@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор изображений инструментов</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            margin: 10px;
+            border: 1px solid #333;
+            background-color: #fff;
+        }
+        .tools-container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Генератор изображений инструментов</h1>
+    <p>Нажмите на кнопку, чтобы сгенерировать и скачать изображения инструментов</p>
+    
+    <div class="tools-container">
+        <div>
+            <h2>Топор</h2>
+            <canvas id="axeCanvas" width="128" height="128"></canvas>
+        </div>
+        <div>
+            <h2>Ручная пила</h2>
+            <canvas id="handsawCanvas" width="128" height="128"></canvas>
+        </div>
+        <div>
+            <h2>Бензопила</h2>
+            <canvas id="chainsawCanvas" width="128" height="128"></canvas>
+        </div>
+    </div>
+    
+    <div>
+        <h2>Фон леса</h2>
+        <canvas id="forestCanvas" width="640" height="360"></canvas>
+    </div>
+    
+    <div>
+        <h2>Лесоруб</h2>
+        <canvas id="lumberjackCanvas" width="128" height="128"></canvas>
+    </div>
+    
+    <button id="generateAll">Сгенерировать все изображения</button>
+    <button id="downloadAll">Скачать все изображения</button>
+    
+    <script>
+        // Функция для рисования топора
+        function drawAxe(ctx) {
+            // Рукоятка
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(50, 30, 15, 80);
+            
+            // Лезвие
+            ctx.fillStyle = '#A9A9A9';
+            ctx.beginPath();
+            ctx.moveTo(65, 30);
+            ctx.lineTo(100, 15);
+            ctx.lineTo(110, 45);
+            ctx.lineTo(65, 60);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Блики на лезвии
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(80, 25);
+            ctx.lineTo(95, 45);
+            ctx.stroke();
+        }
+        
+        // Функция для рисования ручной пилы
+        function drawHandsaw(ctx) {
+            // Рукоятка
+            ctx.fillStyle = '#8B4513';
+            ctx.beginPath();
+            ctx.ellipse(40, 64, 25, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Лезвие
+            ctx.fillStyle = '#A9A9A9';
+            ctx.fillRect(60, 60, 60, 8);
+            
+            // Зубцы
+            ctx.fillStyle = '#696969';
+            for (let i = 0; i < 12; i++) {
+                ctx.beginPath();
+                ctx.moveTo(65 + i*5, 60);
+                ctx.lineTo(68 + i*5, 55);
+                ctx.lineTo(70 + i*5, 60);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+        
+        // Функция для рисования бензопилы
+        function drawChainsaw(ctx) {
+            // Корпус
+            ctx.fillStyle = '#FF4500';
+            ctx.fillRect(20, 50, 50, 30);
+            
+            // Ручка
+            ctx.fillStyle = '#333333';
+            ctx.beginPath();
+            ctx.arc(40, 40, 15, 0, Math.PI, true);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Шина
+            ctx.fillStyle = '#A9A9A9';
+            ctx.fillRect(70, 55, 40, 20);
+            
+            // Цепь
+            ctx.strokeStyle = '#696969';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(72, 58, 36, 14);
+            
+            // Детали
+            ctx.fillStyle = '#333333';
+            ctx.beginPath();
+            ctx.arc(25, 65, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Функция для рисования фона леса
+        function drawForest(ctx) {
+            // Небо
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, 640, 180);
+            
+            // Солнце
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(540, 60, 40, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Земля
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(0, 180, 640, 180);
+            
+            // Деревья
+            for (let i = 0; i < 8; i++) {
+                const x = 50 + i * 80;
+                const height = 100 + Math.random() * 50;
+                
+                // Ствол
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(x-5, 180-height+40, 10, height-40);
+                
+                // Крона
+                ctx.fillStyle = '#006400';
+                ctx.beginPath();
+                ctx.arc(x, 180-height+40, 30, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x-15, 180-height+20, 25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x+15, 180-height+20, 25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x, 180-height, 20, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Функция для рисования лесоруба
+        function drawLumberjack(ctx) {
+            // Голова
+            ctx.fillStyle = '#FFA07A';
+            ctx.beginPath();
+            ctx.arc(64, 40, 15, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Тело
+            ctx.fillStyle = '#D2691E';
+            ctx.fillRect(54, 55, 20, 30);
+            
+            // Руки
+            ctx.fillStyle = '#D2691E';
+            ctx.fillRect(44, 55, 10, 25);
+            ctx.fillRect(74, 55, 10, 25);
+            
+            // Ноги
+            ctx.fillStyle = '#0000CD';
+            ctx.fillRect(54, 85, 8, 30);
+            ctx.fillRect(66, 85, 8, 30);
+            
+            // Детали
+            ctx.fillStyle = '#000000';
+            // Глаза
+            ctx.beginPath();
+            ctx.arc(59, 38, 2, 0, Math.PI * 2);
+            ctx.arc(69, 38, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Рот
+            ctx.beginPath();
+            ctx.arc(64, 45, 5, 0, Math.PI);
+            ctx.stroke();
+            
+            // Борода
+            ctx.fillStyle = '#8B4513';
+            ctx.beginPath();
+            ctx.arc(64, 48, 8, 0, Math.PI);
+            ctx.fill();
+            
+            // Шапка
+            ctx.fillStyle = '#B22222';
+            ctx.beginPath();
+            ctx.ellipse(64, 30, 15, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Функция для скачивания канваса как изображения
+        function downloadCanvas(canvas, filename) {
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            const axeCanvas = document.getElementById('axeCanvas');
+            const handsawCanvas = document.getElementById('handsawCanvas');
+            const chainsawCanvas = document.getElementById('chainsawCanvas');
+            const forestCanvas = document.getElementById('forestCanvas');
+            const lumberjackCanvas = document.getElementById('lumberjackCanvas');
+            
+            const axeCtx = axeCanvas.getContext('2d');
+            const handsawCtx = handsawCanvas.getContext('2d');
+            const chainsawCtx = chainsawCanvas.getContext('2d');
+            const forestCtx = forestCanvas.getContext('2d');
+            const lumberjackCtx = lumberjackCanvas.getContext('2d');
+            
+            // Генерация всех изображений
+            document.getElementById('generateAll').addEventListener('click', () => {
+                drawAxe(axeCtx);
+                drawHandsaw(handsawCtx);
+                drawChainsaw(chainsawCtx);
+                drawForest(forestCtx);
+                drawLumberjack(lumberjackCtx);
+            });
+            
+            // Скачивание всех изображений
+            document.getElementById('downloadAll').addEventListener('click', () => {
+                downloadCanvas(axeCanvas, 'axe.png');
+                downloadCanvas(handsawCanvas, 'handsaw.png');
+                downloadCanvas(chainsawCanvas, 'chainsaw.png');
+                downloadCanvas(forestCanvas, 'forest.jpg');
+                downloadCanvas(lumberjackCanvas, 'lumberjack.gif');
+            });
+            
+            // Рисуем сразу при загрузке
+            drawAxe(axeCtx);
+            drawHandsaw(handsawCtx);
+            drawChainsaw(chainsawCtx);
+            drawForest(forestCtx);
+            drawLumberjack(lumberjackCtx);
+        });
+    </script>
+</body>
+</html> 
