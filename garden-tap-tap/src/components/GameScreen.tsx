@@ -67,10 +67,10 @@ const GameScreen: React.FC<GameScreenProps> = ({
     
     await onTap();
     
-    // Останавливаем анимацию через определенное время
+    // Останавливаем анимацию через небольшое время
     setTimeout(() => {
       setIsAnimating(false);
-    }, 300);
+    }, 200);
   }, [energy, onTap, isAnimating]);
 
   // Клавиатурные сокращения
@@ -97,7 +97,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
       <div className="flex-1 flex items-center justify-center relative">
         {/* Персонаж (кликабельный) - используем изображение вместо canvas */}
         <motion.div 
-          className={`cursor-pointer ${isAnimating ? 'animate-bounce-small' : ''}`}
+          className={`cursor-pointer relative ${isAnimating ? 'animate-bounce-small' : ''}`}
           animate={isAnimating ? { scale: 0.95 } : { scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleTap}
@@ -105,12 +105,9 @@ const GameScreen: React.FC<GameScreenProps> = ({
           <img 
             src={characterImageUrl} 
             alt="Персонаж"
-            className="w-32 h-32 md:w-40 md:h-40"
+            className="w-56 h-56 md:w-64 md:h-64"
             style={{ pointerEvents: energy <= 0 ? 'none' : 'auto' }}
           />
-          <div className="text-white font-semibold text-sm mt-2">
-            Нажми для рубки!
-          </div>
         </motion.div>
 
         {/* Всплывающие уведомления */}
@@ -137,9 +134,9 @@ const GameScreen: React.FC<GameScreenProps> = ({
         )}
       </div>
 
-      {/* Нижняя область с инструментами */}
-      <div className="w-full max-w-sm">
-        <div className="mb-4 bg-gray-800 bg-opacity-80 rounded-lg p-3">
+      {/* Нижняя область с инструментами - немного поднята вверх */}
+      <div className="w-full max-w-sm mb-20">
+        <div className="bg-gray-800 bg-opacity-80 rounded-lg p-3">
           <div className="flex justify-between items-center mb-2">
             <div>
               <div className="text-sm opacity-70">Текущий инструмент</div>
