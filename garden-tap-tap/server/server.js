@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { db, initDatabase, CurrencyType, RewardType } = require('./db');
+const currencyRoutes = require('./routes/currency.routes');
 
 // Инициализируем Express приложение
 const app = express();
@@ -20,6 +21,9 @@ app.use((req, res, next) => {
 });
 
 // API endpoints
+
+// Маршруты для работы с валютами
+app.use('/api/currencies', currencyRoutes);
 
 // Получить все локации
 app.get('/api/locations', async (req, res) => {
@@ -463,8 +467,8 @@ app.post('/api/player/tap', async (req, res) => {
       WHERE et.user_id = ? AND et.character_id = ?
     `, [userId, location.character_id]);
     
-    // Если нет экипированного инструмента, используем базовый
-    const toolPower = equipped ? equipped.power : 1;
+    // Если нет экипированного инструмента, используем базовое значение
+    const toolPower = equipped ? (equipped.location_coins_power || 1) : 1;
     
     // Генерируем случайное количество ресурсов (от 50% до 150% от силы инструмента)
     const resourcesGained = Math.floor(toolPower * (0.5 + Math.random()));

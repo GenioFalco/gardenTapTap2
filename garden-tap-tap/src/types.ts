@@ -33,14 +33,13 @@ export interface Tool {
   id: number;
   name: string;
   description: string;
-  power: number;
   unlockLevel: number;
   unlockCost: number;
   currencyType: CurrencyType;
   characterId: number;
   imagePath?: string;
-  main_coins_power?: number;      // Сколько садкоинов даёт за тап
-  location_coins_power?: number;  // Сколько валюты локации даёт за тап
+  main_coins_power: number;      // Сколько садкоинов даёт за тап
+  location_coins_power: number;  // Сколько валюты локации даёт за тап
 }
 
 // Интерфейс персонажа

@@ -24,7 +24,7 @@ class GardenTapTapDB extends Dexie {
     this.version(1).stores({
       locations: 'id, name, background, resourceName, characterId, unlockLevel, unlockCost, currencyType',
       characters: 'id, name, animationType, animationPath, frameCount',
-      tools: 'id, name, description, characterId, power, unlockLevel, unlockCost, currencyType, imagePath',
+      tools: 'id, name, description, characterId, main_coins_power, location_coins_power, unlockLevel, unlockCost, currencyType, imagePath',
       levels: 'level, requiredExp',
       rewards: 'id, levelId, rewardType, amount, targetId',
       playerProgress: 'id, level, experience, energy, maxEnergy, lastEnergyRefillTime',
@@ -101,7 +101,8 @@ const seedDatabase = async (): Promise<void> => {
           name: 'Топор',
           description: 'Базовый инструмент лесоруба. Эффективен при рубке небольших деревьев.',
           characterId: 1,
-          power: 1,
+          main_coins_power: 0.5,
+          location_coins_power: 1,
           unlockLevel: 1,
           unlockCost: 0,
           currencyType: CurrencyType.FOREST,
@@ -112,7 +113,8 @@ const seedDatabase = async (): Promise<void> => {
           name: 'Ручная пила',
           description: 'Позволяет работать быстрее и эффективнее. Отлично подходит для средних деревьев.',
           characterId: 1,
-          power: 3,
+          main_coins_power: 1.5,
+          location_coins_power: 3,
           unlockLevel: 5,
           unlockCost: 300,
           currencyType: CurrencyType.FOREST,
@@ -123,7 +125,8 @@ const seedDatabase = async (): Promise<void> => {
           name: 'Бензопила',
           description: 'Профессиональный инструмент. Значительно ускоряет работу с любым лесом.',
           characterId: 1,
-          power: 10,
+          main_coins_power: 5,
+          location_coins_power: 10,
           unlockLevel: 10,
           unlockCost: 1000,
           currencyType: CurrencyType.FOREST,
@@ -491,8 +494,8 @@ export const tap = async (locationId: number): Promise<{
     throw new Error(`Не найден экипированный инструмент для персонажа ${location.characterId}`);
   }
   
-  // Рассчитываем полученные ресурсы (сила инструмента)
-  const resourcesGained = tool.power;
+  // Рассчитываем полученные ресурсы (сила инструмента для локации)
+  const resourcesGained = tool.location_coins_power;
   
   // Рассчитываем полученный опыт (пока равен ресурсам)
   const experienceGained = resourcesGained;

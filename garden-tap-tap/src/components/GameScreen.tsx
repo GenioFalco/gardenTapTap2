@@ -107,8 +107,8 @@ const UpgradeModal = ({
                           )}
                         </div>
                         <div className="text-sm text-gray-400">
-                          <div>+{tool.power} валюты локации за тап</div>
-                          <div>+{Math.round(tool.power * 0.5 * 10) / 10} сад-коинов за тап</div>
+                          <div>+{tool.location_coins_power || 1} валюты локации за тап</div>
+                          <div>+{tool.main_coins_power || 0.5} сад-коинов за тап</div>
                         </div>
                       </div>
                     </div>
@@ -355,8 +355,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
             <div className="font-medium text-right">
               <div className="text-sm text-white opacity-70">Сила тапа</div>
               <div className="flex flex-col">
-                <span className="text-white">{currencyInfo?.name || currencyType}: {currentTool?.location_coins_power || currentTool?.power || 1}</span>
-                <span className="text-yellow-400">Сад-коины: {currentTool?.main_coins_power || (currentTool ? Math.round(currentTool.power * 0.5 * 10) / 10 : 0.5)}</span>
+                <span className="text-white">{currencyInfo?.name || currencyType}: {currentTool?.location_coins_power || 1}</span>
+                <span className="text-yellow-400">Сад-коины: {currentTool?.main_coins_power || 0.5}</span>
               </div>
             </div>
           </div>
