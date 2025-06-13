@@ -92,30 +92,33 @@ const TopPanel: React.FC<TopPanelProps> = ({
 
   return (
     <div className="top-panel rounded-xl p-4 mt-4 mx-2">
-      {/* Верхняя часть с аватаром, именем и уровнем */}
-      <div className="flex items-center mb-4">
+      {/* Верхняя часть с аватаром, именем, уровнем и прогрессом */}
+      <div className="flex items-start mb-4">
         {/* Аватар пользователя */}
         <div className="avatar mr-4">
           <img src={avatarSrc} alt="Аватар" className="w-full h-full object-cover" />
         </div>
         
-        {/* Имя и уровень справа от аватарки */}
-        <div className="flex flex-col">
-          <span className="text-white font-bold text-xl">{userName}</span>
-          <span className="text-white font-medium text-lg">Уровень {level}</span>
-        </div>
-      </div>
-      
-      {/* Шкала прогресса уровня с опытом слева */}
-      <div className="mb-4">
-        <div className="text-white text-sm mb-1">
-          XP: {experience}/{nextLevelExperience}
-        </div>
-        <div className="progress-bar">
-          <div 
-            className="progress-fill bg-blue-500"
-            style={{ width: `${nextLevelExperience ? Math.min((experience / nextLevelExperience) * 100, 100) : 0}%` }}
-          />
+        {/* Правая колонка: имя, уровень и шкала прогресса */}
+        <div className="flex flex-col flex-grow">
+          {/* Имя и уровень */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-white font-bold text-base">{userName}</span>
+            <span className="text-white font-medium text-sm bg-yellow-300 rounded-full px-3 py-1">Уровень {level}</span>
+          </div>
+          
+          {/* Шкала прогресса уровня с опытом */}
+          <div>
+            <div className="text-white text-xs mb-1">
+              XP: {experience}/{nextLevelExperience}
+            </div>
+            <div className="progress-bar">
+              <div 
+                className="progress-fill bg-blue-500"
+                style={{ width: `${nextLevelExperience ? Math.min((experience / nextLevelExperience) * 100, 100) : 0}%` }}
+              />
+            </div>
+          </div>
         </div>
       </div>
       
@@ -126,7 +129,11 @@ const TopPanel: React.FC<TopPanelProps> = ({
       <div className="flex justify-between items-center">
         {/* Энергия с таймером */}
         <div className="flex items-center">
-          <span className="text-yellow-400 mr-2 text-xl">⚡</span>
+          <img 
+            src="/assets/currencies/energy.png" 
+            alt="Энергия" 
+            className="w-6 h-6 mr-2" 
+          />
           <span className="text-white text-base">{energy}/{maxEnergy}</span>
           {energy < maxEnergy ? (
             <span className="text-yellow-300 text-xs ml-2">+1 через {formatTime(secondsUntilRefill)}</span>
