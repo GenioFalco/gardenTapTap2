@@ -247,17 +247,115 @@ app.get('/api/player/progress', async (req, res) => {
       return acc;
     }, {});
     
-    // Формируем ответ
+    // Формируем ответ с правильными именами полей для клиента
     const response = {
-      ...playerProgress,
+      id: playerProgress.user_id,
+      level: playerProgress.level,
+      experience: playerProgress.experience,
+      energy: playerProgress.energy,
+      maxEnergy: playerProgress.max_energy,
+      lastEnergyRefillTime: playerProgress.last_energy_refill_time,
       unlockedLocations: unlockedLocationIds,
       unlockedTools: unlockedToolIds,
-      equippedTools: equippedToolsMap
+      equippedTools: equippedToolsMap,
+      currencies: [] // Добавляем пустой массив валют для соответствия интерфейсу
     };
     
+    console.log('Sending player progress:', response);
     res.json(response);
   } catch (error) {
     console.error('Ошибка при получении прогресса игрока:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Обновить энергию игрока
+app.post('/api/player/update-energy', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { energy } = req.body;
+    
+    if (energy === undefined) {
+      return res.status(400).json({ error: 'Отсутствует параметр energy' });
+    }
+    
+    // Получаем текущий прогресс игрока с максимальной энергией и временем последнего обновления
+    const playerProgress = await db.get(`
+      SELECT energy, max_energy, last_energy_refill_time FROM player_progress WHERE user_id = ?
+    `, [userId]);
+    
+    if (!playerProgress) {
+      return res.status(404).json({ error: 'Прогресс игрока не найден' });
+    }
+    
+    console.log('Текущий прогресс игрока перед обновлением энергии:', playerProgress);
+    
+    // Проверяем, прошла ли минута с момента последнего обновления энергии
+    const lastRefillTime = new Date(playerProgress.last_energy_refill_time).getTime();
+    const currentTime = new Date().getTime();
+    const timeDifference = currentTime - lastRefillTime;
+    const minutesPassed = Math.floor(timeDifference / (60 * 1000));
+    
+    console.log(`Время последнего обновления: ${new Date(lastRefillTime).toLocaleTimeString()}`);
+    console.log(`Текущее время: ${new Date(currentTime).toLocaleTimeString()}`);
+    console.log(`Прошло миллисекунд: ${timeDifference}, минут: ${minutesPassed}`);
+    
+    // Если запрашивается увеличение энергии, проверяем, прошла ли минута
+    if (energy > playerProgress.energy) {
+      // Если это восстановление энергии и не прошла минута, возвращаем ошибку
+      if (minutesPassed < 1 && timeDifference < 60000) {
+        console.log('Попытка восстановить энергию слишком рано, отклонено');
+        return res.status(403).json({ 
+          error: 'Слишком рано для восстановления энергии',
+          timeUntilRefill: 60000 - timeDifference
+        });
+      }
+      
+      // Если прошла минута, обновляем время последнего восстановления
+      const newRefillTime = new Date().toISOString();
+      console.log(`Разрешено обновление энергии, новое время: ${newRefillTime}`);
+      
+      // Проверяем, что новое значение энергии не превышает максимальное
+      const newEnergy = Math.min(energy, playerProgress.max_energy);
+      
+      // Обновляем энергию и время последнего обновления
+      await db.run(`
+        UPDATE player_progress
+        SET energy = ?, last_energy_refill_time = ?
+        WHERE user_id = ?
+      `, [newEnergy, newRefillTime, userId]);
+      
+      console.log(`Энергия обновлена: ${playerProgress.energy} -> ${newEnergy}, максимум: ${playerProgress.max_energy}`);
+      
+      res.json({ 
+        success: true, 
+        energy: newEnergy,
+        maxEnergy: playerProgress.max_energy,
+        lastEnergyRefillTime: newRefillTime
+      });
+    } else {
+      // Если энергия уменьшается (например, при тапе), не проверяем время
+      // Проверяем, что новое значение не меньше 0
+      const newEnergy = Math.max(0, energy);
+      
+      // Обновляем только энергию, время последнего восстановления не меняем
+      await db.run(`
+        UPDATE player_progress
+        SET energy = ?
+        WHERE user_id = ?
+      `, [newEnergy, userId]);
+      
+      console.log(`Энергия уменьшена: ${playerProgress.energy} -> ${newEnergy}`);
+      
+      res.json({ 
+        success: true, 
+        energy: newEnergy,
+        maxEnergy: playerProgress.max_energy,
+        lastEnergyRefillTime: playerProgress.last_energy_refill_time
+      });
+    }
+  } catch (error) {
+    console.error('Ошибка при обновлении энергии игрока:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -303,10 +401,21 @@ app.get('/api/levels/:level', async (req, res) => {
       SELECT * FROM rewards WHERE level_id = ?
     `, [levelId]);
     
-    res.json({
-      ...level,
-      rewards
-    });
+    // Формируем ответ с правильными именами полей для клиента
+    const response = {
+      level: level.level,
+      requiredExp: level.required_exp,
+      rewards: rewards.map(reward => ({
+        id: reward.id,
+        levelId: reward.level_id,
+        rewardType: reward.reward_type,
+        amount: reward.amount,
+        targetId: reward.target_id
+      }))
+    };
+    
+    console.log('Sending level info:', response);
+    res.json(response);
   } catch (error) {
     console.error('Ошибка при получении информации об уровне:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -332,7 +441,15 @@ app.post('/api/player/tap', async (req, res) => {
     }
     
     // Получаем прогресс игрока
-    const playerProgress = await getOrCreatePlayerProgress(userId);
+    const playerProgress = await db.get(`
+      SELECT * FROM player_progress WHERE user_id = ?
+    `, [userId]);
+    
+    if (!playerProgress) {
+      return res.status(404).json({ error: 'Прогресс игрока не найден' });
+    }
+    
+    console.log('Текущий прогресс игрока:', playerProgress);
     
     // Проверяем, есть ли энергия
     if (playerProgress.energy <= 0) {
@@ -362,20 +479,28 @@ app.post('/api/player/tap', async (req, res) => {
     // Генерируем опыт (равен количеству ресурсов)
     const experienceGained = resourcesGained;
     
-    // Уменьшаем энергию
+    // Текущее время для обновления времени последнего изменения энергии
+    const currentTime = new Date().toISOString();
+    
+    // Уменьшаем энергию и обновляем время последнего изменения
     await db.run(`
       UPDATE player_progress
-      SET energy = energy - 1
+      SET energy = energy - 1, last_energy_refill_time = ?
       WHERE user_id = ?
-    `, [userId]);
+    `, [currentTime, userId]);
+    
+    console.log(`Энергия уменьшена на 1, время обновления: ${currentTime}`);
     
     // Обработка опыта и проверка повышения уровня
     const { levelUp, level, rewards } = await addExperience(userId, experienceGained);
     
     // Получаем оставшуюся энергию
     const updatedProgress = await db.get(`
-      SELECT energy FROM player_progress WHERE user_id = ?
+      SELECT energy, max_energy as maxEnergy, last_energy_refill_time as lastEnergyRefillTime 
+      FROM player_progress WHERE user_id = ?
     `, [userId]);
+    
+    console.log('Обновленный прогресс после тапа:', updatedProgress);
     
     res.json({
       resourcesGained,
@@ -383,7 +508,9 @@ app.post('/api/player/tap', async (req, res) => {
       levelUp,
       level,
       rewards,
-      energyLeft: updatedProgress.energy
+      energyLeft: updatedProgress.energy,
+      maxEnergy: updatedProgress.maxEnergy,
+      lastEnergyRefillTime: updatedProgress.lastEnergyRefillTime
     });
   } catch (error) {
     console.error('Ошибка при тапе:', error);
@@ -497,6 +624,7 @@ async function getOrCreatePlayerProgress(userId) {
     VALUES (?, ?, 0)
   `, [userId, CurrencyType.MAIN]);
   
+  // Добавляем валюту леса
   await db.run(`
     INSERT INTO player_currencies (user_id, currency_type, amount)
     VALUES (?, ?, 0)
@@ -520,15 +648,10 @@ async function getOrCreatePlayerProgress(userId) {
     VALUES (?, 1, 1)
   `, [userId]);
   
-  // Возвращаем созданный прогресс
-  return {
-    user_id: userId,
-    level: 1,
-    experience: 0,
-    energy: 100,
-    max_energy: 100,
-    last_energy_refill_time: new Date().toISOString()
-  };
+  // Получаем созданный прогресс
+  return await db.get(`
+    SELECT * FROM player_progress WHERE user_id = ?
+  `, [userId]);
 }
 
 // Получение или создание валюты игрока

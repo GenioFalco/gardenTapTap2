@@ -86,45 +86,13 @@ const GameScreen: React.FC<GameScreenProps> = ({
 
   return (
     <div 
-      className="h-screen w-full flex flex-col items-center justify-between py-8 px-4"
+      className="h-screen w-full flex flex-col items-center justify-between py-8 px-4 pt-24"
       style={{
         backgroundImage: `url(${location.background})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
     >
-      {/* Верхний HUD */}
-      <div className="w-full flex flex-col items-center">
-        <div className="bg-gray-800 bg-opacity-80 rounded-lg p-3 w-full max-w-sm flex justify-between items-center">
-          <div>
-            <span className="text-sm font-medium">{location.resourceName}: </span>
-            <span className="text-lg font-bold">{resourceAmount}</span>
-          </div>
-          <div className="flex items-center">
-            <span className="text-sm mr-2">Энергия: {energy}/{maxEnergy}</span>
-            <div className="w-16 h-2 bg-gray-600 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-green-500"
-                style={{ width: `${(energy / maxEnergy) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-2 bg-gray-800 bg-opacity-80 rounded-lg p-2 w-full max-w-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-sm">Уровень {level}</span>
-            <span className="text-xs">{experience}/{nextLevelExperience} XP</span>
-          </div>
-          <div className="w-full h-1 bg-gray-600 rounded-full mt-1 overflow-hidden">
-            <div 
-              className="h-full bg-blue-500"
-              style={{ width: `${(experience / nextLevelExperience) * 100}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
       {/* Центральная область с персонажем */}
       <div className="flex-1 flex items-center justify-center relative">
         {/* Персонаж (кликабельный) - используем изображение вместо canvas */}

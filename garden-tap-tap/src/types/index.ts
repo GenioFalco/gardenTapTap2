@@ -75,6 +75,7 @@ export interface PlayerProgress {
   unlockedLocations: number[];
   unlockedTools: number[];
   equippedTools: Record<number, number>; // characterId -> toolId
+  nextLevelExperience?: number; // Требуемый опыт для следующего уровня
 }
 
 // Валюта игрока

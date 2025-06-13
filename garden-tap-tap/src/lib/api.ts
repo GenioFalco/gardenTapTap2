@@ -28,7 +28,9 @@ const fetchApi = async <T>(
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
     
-    return await response.json();
+    const data = await response.json();
+    console.log(`API response from ${endpoint}:`, data);
+    return data;
   } catch (error) {
     console.error(`API request failed: ${url}`, error);
     throw error;
@@ -82,13 +84,51 @@ export const equipTool = async (characterId: number, toolId: number): Promise<vo
 
 // Получить прогресс игрока
 export const getPlayerProgress = async (): Promise<PlayerProgress> => {
-  return await fetchApi<PlayerProgress>('/player/progress');
+  // Получаем основной прогресс игрока
+  const progress = await fetchApi<PlayerProgress>('/player/progress');
+  console.log('Raw player progress from API:', progress);
+  
+  // Получаем информацию о следующем уровне для расчета требуемого опыта
+  const nextLevel = await getLevelInfo(progress.level + 1);
+  console.log('Next level info:', nextLevel);
+  
+  // Обновляем прогресс с требуемым опытом для следующего уровня
+  // При этом сохраняем maxEnergy из базы данных, который уже приходит в ответе
+  const updatedProgress = {
+    ...progress,
+    nextLevelExperience: nextLevel.requiredExp // Добавляем требуемый опыт для следующего уровня
+  };
+  
+  console.log('Updated player progress with nextLevelExperience:', updatedProgress);
+  return updatedProgress;
 };
 
 // Обновить энергию игрока
-export const updatePlayerEnergy = async (energy: number): Promise<void> => {
-  // На стороне сервера эта функция не реализована отдельно,
-  // так как энергия обновляется автоматически при тапе
+export const updatePlayerEnergy = async (energy: number): Promise<{ success: boolean; energy: number; maxEnergy: number; lastEnergyRefillTime: string; timeUntilRefill?: number }> => {
+  try {
+    return await fetchApi<{ success: boolean; energy: number; maxEnergy: number; lastEnergyRefillTime: string; timeUntilRefill?: number }>('/player/update-energy', {
+      method: 'POST',
+      body: JSON.stringify({ energy })
+    });
+  } catch (error: any) {
+    // Проверяем, не связана ли ошибка с преждевременным восстановлением энергии
+    if (error.message && error.message.includes('403')) {
+      console.warn('Слишком рано для восстановления энергии');
+      
+      // Возвращаем текущую энергию без изменений
+      const progress = await getPlayerProgress();
+      return {
+        success: false,
+        energy: progress.energy,
+        maxEnergy: progress.maxEnergy,
+        lastEnergyRefillTime: progress.lastEnergyRefillTime,
+        timeUntilRefill: 60000 // 1 минута (приблизительно)
+      };
+    }
+    
+    // Другие ошибки просто выбрасываем
+    throw error;
+  }
 };
 
 // Добавить ресурсы игроку
