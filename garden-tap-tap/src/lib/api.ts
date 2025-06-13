@@ -1,10 +1,11 @@
 import { 
   Location, Character, Tool, Level, Reward, PlayerProgress, 
-  CurrencyType, RewardType, PlayerCurrency 
+  CurrencyType, RewardType, PlayerCurrency, Currency 
 } from '../types';
+import CONFIG from '../config';
 
 // Базовый URL для API
-const API_BASE_URL = 'http://localhost:3002/api';
+const API_BASE_URL = CONFIG.API_URL || 'http://localhost:3001/api';
 
 // Функция для выполнения fetch-запросов
 const fetchApi = async <T>(
@@ -203,5 +204,44 @@ export const upgradeTool = async (toolId: number): Promise<boolean> => {
     return response.success;
   } catch (error) {
     return false;
+  }
+};
+
+/**
+ * Получить все валюты
+ */
+export const getCurrencies = async (): Promise<Currency[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/currencies`);
+    
+    if (!response.ok) {
+      throw new Error(`Ошибка при получении валют: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Ошибка при получении валют:', error);
+    return [];
+  }
+};
+
+/**
+ * Получить валюту по типу
+ */
+export const getCurrencyByType = async (currencyType: CurrencyType): Promise<Currency | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/currencies/${currencyType}`);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      throw new Error(`Ошибка при получении валюты: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error(`Ошибка при получении валюты типа ${currencyType}:`, error);
+    return null;
   }
 }; 

@@ -35,10 +35,14 @@ const TopPanel: React.FC<TopPanelProps> = ({
     switch (type) {
       case CurrencyType.FOREST:
         return '/assets/currencies/wood.png'; // Дрова для леса
-      case CurrencyType.GARDEN:
-        return '/assets/currencies/vegetable.png'; // Овощи для сада
-      case CurrencyType.WINTER:
-        return '/assets/currencies/snowflake.png'; // Снежинки для зимы
+      case CurrencyType.MOUNTAIN:
+        return '/assets/currencies/stone.png'; // Камень для гор
+      case CurrencyType.DESERT:
+        return '/assets/currencies/sand.png'; // Песок для пустыни
+      case CurrencyType.LAKE:
+        return '/assets/currencies/water.png'; // Вода для озера
+      case CurrencyType.MAIN:
+        return '/assets/currencies/garden_coin.png'; // Сад-коин
       default:
         return '/assets/currencies/default.png';
     }
@@ -104,7 +108,7 @@ const TopPanel: React.FC<TopPanelProps> = ({
           {/* Имя и уровень */}
           <div className="flex items-center justify-between mb-2">
             <span className="text-white font-bold text-base">{userName}</span>
-            <span className="text-white font-medium text-sm bg-yellow-300 rounded-full px-3 py-1">Уровень {level}</span>
+            <span className="text-white font-medium text-sm bg-yellow-500 rounded-full px-3 py-1">Уровень {level}</span>
           </div>
           
           {/* Шкала прогресса уровня с опытом */}
@@ -136,9 +140,9 @@ const TopPanel: React.FC<TopPanelProps> = ({
           />
           <span className="text-white text-base">{energy}/{maxEnergy}</span>
           {energy < maxEnergy ? (
-            <span className="text-yellow-300 text-xs ml-2">+1 через {formatTime(secondsUntilRefill)}</span>
+            <span className="text-yellow-500 text-xs ml-2">+1 через {formatTime(secondsUntilRefill)}</span>
           ) : (
-            <span className="text-yellow-300 text-xs ml-2">MAX</span>
+            <span className="text-yellow-500 text-xs ml-2">MAX</span>
           )}
         </div>
         

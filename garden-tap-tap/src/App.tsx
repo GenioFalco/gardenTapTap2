@@ -389,6 +389,24 @@ function App() {
       setCurrentLocationId(selectedLocation.id);
     }
   };
+
+  // Активация инструмента
+  const handleActivateTool = async (toolId: number) => {
+    try {
+      if (!currentLocation) return;
+      
+      await api.equipTool(currentLocation.characterId, toolId);
+      
+      // Обновляем прогресс после активации
+      const progress = await api.getPlayerProgress();
+      setPlayerProgress(progress);
+      
+      return true;
+    } catch (error) {
+      console.error('Ошибка при активации инструмента:', error);
+      return false;
+    }
+  };
   
   if (!initialized || !playerProgress || !currentLocation) {
     return <div className="loading">Загрузка...</div>;
@@ -426,6 +444,8 @@ function App() {
         onTap={handleTap}
         onUpgrade={handleUpgrade}
         characterImageUrl="/assets/characters/lumberjack.gif"
+        gardenCoins={gardenCoins}
+        onActivateTool={handleActivateTool}
       />
       
       {/* Выбор локации */}

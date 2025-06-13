@@ -24,7 +24,7 @@ class GardenTapTapDB extends Dexie {
     this.version(1).stores({
       locations: 'id, name, background, resourceName, characterId, unlockLevel, unlockCost, currencyType',
       characters: 'id, name, animationType, animationPath, frameCount',
-      tools: 'id, name, characterId, power, unlockLevel, unlockCost, currencyType, imagePath',
+      tools: 'id, name, description, characterId, power, unlockLevel, unlockCost, currencyType, imagePath',
       levels: 'level, requiredExp',
       rewards: 'id, levelId, rewardType, amount, targetId',
       playerProgress: 'id, level, experience, energy, maxEnergy, lastEnergyRefillTime',
@@ -86,6 +86,9 @@ const seedDatabase = async (): Promise<void> => {
       await db.characters.add({
         id: 1,
         name: 'Лесоруб',
+        description: 'Опытный работник, занимающийся вырубкой леса.',
+        image: '/assets/characters/lumberjack.png',
+        locationId: 1,
         animationType: 'gif',
         animationPath: '/assets/characters/lumberjack.gif',
         frameCount: undefined
@@ -96,6 +99,7 @@ const seedDatabase = async (): Promise<void> => {
         {
           id: 1,
           name: 'Топор',
+          description: 'Базовый инструмент лесоруба. Эффективен при рубке небольших деревьев.',
           characterId: 1,
           power: 1,
           unlockLevel: 1,
@@ -106,6 +110,7 @@ const seedDatabase = async (): Promise<void> => {
         {
           id: 2,
           name: 'Ручная пила',
+          description: 'Позволяет работать быстрее и эффективнее. Отлично подходит для средних деревьев.',
           characterId: 1,
           power: 3,
           unlockLevel: 5,
@@ -116,6 +121,7 @@ const seedDatabase = async (): Promise<void> => {
         {
           id: 3,
           name: 'Бензопила',
+          description: 'Профессиональный инструмент. Значительно ускоряет работу с любым лесом.',
           characterId: 1,
           power: 10,
           unlockLevel: 10,
@@ -129,6 +135,7 @@ const seedDatabase = async (): Promise<void> => {
       await db.locations.add({
         id: 1,
         name: 'Лес',
+        description: 'Густой лес, богатый ценной древесиной.',
         background: '/assets/backgrounds/forest.jpg',
         resourceName: 'Брёвна',
         characterId: 1,
@@ -148,21 +155,20 @@ const seedDatabase = async (): Promise<void> => {
       
       // Добавляем награды за уровни
       await db.rewards.bulkAdd([
-        { id: 1, levelId: 1, rewardType: RewardType.MAIN_CURRENCY, amount: 100, targetId: undefined },
-        { id: 2, levelId: 2, rewardType: RewardType.MAIN_CURRENCY, amount: 200, targetId: undefined },
-        { id: 3, levelId: 3, rewardType: RewardType.MAIN_CURRENCY, amount: 300, targetId: undefined },
-        { id: 4, levelId: 4, rewardType: RewardType.MAIN_CURRENCY, amount: 400, targetId: undefined },
-        { id: 5, levelId: 5, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 2 }, // Разблокировка ручной пилы
-        { id: 6, levelId: 6, rewardType: RewardType.MAIN_CURRENCY, amount: 600, targetId: undefined },
-        { id: 7, levelId: 7, rewardType: RewardType.MAIN_CURRENCY, amount: 700, targetId: undefined },
-        { id: 8, levelId: 8, rewardType: RewardType.MAIN_CURRENCY, amount: 800, targetId: undefined },
-        { id: 9, levelId: 9, rewardType: RewardType.MAIN_CURRENCY, amount: 900, targetId: undefined },
-        { id: 10, levelId: 10, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 3 }, // Разблокировка бензопилы
+        { id: 1, level: 1, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 100, targetId: undefined, levelId: 1 },
+        { id: 2, level: 2, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 200, targetId: undefined, levelId: 2 },
+        { id: 3, level: 3, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 300, targetId: undefined, levelId: 3 },
+        { id: 4, level: 4, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 400, targetId: undefined, levelId: 4 },
+        { id: 5, level: 5, type: RewardType.TOOL, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 2, levelId: 5 }, // Разблокировка ручной пилы
+        { id: 6, level: 6, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 600, targetId: undefined, levelId: 6 },
+        { id: 7, level: 7, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 700, targetId: undefined, levelId: 7 },
+        { id: 8, level: 8, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 800, targetId: undefined, levelId: 8 },
+        { id: 9, level: 9, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 900, targetId: undefined, levelId: 9 },
+        { id: 10, level: 10, type: RewardType.TOOL, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 3, levelId: 10 }, // Разблокировка бензопилы
       ]);
       
       // Инициализация прогресса игрока
       await db.playerProgress.add({
-        id: 1,
         level: 1,
         experience: 0,
         energy: 100,
@@ -405,7 +411,9 @@ export const addExperience = async (exp: number): Promise<{ levelUp: boolean; le
     for (const reward of levelRewards) {
       switch (reward.rewardType) {
         case RewardType.MAIN_CURRENCY:
-          await addResources(CurrencyType.MAIN, reward.amount);
+          if (reward.amount !== undefined) {
+            await addResources(CurrencyType.MAIN, reward.amount);
+          }
           break;
         case RewardType.LOCATION_CURRENCY:
           // Здесь должна быть логика определения типа валюты локации
@@ -441,7 +449,10 @@ export const getLevelInfo = async (level: number): Promise<Level> => {
     .equals(level)
     .toArray();
   
-  return { ...levelInfo, rewards };
+  // Базовая формула для максимальной энергии: 100 + 2 * (level - 1)
+  const maxEnergy = 100 + 2 * (level - 1);
+  
+  return { ...levelInfo, rewards, maxEnergy };
 };
 
 // Тап по кнопке (основная механика)
