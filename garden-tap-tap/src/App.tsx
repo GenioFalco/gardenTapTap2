@@ -33,8 +33,8 @@ function App() {
         const allLocations = await api.getLocations();
         const locationsWithPlaceholders = allLocations.map(location => ({
           ...location,
-          // Проверяем наличие изображений и подставляем нужный путь, если нужно
-          background: location.background || '/assets/backgrounds/forest.jpg',
+          // Используем путь из базы данных или значение по умолчанию
+          background: location.background || '/assets/backgrounds/default.jpg',
         }));
         
         setLocations(locationsWithPlaceholders);
@@ -49,18 +49,43 @@ function App() {
         setCurrentLocation(defaultLocation);
         setCurrentLocationId(defaultLocation.id);
         
-        // Получаем инструменты для текущей локации с подстановкой изображений
-        const locationTools = await api.getToolsByCharacterId(defaultLocation.characterId);
-        const toolsWithImages = locationTools.map(tool => {
-          const imagePath = tool.imagePath || getToolImagePath(tool.name);
-          return { ...tool, imagePath };
-        });
+        // Проверяем, что characterId определен
+        if (defaultLocation.characterId) {
+          // Получаем инструменты для текущей локации с подстановкой изображений
+          const locationTools = await api.getToolsByCharacterId(defaultLocation.characterId);
+          console.log('Получены инструменты для локации:', locationTools);
+          
+          const toolsWithImages = locationTools.map((tool: Tool) => {
+            // Используем imagePath из API, если он есть, иначе генерируем путь на основе имени
+            const imagePath = tool.imagePath || getToolImagePath(tool.name);
+            
+            // Обеспечиваем совместимость полей в разных форматах
+            return { 
+              ...tool, 
+              imagePath,
+              // Если поля в camelCase отсутствуют, но есть в snake_case, копируем их
+              mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
+              locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
+              // Убедимся, что обязательные поля всегда определены
+              main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
+              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+            };
+          });
+          
+          setTools(toolsWithImages as Tool[]);
+        } else {
+          console.warn('characterId не определен для локации по умолчанию:', defaultLocation);
+          setTools([]);
+        }
         
-        setTools(toolsWithImages);
-        
-        // Получаем количество ресурсов
-        const forestResources = await api.getResourceAmount(CurrencyType.FOREST);
-        setResourceAmount(forestResources);
+        // Получаем количество ресурсов для локации
+        const currencyIdentifier = defaultLocation.currencyType || defaultLocation.currencyId;
+        if (currencyIdentifier) {
+          const resources = await api.getResourceAmount(currencyIdentifier);
+          setResourceAmount(resources);
+        } else {
+          setResourceAmount(0);
+        }
         
         // Получаем информацию о следующем уровне
         const nextLevel = await api.getLevelInfo(progress.level + 1);
@@ -82,16 +107,9 @@ function App() {
   
   // Функция для получения пути к изображению инструмента
   const getToolImagePath = (toolName: string): string => {
-    switch (toolName) {
-      case 'Топор':
-        return '/assets/tools/axe.png';
-      case 'Ручная пила':
-        return '/assets/tools/handsaw.png';
-      case 'Бензопила':
-        return '/assets/tools/chainsaw.png';
-      default:
-        return '/assets/tools/axe.png';
-    }
+    // Преобразуем имя инструмента в нижний регистр и удаляем пробелы для формирования имени файла
+    const fileName = toolName.toLowerCase().replace(/\s+/g, '_');
+    return `/assets/tools/${fileName}.png`;
   };
   
   // При изменении текущей локации подгружаем связанные данные
@@ -100,21 +118,45 @@ function App() {
       if (!currentLocation || !initialized) return;
       
       try {
-        // Получаем инструменты для текущей локации с подстановкой изображений
-        const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
-        const toolsWithImages = locationTools.map(tool => {
-          const imagePath = tool.imagePath || getToolImagePath(tool.name);
-          return { ...tool, imagePath };
-        });
+        // Проверяем, что characterId определен
+        if (currentLocation.characterId) {
+          // Получаем инструменты для текущей локации с подстановкой изображений
+          const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
+          const toolsWithImages = locationTools.map((tool: Tool) => {
+            const imagePath = tool.imagePath || getToolImagePath(tool.name);
+            
+            // Обеспечиваем совместимость полей в разных форматах
+            return { 
+              ...tool, 
+              imagePath,
+              // Если поля в camelCase отсутствуют, но есть в snake_case, копируем их
+              mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
+              locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
+              // Убедимся, что обязательные поля всегда определены
+              main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
+              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+            };
+          });
+          
+          setTools(toolsWithImages as Tool[]);
+        } else {
+          console.warn('characterId не определен для текущей локации:', currentLocation);
+          setTools([]);
+        }
         
-        setTools(toolsWithImages);
-        
-        // Получаем количество ресурсов
-        const resources = await api.getResourceAmount(currentLocation.currencyId);
-        setResourceAmount(resources);
+        // Проверяем, что currencyType или currencyId определены
+        const currencyIdentifier = currentLocation.currencyType || currentLocation.currencyId;
+        if (currencyIdentifier) {
+          // Получаем количество ресурсов
+          const resources = await api.getResourceAmount(currencyIdentifier);
+          setResourceAmount(resources);
+        } else {
+          console.warn('currencyType и currencyId не определены для текущей локации:', currentLocation);
+          setResourceAmount(0);
+        }
         
         // Получаем сад-коины при смене локации
-        const coins = await api.getResourceAmount('main');
+        const coins = await api.getResourceAmount(CurrencyType.MAIN);
         setGardenCoins(coins);
       } catch (error) {
         console.error('Ошибка при загрузке данных локации:', error);
@@ -303,8 +345,11 @@ function App() {
       const tapResult = await api.tap(currentLocation.id);
       
       // Обновляем данные на интерфейсе
-      const newResourceAmount = await api.getResourceAmount(currentLocation.currencyId);
-      setResourceAmount(newResourceAmount);
+      const currencyIdentifier = currentLocation.currencyType || currentLocation.currencyId;
+      if (currencyIdentifier) {
+        const newResourceAmount = await api.getResourceAmount(currencyIdentifier);
+        setResourceAmount(newResourceAmount);
+      }
       
       // Обновляем прогресс
       const progress = await api.getPlayerProgress();
@@ -319,22 +364,35 @@ function App() {
         const allLocations = await api.getLocations();
         const locationsWithPlaceholders = allLocations.map((location: Location) => ({
           ...location,
-          background: location.background || '/assets/backgrounds/forest.jpg',
+          background: location.background || '/assets/backgrounds/default.jpg',
         }));
         
         setLocations(locationsWithPlaceholders);
         
-        const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
-        const toolsWithImages = locationTools.map((tool: Tool) => {
-          const imagePath = tool.imagePath || getToolImagePath(tool.name);
-          return { ...tool, imagePath };
-        });
-        
-        setTools(toolsWithImages);
+        if (currentLocation.characterId) {
+          const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
+          const toolsWithImages = locationTools.map((tool: Tool) => {
+            const imagePath = tool.imagePath || getToolImagePath(tool.name);
+            
+            // Обеспечиваем совместимость полей в разных форматах
+            return { 
+              ...tool, 
+              imagePath,
+              // Если поля в camelCase отсутствуют, но есть в snake_case, копируем их
+              mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
+              locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
+              // Убедимся, что обязательные поля всегда определены
+              main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
+              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+            };
+          });
+          
+          setTools(toolsWithImages as Tool[]);
+        }
       }
       
       // Обновляем сад-коины
-      const coins = await api.getResourceAmount('main');
+      const coins = await api.getResourceAmount(CurrencyType.MAIN);
       setGardenCoins(coins);
     } catch (error) {
       console.error('Ошибка при тапе:', error);
@@ -349,29 +407,43 @@ function App() {
       
       if (success) {
         // Обновляем количество ресурсов
-        const newResourceAmount = await api.getResourceAmount(currentLocation?.currencyId || 'forest');
-        setResourceAmount(newResourceAmount);
+        const currencyIdentifier = currentLocation?.currencyType || currentLocation?.currencyId;
+        if (currencyIdentifier) {
+          const newResourceAmount = await api.getResourceAmount(currencyIdentifier);
+          setResourceAmount(newResourceAmount);
+        }
         
         // Обновляем список инструментов и прогресс
         const progress = await api.getPlayerProgress();
         setPlayerProgress(progress);
         
         // Проверяем, разблокирован ли инструмент
-        if (progress.unlockedTools.includes(toolId)) {
-          await api.equipTool(currentLocation?.characterId as number, toolId);
+        if (currentLocation?.characterId && progress.unlockedTools.includes(toolId)) {
+          await api.equipTool(currentLocation.characterId, toolId);
           
           // Получаем обновленный список инструментов
-          const locationTools = await api.getToolsByCharacterId(currentLocation?.characterId as number);
+          const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
           const toolsWithImages = locationTools.map((tool: Tool) => {
             const imagePath = tool.imagePath || getToolImagePath(tool.name);
-            return { ...tool, imagePath };
+            
+            // Обеспечиваем совместимость полей в разных форматах
+            return { 
+              ...tool, 
+              imagePath,
+              // Если поля в camelCase отсутствуют, но есть в snake_case, копируем их
+              mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
+              locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
+              // Убедимся, что обязательные поля всегда определены
+              main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
+              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+            };
           });
           
-          setTools(toolsWithImages);
+          setTools(toolsWithImages as Tool[]);
         }
         
         // Обновляем сад-коины
-        const coins = await api.getResourceAmount('main');
+        const coins = await api.getResourceAmount(CurrencyType.MAIN);
         setGardenCoins(coins);
       }
       
@@ -383,18 +455,63 @@ function App() {
   };
   
   // Обработка смены локации
-  const handleLocationChange = (locationId: number) => {
+  const handleLocationChange = async (locationId: number) => {
     const selectedLocation = locations.find(loc => loc.id === locationId);
     if (selectedLocation) {
       setCurrentLocation(selectedLocation);
       setCurrentLocationId(selectedLocation.id);
+      
+      try {
+        // Проверяем, что characterId определен
+        if (selectedLocation.characterId) {
+          // Получаем инструменты для новой локации
+          const locationTools = await api.getToolsByCharacterId(selectedLocation.characterId);
+          const toolsWithImages = locationTools.map(tool => {
+            const imagePath = tool.imagePath || getToolImagePath(tool.name);
+            
+            // Обеспечиваем совместимость полей в разных форматах
+            return { 
+              ...tool, 
+              imagePath,
+              // Если поля в camelCase отсутствуют, но есть в snake_case, копируем их
+              mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
+              locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
+              // Убедимся, что обязательные поля всегда определены
+              main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
+              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+            };
+          });
+          
+          setTools(toolsWithImages as Tool[]);
+        } else {
+          console.warn('characterId не определен для выбранной локации:', selectedLocation);
+          setTools([]);
+        }
+        
+        // Проверяем, что currencyType или currencyId определены
+        const currencyIdentifier = selectedLocation.currencyType || selectedLocation.currencyId;
+        if (currencyIdentifier) {
+          // Получаем количество ресурсов для новой локации
+          const resources = await api.getResourceAmount(currencyIdentifier);
+          setResourceAmount(resources);
+        } else {
+          console.warn('currencyType и currencyId не определены для выбранной локации:', selectedLocation);
+          setResourceAmount(0);
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке данных для новой локации:', error);
+      }
     }
   };
 
   // Активация инструмента
   const handleActivateTool = async (toolId: number) => {
     try {
-      if (!currentLocation) return;
+      if (!currentLocation) return false;
+      if (!currentLocation.characterId) {
+        console.warn('characterId не определен для текущей локации:', currentLocation);
+        return false;
+      }
       
       await api.equipTool(currentLocation.characterId, toolId);
       
@@ -426,7 +543,7 @@ function App() {
         maxEnergy={playerProgress.maxEnergy}
         gardenCoins={gardenCoins}
         locationCurrency={resourceAmount}
-        locationCurrencyType={currentLocation.currencyId as unknown as CurrencyType}
+        locationCurrencyType={(currentLocation.currencyType || currentLocation.currencyId || CurrencyType.FOREST) as CurrencyType}
         lastEnergyRefillTime={playerProgress.lastEnergyRefillTime}
       />
       
@@ -434,9 +551,9 @@ function App() {
       {activeTab === "tap" && <GameScreen
         location={currentLocation}
         tools={tools}
-        equippedToolId={playerProgress.equippedTools[currentLocation.characterId] || 0}
+        equippedToolId={currentLocation.characterId ? (playerProgress.equippedTools[currentLocation.characterId] || 0) : 0}
         resourceAmount={resourceAmount}
-        currencyType={currentLocation.currencyId as unknown as CurrencyType}
+        currencyType={(currentLocation.currencyType || currentLocation.currencyId || CurrencyType.FOREST) as CurrencyType}
         energy={playerProgress.energy}
         maxEnergy={playerProgress.maxEnergy}
         level={playerProgress.level}
@@ -444,7 +561,7 @@ function App() {
         nextLevelExperience={nextLevelExp}
         onTap={handleTap}
         onUpgrade={handleUpgrade}
-        characterImageUrl="/assets/characters/lumberjack.gif"
+        characterImageUrl={currentLocation.characterId ? `/assets/characters/${currentLocation.characterId}.gif` : '/assets/characters/lumberjack.gif'}
         gardenCoins={gardenCoins}
         onActivateTool={handleActivateTool}
       />}
@@ -486,7 +603,7 @@ function App() {
                     </div>
                     {isUnlocked && (
                       <button 
-                        className={`ml-4 px-4 py-2 rounded ${isActive ? 'bg-green-600' : 'bg-yellow-500'} text-white`}
+                        className={`ml-4 px-4 py-2 rounded bg-yellow-500 text-white transform transition-transform hover:scale-105 active:scale-95`}
                         onClick={() => {
                           handleLocationChange(location.id);
                           setActiveTab("tap");

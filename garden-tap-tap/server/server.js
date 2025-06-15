@@ -82,7 +82,22 @@ app.get('/api/characters/:id', async (req, res) => {
 // Получить инструменты для персонажа
 app.get('/api/characters/:id/tools', async (req, res) => {
   try {
-    const tools = await db.all('SELECT * FROM tools WHERE character_id = ?', [req.params.id]);
+    const tools = await db.all(`
+      SELECT 
+        id, 
+        name, 
+        character_id as characterId, 
+        unlock_level as unlockLevel, 
+        unlock_cost as unlockCost, 
+        currency_type as currencyType, 
+        image_path as imagePath,
+        main_coins_power as mainCoinsPower,
+        location_coins_power as locationCoinsPower
+      FROM tools 
+      WHERE character_id = ?
+    `, [req.params.id]);
+    
+    console.log(`API: Получены инструменты для персонажа ${req.params.id}:`, tools);
     res.json(tools);
   } catch (error) {
     console.error('Ошибка при получении инструментов:', error);
@@ -373,11 +388,11 @@ app.get('/api/player/resources/:currencyId', async (req, res) => {
     // Получаем или создаем запись о валюте
     await getOrCreatePlayerCurrency(userId, currencyId);
     
-    // Получаем количество ресурсов
+    // Получаем количество ресурсов, проверяя обе колонки для обратной совместимости
     const currency = await db.get(`
       SELECT amount FROM player_currencies
-      WHERE user_id = ? AND currency_type = ?
-    `, [userId, currencyId]);
+      WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
+    `, [userId, currencyId, currencyId]);
     
     res.json({ amount: currency ? currency.amount : 0 });
   } catch (error) {
@@ -475,10 +490,10 @@ app.post('/api/player/tap', async (req, res) => {
     
     // Добавляем ресурсы
     await db.run(`
-      INSERT OR REPLACE INTO player_currencies (user_id, currency_type, amount)
-      VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies 
-        WHERE user_id = ? AND currency_type = ?), 0) + ?)
-    `, [userId, location.currency_type, userId, location.currency_type, resourcesGained]);
+      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, currency_type, amount)
+      VALUES (?, ?, ?, COALESCE((SELECT amount FROM player_currencies 
+        WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)), 0) + ?)
+    `, [userId, location.currency_type, location.currency_type, userId, location.currency_type, location.currency_type, resourcesGained]);
     
     // Генерируем опыт (равен количеству ресурсов)
     const experienceGained = resourcesGained;
@@ -581,8 +596,8 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     await db.run(`
       UPDATE player_currencies
       SET amount = amount - ?
-      WHERE user_id = ? AND currency_type = ?
-    `, [tool.unlock_cost, userId, tool.currency_type]);
+      WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
+    `, [tool.unlock_cost, userId, tool.currency_type, tool.currency_type]);
     
     // Разблокируем инструмент
     await db.run(`
@@ -624,15 +639,15 @@ async function getOrCreatePlayerProgress(userId) {
   
   // Создаем записи о валютах
   await db.run(`
-    INSERT INTO player_currencies (user_id, currency_type, amount)
-    VALUES (?, ?, 0)
-  `, [userId, CurrencyType.MAIN]);
+    INSERT INTO player_currencies (user_id, currency_id, currency_type, amount)
+    VALUES (?, ?, ?, 0)
+  `, [userId, CurrencyType.MAIN, CurrencyType.MAIN]);
   
   // Добавляем валюту леса
   await db.run(`
-    INSERT INTO player_currencies (user_id, currency_type, amount)
-    VALUES (?, ?, 0)
-  `, [userId, CurrencyType.FOREST]);
+    INSERT INTO player_currencies (user_id, currency_id, currency_type, amount)
+    VALUES (?, ?, ?, 0)
+  `, [userId, CurrencyType.FOREST, CurrencyType.FOREST]);
   
   // Разблокируем первую локацию
   await db.run(`
@@ -660,24 +675,32 @@ async function getOrCreatePlayerProgress(userId) {
 
 // Получение или создание валюты игрока
 async function getOrCreatePlayerCurrency(userId, currencyId) {
-  // Проверяем, есть ли запись о валюте
+  // Проверяем, есть ли запись о валюте (проверяем обе колонки)
   const currency = await db.get(`
-    SELECT * FROM player_currencies WHERE user_id = ? AND currency_type = ?
-  `, [userId, currencyId]);
+    SELECT * FROM player_currencies WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
+  `, [userId, currencyId, currencyId]);
   
   if (currency) {
+    // Если запись существует, но нет значения в currency_type, обновляем его
+    if (!currency.currency_type) {
+      await db.run(`
+        UPDATE player_currencies SET currency_type = ?
+        WHERE user_id = ? AND currency_id = ?
+      `, [currencyId, userId, currencyId]);
+    }
     return currency;
   }
   
-  // Создаем запись о валюте
+  // Создаем запись о валюте с заполнением обеих колонок
   await db.run(`
-    INSERT INTO player_currencies (user_id, currency_type, amount)
-    VALUES (?, ?, 0)
-  `, [userId, currencyId]);
+    INSERT INTO player_currencies (user_id, currency_id, currency_type, amount)
+    VALUES (?, ?, ?, 0)
+  `, [userId, currencyId, currencyId]);
   
   // Возвращаем созданную запись
   return {
     user_id: userId,
+    currency_id: currencyId,
     currency_type: currencyId,
     amount: 0
   };
@@ -746,8 +769,8 @@ async function processReward(userId, reward) {
       await db.run(`
         UPDATE player_currencies
         SET amount = amount + ?
-        WHERE user_id = ? AND currency_type = ?
-      `, [reward.amount, userId, CurrencyType.MAIN]);
+        WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
+      `, [reward.amount, userId, CurrencyType.MAIN, CurrencyType.MAIN]);
       break;
       
     case RewardType.LOCATION_CURRENCY:
@@ -760,8 +783,8 @@ async function processReward(userId, reward) {
         await db.run(`
           UPDATE player_currencies
           SET amount = amount + ?
-          WHERE user_id = ? AND currency_type = ?
-        `, [reward.amount, userId, location.currency_type]);
+          WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
+        `, [reward.amount, userId, location.currency_type, location.currency_type]);
       }
       break;
       

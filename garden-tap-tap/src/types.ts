@@ -41,6 +41,9 @@ export interface Tool {
   imagePath?: string;
   main_coins_power: number;      // Сколько садкоинов даёт за тап
   location_coins_power: number;  // Сколько валюты локации даёт за тап
+  // Поля в camelCase для совместимости с API
+  mainCoinsPower?: number;
+  locationCoinsPower?: number;
 }
 
 // Интерфейс персонажа

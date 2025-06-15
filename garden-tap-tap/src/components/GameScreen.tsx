@@ -107,8 +107,8 @@ const UpgradeModal = ({
                           )}
                         </div>
                         <div className="text-sm text-gray-400">
-                          <div>+{tool.location_coins_power || 1} валюты локации за тап</div>
-                          <div>+{tool.main_coins_power || 0.5} сад-коинов за тап</div>
+                          <div>+{tool.locationCoinsPower || tool.location_coins_power || 1} валюты локации за тап</div>
+                          <div>+{tool.mainCoinsPower || tool.main_coins_power || 0.5} сад-коинов за тап</div>
                         </div>
                       </div>
                     </div>
@@ -240,9 +240,13 @@ const GameScreen: React.FC<GameScreenProps> = ({
   useEffect(() => {
     const loadCurrencyInfo = async () => {
       try {
-        const currency = await api.getCurrencyByType(location.currencyId);
-        if (currency) {
-          setCurrencyInfo(currency);
+        // Используем currencyType, если доступен, иначе currencyId
+        const currencyIdentifier = location.currencyType || location.currencyId;
+        if (currencyIdentifier) {
+          const currency = await api.getCurrencyByType(currencyIdentifier);
+          if (currency) {
+            setCurrencyInfo(currency);
+          }
         }
       } catch (error) {
         console.error('Ошибка при загрузке информации о валюте:', error);
@@ -250,7 +254,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
     };
 
     loadCurrencyInfo();
-  }, [location.currencyId]);
+  }, [location.currencyType, location.currencyId]);
 
   // Попытка улучшить инструмент
   const handleUpgrade = useCallback(async () => {
@@ -355,8 +359,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
             <div className="font-medium text-right">
               <div className="text-xs text-white opacity-70">Сила тапа</div>
               <div className="flex flex-col">
-                <span className="text-white text-sm">{currencyInfo?.name || currencyType}: {currentTool?.location_coins_power || 1}</span>
-                <span className="text-yellow-400 text-sm">Сад-коины: {currentTool?.main_coins_power || 0.5}</span>
+                <span className="text-white text-sm">{currencyInfo?.name || currencyType}: {currentTool?.locationCoinsPower || currentTool?.location_coins_power || 1}</span>
+                <span className="text-yellow-400 text-sm">Сад-коины: {currentTool?.mainCoinsPower || currentTool?.main_coins_power || 0.5}</span>
               </div>
             </div>
           </div>
