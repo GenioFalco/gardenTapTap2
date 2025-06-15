@@ -345,24 +345,24 @@ const GameScreen: React.FC<GameScreenProps> = ({
       </div>
 
       {/* Нижняя область с инструментами - немного поднята вверх */}
-      <div className="w-full max-w-sm mb-20">
-        <div className="bg-gray-800 bg-opacity-80 rounded-lg p-3">
+      <div className="w-full max-w-xs fixed bottom-24 left-1/2 transform -translate-x-1/2 z-10">
+        <div className="bg-gray-800 bg-opacity-80 rounded-lg p-1.5">
           <div className="flex justify-between items-center mb-2">
             <div>
-              <div className="text-sm text-white opacity-70">Текущий инструмент</div>
-              <div className="font-bold text-white">{currentTool?.name || 'Нет'}</div>
+              <div className="text-xs text-white opacity-70">Текущий инструмент</div>
+              <div className="font-medium text-sm text-white">{currentTool?.name || 'Нет'}</div>
             </div>
             <div className="font-medium text-right">
-              <div className="text-sm text-white opacity-70">Сила тапа</div>
+              <div className="text-xs text-white opacity-70">Сила тапа</div>
               <div className="flex flex-col">
-                <span className="text-white">{currencyInfo?.name || currencyType}: {currentTool?.location_coins_power || 1}</span>
-                <span className="text-yellow-400">Сад-коины: {currentTool?.main_coins_power || 0.5}</span>
+                <span className="text-white text-sm">{currencyInfo?.name || currencyType}: {currentTool?.location_coins_power || 1}</span>
+                <span className="text-yellow-400 text-sm">Сад-коины: {currentTool?.main_coins_power || 0.5}</span>
               </div>
             </div>
           </div>
 
           <button 
-            className="w-full bg-yellow-500 hover:bg-yellow-600 py-2 px-4 rounded text-black font-medium mt-1"
+            className="w-full bg-yellow-500 hover:bg-yellow-600 py-1 px-2 rounded text-black text-xs mt-0.5"
             onClick={() => setShowUpgradeModal(true)}
           >
             Улучшить

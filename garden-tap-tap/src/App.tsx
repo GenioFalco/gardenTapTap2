@@ -454,6 +454,7 @@ function App() {
         activeLocationId={currentLocationId}
         onSelectLocation={handleLocationChange}
         unlockedLocations={playerProgress.unlockedLocations}
+        onTap={handleTap}
       />
     </div>
   );

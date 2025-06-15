@@ -95,25 +95,25 @@ const TopPanel: React.FC<TopPanelProps> = ({
   console.log(`TopPanel render - energy: ${energy}, maxEnergy: ${maxEnergy}, nextLevel: ${nextLevelExperience}`);
 
   return (
-    <div className="top-panel rounded-xl p-4 mt-4 mx-2">
+    <div className="top-panel rounded-xl p-3 mt-2 mx-2">
       {/* Верхняя часть с аватаром, именем, уровнем и прогрессом */}
-      <div className="flex items-start mb-4">
+      <div className="flex items-start mb-2">
         {/* Аватар пользователя */}
-        <div className="avatar mr-4">
+        <div className="avatar mr-3">
           <img src={avatarSrc} alt="Аватар" className="w-full h-full object-cover" />
         </div>
         
         {/* Правая колонка: имя, уровень и шкала прогресса */}
         <div className="flex flex-col flex-grow">
           {/* Имя и уровень */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1">
             <span className="text-white font-bold text-base">{userName}</span>
-            <span className="text-white font-medium text-sm bg-yellow-500 rounded-full px-3 py-1">Уровень {level}</span>
+            <span className="text-white font-medium text-xs bg-yellow-500 rounded-full px-2 py-1">Уровень {level}</span>
           </div>
           
           {/* Шкала прогресса уровня с опытом */}
           <div>
-            <div className="text-white text-xs mb-1">
+            <div className="text-white text-xs mb-0.5">
               XP: {experience}/{nextLevelExperience}
             </div>
             <div className="progress-bar">
@@ -127,7 +127,7 @@ const TopPanel: React.FC<TopPanelProps> = ({
       </div>
       
       {/* Разделительная линия */}
-      <div className="divider mb-4"></div>
+      <div className="divider mb-2"></div>
       
       {/* Нижняя часть с энергией и валютами */}
       <div className="flex justify-between items-center">
@@ -136,26 +136,26 @@ const TopPanel: React.FC<TopPanelProps> = ({
           <img 
             src="/assets/currencies/energy.png" 
             alt="Энергия" 
-            className="w-6 h-6 mr-2" 
+            className="w-5 h-5 mr-1" 
           />
-          <span className="text-white text-base">{energy}/{maxEnergy}</span>
+          <span className="text-white text-sm">{energy}/{maxEnergy}</span>
           {energy < maxEnergy ? (
-            <span className="text-yellow-500 text-xs ml-2">+1 через {formatTime(secondsUntilRefill)}</span>
+            <span className="text-yellow-500 text-xs ml-1">+1 через {formatTime(secondsUntilRefill)}</span>
           ) : (
-            <span className="text-yellow-500 text-xs ml-2">MAX</span>
+            <span className="text-yellow-500 text-xs ml-1">MAX</span>
           )}
         </div>
         
         {/* Валюты */}
-        <div className="flex space-x-5">
+        <div className="flex space-x-3">
           {/* Сад коины (монета с листочком) */}
           <div className="flex items-center">
             <img 
               src="/assets/currencies/garden_coin.png" 
               alt="Сад-коин" 
-              className="w-6 h-6 mr-2" 
+              className="w-5 h-5 mr-1" 
             />
-            <span className="text-white text-base">{gardenCoins.toFixed(1)}</span>
+            <span className="text-white text-sm">{gardenCoins.toFixed(1)}</span>
           </div>
           
           {/* Валюта локации */}
@@ -163,9 +163,9 @@ const TopPanel: React.FC<TopPanelProps> = ({
             <img 
               src={getLocationCurrencyIcon(locationCurrencyType)} 
               alt="Валюта локации" 
-              className="w-6 h-6 mr-2" 
+              className="w-5 h-5 mr-1" 
             />
-            <span className="text-white text-base">{locationCurrency.toFixed(1)}</span>
+            <span className="text-white text-sm">{locationCurrency.toFixed(1)}</span>
           </div>
         </div>
       </div>
