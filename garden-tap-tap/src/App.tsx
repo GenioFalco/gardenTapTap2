@@ -18,6 +18,7 @@ function App() {
   const [userName, setUserName] = useState<string>('');
   const [userAvatar, setUserAvatar] = useState<string>('');
   const [gardenCoins, setGardenCoins] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<string>("tap");
   
   // Генерация случайного имени пользователя, если не удалось получить из Telegram
   const generateRandomUserName = () => {
@@ -429,8 +430,8 @@ function App() {
         lastEnergyRefillTime={playerProgress.lastEnergyRefillTime}
       />
       
-      {/* Игровой экран */}
-      <GameScreen
+      {/* Игровой экран или другие вкладки в зависимости от activeTab */}
+      {activeTab === "tap" && <GameScreen
         location={currentLocation}
         tools={tools}
         equippedToolId={playerProgress.equippedTools[currentLocation.characterId] || 0}
@@ -446,7 +447,85 @@ function App() {
         characterImageUrl="/assets/characters/lumberjack.gif"
         gardenCoins={gardenCoins}
         onActivateTool={handleActivateTool}
-      />
+      />}
+      
+      {/* Экран локаций */}
+      {activeTab === "locations" && (
+        <div className="h-screen w-full pt-36 mt-1 px-4 overflow-hidden relative">
+          <div className="absolute inset-0 z-0" 
+               style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
+          <div className="grid grid-cols-1 gap-4 pb-20 max-h-[calc(100vh-180px)] overflow-y-auto relative z-10">
+            {locations.map((location) => {
+              const isUnlocked = playerProgress.unlockedLocations.includes(location.id);
+              const isActive = location.id === currentLocationId;
+              
+              return (
+                <div 
+                  key={location.id} 
+                  className={`location-card p-4 rounded-lg ${
+                    isActive ? 'bg-blue-700' : 'bg-gray-700'
+                  } ${!isUnlocked ? 'opacity-50 grayscale' : ''} relative overflow-hidden bg-opacity-80`}
+                >
+                  {!isUnlocked && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 rounded-lg">
+                      <span className="text-sm font-medium">{`Доступно с уровня ${location.unlockLevel}`}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center">
+                    <div className="w-16 h-16 rounded-full bg-gray-600 mr-4 overflow-hidden">
+                      <img 
+                        src={location.background} 
+                        alt={location.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-white">{location.name}</h3>
+                      <p className="text-sm text-white opacity-75">{location.description}</p>
+                    </div>
+                    {isUnlocked && (
+                      <button 
+                        className={`ml-4 px-4 py-2 rounded ${isActive ? 'bg-green-600' : 'bg-yellow-500'} text-white`}
+                        onClick={() => {
+                          handleLocationChange(location.id);
+                          setActiveTab("tap");
+                        }}
+                      >
+                        {isActive ? 'Активна' : 'Выбрать'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      
+      {/* Экран друзей */}
+      {activeTab === "friends" && (
+        <div className="h-screen w-full pt-36 mt-1 px-4 flex items-center justify-center overflow-hidden relative">
+          <div className="absolute inset-0 z-0" 
+               style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
+          <div className="text-center p-8 bg-gray-800 bg-opacity-80 rounded-lg relative z-10">
+            <h2 className="text-xl font-bold text-white mb-4">Друзья</h2>
+            <p className="text-white">Функция "Друзья" находится в разработке.</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Экран обмена */}
+      {activeTab === "exchange" && (
+        <div className="h-screen w-full pt-36 mt-1 px-4 flex items-center justify-center overflow-hidden relative">
+          <div className="absolute inset-0 z-0" 
+               style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
+          <div className="text-center p-8 bg-gray-800 bg-opacity-80 rounded-lg relative z-10">
+            <h2 className="text-xl font-bold text-white mb-4">Обмен</h2>
+            <p className="text-white">Функция "Обмен" находится в разработке.</p>
+          </div>
+        </div>
+      )}
       
       {/* Выбор локации */}
       <LocationSelector
@@ -455,6 +534,8 @@ function App() {
         onSelectLocation={handleLocationChange}
         unlockedLocations={playerProgress.unlockedLocations}
         onTap={handleTap}
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
       />
     </div>
   );

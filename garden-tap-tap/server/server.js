@@ -376,7 +376,7 @@ app.get('/api/player/resources/:currencyId', async (req, res) => {
     // Получаем количество ресурсов
     const currency = await db.get(`
       SELECT amount FROM player_currencies
-      WHERE user_id = ? AND currency_id = ?
+      WHERE user_id = ? AND currency_type = ?
     `, [userId, currencyId]);
     
     res.json({ amount: currency ? currency.amount : 0 });
@@ -662,7 +662,7 @@ async function getOrCreatePlayerProgress(userId) {
 async function getOrCreatePlayerCurrency(userId, currencyId) {
   // Проверяем, есть ли запись о валюте
   const currency = await db.get(`
-    SELECT * FROM player_currencies WHERE user_id = ? AND currency_id = ?
+    SELECT * FROM player_currencies WHERE user_id = ? AND currency_type = ?
   `, [userId, currencyId]);
   
   if (currency) {
@@ -671,14 +671,14 @@ async function getOrCreatePlayerCurrency(userId, currencyId) {
   
   // Создаем запись о валюте
   await db.run(`
-    INSERT INTO player_currencies (user_id, currency_id, amount)
+    INSERT INTO player_currencies (user_id, currency_type, amount)
     VALUES (?, ?, 0)
   `, [userId, currencyId]);
   
   // Возвращаем созданную запись
   return {
     user_id: userId,
-    currency_id: currencyId,
+    currency_type: currencyId,
     amount: 0
   };
 }
