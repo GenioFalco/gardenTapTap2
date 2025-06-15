@@ -36,7 +36,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({
                 </div>
               )}
               <span className="text-xs font-medium">{location.name}</span>
-              <span className="text-[10px] opacity-75">{location.resourceName}</span>
+              <span className="text-[10px] opacity-75">{location.description}</span>
             </motion.div>
           );
         })}

@@ -1,7 +1,7 @@
 // routes/currency.routes.js
 const express = require('express');
 const router = express.Router();
-const { db, CurrencyType } = require('../db');
+const { db } = require('../db');
 
 // Получить все валюты
 router.get('/', async (req, res) => {
@@ -14,15 +14,13 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Получить валюту по типу
-router.get('/:type', async (req, res) => {
+// Получить валюту по ID
+router.get('/:id', async (req, res) => {
   try {
-    const { type } = req.params;
+    const { id } = req.params;
     
-    // Проверяем, что тип валюты корректный
-    const normalizedType = type.toUpperCase();
-    
-    const currency = await db.get('SELECT * FROM currencies WHERE currency_type = ?', [type.toLowerCase()]);
+    // Получаем валюту по ID (currency_type)
+    const currency = await db.get('SELECT * FROM currencies WHERE LOWER(currency_type) = LOWER(?)', [id]);
     
     if (!currency) {
       return res.status(404).json({ error: 'Валюта не найдена' });
@@ -30,7 +28,7 @@ router.get('/:type', async (req, res) => {
     
     res.json(currency);
   } catch (error) {
-    console.error('Ошибка при получении валюты по типу:', error);
+    console.error('Ошибка при получении валюты по ID:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -62,9 +60,9 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, currency_type, image_path } = req.body;
+    const { name, image_path } = req.body;
     
-    if (!name && !currency_type && !image_path) {
+    if (!name && !image_path) {
       return res.status(400).json({ error: 'Не указаны параметры для обновления' });
     }
     
@@ -75,12 +73,11 @@ router.put('/:id', async (req, res) => {
     }
     
     const updatedName = name || currency.name;
-    const updatedType = currency_type ? currency_type.toLowerCase() : currency.currency_type;
     const updatedImagePath = image_path || currency.image_path;
     
     await db.run(
-      'UPDATE currencies SET name = ?, currency_type = ?, image_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [updatedName, updatedType, updatedImagePath, id]
+      'UPDATE currencies SET name = ?, image_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [updatedName, updatedImagePath, id]
     );
     
     const updatedCurrency = await db.get('SELECT * FROM currencies WHERE id = ?', [id]);

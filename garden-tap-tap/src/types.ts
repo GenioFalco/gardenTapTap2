@@ -23,9 +23,10 @@ export interface Location {
   background: string;
   unlockLevel: number;
   characterId: number;
-  currencyType: CurrencyType;
-  resourceName?: string;  // Название ресурса, который добывается в локации
-  unlockCost?: number;    // Стоимость разблокировки локации
+  currencyId: string;  // Для использования с базой данных SQLite
+  currencyType: CurrencyType;  // Для обратной совместимости с API
+  resourceName: string;  // Для обратной совместимости с API
+  unlockCost?: number;
 }
 
 // Интерфейс инструмента
@@ -77,19 +78,22 @@ export enum RewardType {
 // Интерфейс награды
 export interface Reward {
   id: number;
-  type: RewardType;
-  itemId?: number;
-  amount?: number;
   level: number;
-  levelId?: number;       // Поддержка обратной совместимости
-  currencyType?: CurrencyType;
-  rewardType?: RewardType; // Поддержка обратной совместимости
-  targetId?: number;      // ID цели награды (инструмент, локация и т.д.)
+  levelId?: number;       // Для обратной совместимости
+  type?: RewardType;      // Для обратной совместимости
+  reward_type: RewardType;
+  rewardType?: RewardType;  // Для обратной совместимости с API
+  currencyId?: string;    
+  currencyType?: CurrencyType;  // Для обратной совместимости
+  amount?: number;
+  target_id?: number;
+  targetId?: number;     // Для обратной совместимости с API
 }
 
 // Интерфейс валюты игрока
 export interface PlayerCurrency {
-  currencyType: CurrencyType;
+  currencyId: string;  
+  currencyType?: CurrencyType;  // Для обратной совместимости с API
   amount: number;
 }
 
@@ -104,4 +108,15 @@ export interface PlayerProgress {
   unlockedTools: number[];
   unlockedLocations: number[];
   currencies?: PlayerCurrency[];  // Валюты игрока
+}
+
+// Добавляем интерфейс для внешнего вида персонажа
+export interface CharacterAppearance {
+  id: number;
+  characterId: number;
+  toolId: number;
+  imagePath: string;
+  animationType?: string;
+  animationPath?: string;
+  frameCount?: number;
 } 

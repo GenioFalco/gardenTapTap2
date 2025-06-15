@@ -365,21 +365,21 @@ app.post('/api/player/update-energy', async (req, res) => {
 });
 
 // Получить количество ресурсов игрока
-app.get('/api/player/resources/:currencyType', async (req, res) => {
+app.get('/api/player/resources/:currencyId', async (req, res) => {
   try {
     const { userId } = req;
-    const currencyType = req.params.currencyType;
+    const currencyId = req.params.currencyId;
     
     // Получаем или создаем запись о валюте
-    await getOrCreatePlayerCurrency(userId, currencyType);
+    await getOrCreatePlayerCurrency(userId, currencyId);
     
     // Получаем количество ресурсов
     const currency = await db.get(`
       SELECT amount FROM player_currencies
-      WHERE user_id = ? AND currency_type = ?
-    `, [userId, currencyType]);
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, currencyId]);
     
-    res.json({ amount: currency.amount });
+    res.json({ amount: currency ? currency.amount : 0 });
   } catch (error) {
     console.error('Ошибка при получении количества ресурсов:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -659,11 +659,11 @@ async function getOrCreatePlayerProgress(userId) {
 }
 
 // Получение или создание валюты игрока
-async function getOrCreatePlayerCurrency(userId, currencyType) {
+async function getOrCreatePlayerCurrency(userId, currencyId) {
   // Проверяем, есть ли запись о валюте
   const currency = await db.get(`
-    SELECT * FROM player_currencies WHERE user_id = ? AND currency_type = ?
-  `, [userId, currencyType]);
+    SELECT * FROM player_currencies WHERE user_id = ? AND currency_id = ?
+  `, [userId, currencyId]);
   
   if (currency) {
     return currency;
@@ -671,14 +671,14 @@ async function getOrCreatePlayerCurrency(userId, currencyType) {
   
   // Создаем запись о валюте
   await db.run(`
-    INSERT INTO player_currencies (user_id, currency_type, amount)
+    INSERT INTO player_currencies (user_id, currency_id, amount)
     VALUES (?, ?, 0)
-  `, [userId, currencyType]);
+  `, [userId, currencyId]);
   
   // Возвращаем созданную запись
   return {
     user_id: userId,
-    currency_type: currencyType,
+    currency_id: currencyId,
     amount: 0
   };
 }

@@ -139,13 +139,13 @@ export const addResources = async (currencyType: CurrencyType, amount: number): 
 };
 
 // Получить количество ресурсов игрока
-export const getResourceAmount = async (currencyType: CurrencyType): Promise<number> => {
-  const response = await fetchApi<{ amount: number }>(`/player/resources/${currencyType}`);
+export const getResourceAmount = async (currencyId: string): Promise<number> => {
+  const response = await fetchApi<{ amount: number }>(`/player/resources/${currencyId}`);
   return response.amount;
 };
 
 // Потратить ресурсы
-export const spendResources = async (currencyType: CurrencyType, amount: number): Promise<boolean> => {
+export const spendResources = async (currencyId: string, amount: number): Promise<boolean> => {
   // На стороне сервера эта функция используется внутренне
   // при покупке инструментов и локаций
   return true;
@@ -228,9 +228,9 @@ export const getCurrencies = async (): Promise<Currency[]> => {
 /**
  * Получить валюту по типу
  */
-export const getCurrencyByType = async (currencyType: CurrencyType): Promise<Currency | null> => {
+export const getCurrencyByType = async (currencyId: string): Promise<Currency | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/currencies/${currencyType}`);
+    const response = await fetch(`${API_BASE_URL}/currencies/${currencyId}`);
     
     if (!response.ok) {
       if (response.status === 404) {
@@ -241,7 +241,7 @@ export const getCurrencyByType = async (currencyType: CurrencyType): Promise<Cur
     
     return await response.json();
   } catch (error) {
-    console.error(`Ошибка при получении валюты типа ${currencyType}:`, error);
+    console.error(`Ошибка при получении валюты с ID ${currencyId}:`, error);
     return null;
   }
 }; 

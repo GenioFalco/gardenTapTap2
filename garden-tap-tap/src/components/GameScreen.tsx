@@ -240,7 +240,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
   useEffect(() => {
     const loadCurrencyInfo = async () => {
       try {
-        const currency = await api.getCurrencyByType(currencyType);
+        const currency = await api.getCurrencyByType(location.currencyId);
         if (currency) {
           setCurrencyInfo(currency);
         }
@@ -250,7 +250,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
     };
 
     loadCurrencyInfo();
-  }, [currencyType]);
+  }, [location.currencyId]);
 
   // Попытка улучшить инструмент
   const handleUpgrade = useCallback(async () => {

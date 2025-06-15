@@ -4,7 +4,7 @@ import GameScreen from './components/GameScreen';
 import LocationSelector from './components/LocationSelector';
 import TopPanel from './components/TopPanel';
 import * as api from './lib/api';
-import { Location, Tool, CurrencyType, PlayerProgress } from './types';
+import { Location, Tool, PlayerProgress, CurrencyType } from './types';
 
 function App() {
   const [initialized, setInitialized] = useState(false);
@@ -109,11 +109,11 @@ function App() {
         setTools(toolsWithImages);
         
         // Получаем количество ресурсов
-        const resources = await api.getResourceAmount(currentLocation.currencyType);
+        const resources = await api.getResourceAmount(currentLocation.currencyId);
         setResourceAmount(resources);
         
         // Получаем сад-коины при смене локации
-        const coins = await api.getResourceAmount(CurrencyType.MAIN);
+        const coins = await api.getResourceAmount('main');
         setGardenCoins(coins);
       } catch (error) {
         console.error('Ошибка при загрузке данных локации:', error);
@@ -302,7 +302,7 @@ function App() {
       const tapResult = await api.tap(currentLocation.id);
       
       // Обновляем данные на интерфейсе
-      const newResourceAmount = await api.getResourceAmount(currentLocation.currencyType);
+      const newResourceAmount = await api.getResourceAmount(currentLocation.currencyId);
       setResourceAmount(newResourceAmount);
       
       // Обновляем прогресс
@@ -333,7 +333,7 @@ function App() {
       }
       
       // Обновляем сад-коины
-      const coins = await api.getResourceAmount(CurrencyType.MAIN);
+      const coins = await api.getResourceAmount('main');
       setGardenCoins(coins);
     } catch (error) {
       console.error('Ошибка при тапе:', error);
@@ -348,7 +348,7 @@ function App() {
       
       if (success) {
         // Обновляем количество ресурсов
-        const newResourceAmount = await api.getResourceAmount(currentLocation?.currencyType as CurrencyType);
+        const newResourceAmount = await api.getResourceAmount(currentLocation?.currencyId || 'forest');
         setResourceAmount(newResourceAmount);
         
         // Обновляем список инструментов и прогресс
@@ -370,7 +370,7 @@ function App() {
         }
         
         // Обновляем сад-коины
-        const coins = await api.getResourceAmount(CurrencyType.MAIN);
+        const coins = await api.getResourceAmount('main');
         setGardenCoins(coins);
       }
       
@@ -425,7 +425,7 @@ function App() {
         maxEnergy={playerProgress.maxEnergy}
         gardenCoins={gardenCoins}
         locationCurrency={resourceAmount}
-        locationCurrencyType={currentLocation.currencyType}
+        locationCurrencyType={currentLocation.currencyId as unknown as CurrencyType}
         lastEnergyRefillTime={playerProgress.lastEnergyRefillTime}
       />
       
@@ -435,7 +435,7 @@ function App() {
         tools={tools}
         equippedToolId={playerProgress.equippedTools[currentLocation.characterId] || 0}
         resourceAmount={resourceAmount}
-        currencyType={currentLocation.currencyType}
+        currencyType={currentLocation.currencyId as unknown as CurrencyType}
         energy={playerProgress.energy}
         maxEnergy={playerProgress.maxEnergy}
         level={playerProgress.level}

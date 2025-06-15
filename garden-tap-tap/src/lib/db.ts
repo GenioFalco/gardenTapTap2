@@ -144,7 +144,8 @@ const seedDatabase = async (): Promise<void> => {
         characterId: 1,
         unlockLevel: 1,
         unlockCost: 0,
-        currencyType: CurrencyType.MAIN
+        currencyType: CurrencyType.MAIN,
+        currencyId: 'forest'
       });
       
       // Добавляем уровни (первые 20)
@@ -158,16 +159,16 @@ const seedDatabase = async (): Promise<void> => {
       
       // Добавляем награды за уровни
       await db.rewards.bulkAdd([
-        { id: 1, level: 1, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 100, targetId: undefined, levelId: 1 },
-        { id: 2, level: 2, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 200, targetId: undefined, levelId: 2 },
-        { id: 3, level: 3, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 300, targetId: undefined, levelId: 3 },
-        { id: 4, level: 4, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 400, targetId: undefined, levelId: 4 },
-        { id: 5, level: 5, type: RewardType.TOOL, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 2, levelId: 5 }, // Разблокировка ручной пилы
-        { id: 6, level: 6, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 600, targetId: undefined, levelId: 6 },
-        { id: 7, level: 7, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 700, targetId: undefined, levelId: 7 },
-        { id: 8, level: 8, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 800, targetId: undefined, levelId: 8 },
-        { id: 9, level: 9, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 900, targetId: undefined, levelId: 9 },
-        { id: 10, level: 10, type: RewardType.TOOL, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 3, levelId: 10 }, // Разблокировка бензопилы
+        { id: 1, level: 1, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 100, targetId: undefined, levelId: 1, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 2, level: 2, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 200, targetId: undefined, levelId: 2, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 3, level: 3, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 300, targetId: undefined, levelId: 3, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 4, level: 4, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 400, targetId: undefined, levelId: 4, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 5, level: 5, type: RewardType.TOOL, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 2, levelId: 5, reward_type: RewardType.UNLOCK_TOOL }, // Разблокировка ручной пилы
+        { id: 6, level: 6, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 600, targetId: undefined, levelId: 6, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 7, level: 7, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 700, targetId: undefined, levelId: 7, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 8, level: 8, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 800, targetId: undefined, levelId: 8, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 9, level: 9, type: RewardType.CURRENCY, rewardType: RewardType.MAIN_CURRENCY, currencyType: CurrencyType.MAIN, amount: 900, targetId: undefined, levelId: 9, reward_type: RewardType.MAIN_CURRENCY },
+        { id: 10, level: 10, type: RewardType.TOOL, rewardType: RewardType.UNLOCK_TOOL, amount: 0, targetId: 3, levelId: 10, reward_type: RewardType.UNLOCK_TOOL }, // Разблокировка бензопилы
       ]);
       
       // Инициализация прогресса игрока
@@ -181,8 +182,8 @@ const seedDatabase = async (): Promise<void> => {
       
       // Инициализация валют игрока
       await db.playerCurrencies.bulkAdd([
-        { currencyType: CurrencyType.MAIN, amount: 0 },
-        { currencyType: CurrencyType.FOREST, amount: 0 },
+        { currencyType: CurrencyType.MAIN, amount: 0, currencyId: 'main' },
+        { currencyType: CurrencyType.FOREST, amount: 0, currencyId: 'forest' },
       ]);
       
       // Разблокируем первую локацию и инструмент
@@ -311,9 +312,13 @@ export const addResources = async (currencyType: CurrencyType, amount: number): 
       amount: currency.amount + amount
     });
   } else {
+    // Преобразуем тип валюты в идентификатор
+    const currencyId = currencyType.toLowerCase();
+    
     await db.playerCurrencies.add({
       currencyType,
-      amount
+      amount,
+      currencyId
     });
   }
 };
@@ -412,7 +417,7 @@ export const addExperience = async (exp: number): Promise<{ levelUp: boolean; le
     
     // Применяем награды
     for (const reward of levelRewards) {
-      switch (reward.rewardType) {
+      switch (reward.reward_type || reward.rewardType) {
         case RewardType.MAIN_CURRENCY:
           if (reward.amount !== undefined) {
             await addResources(CurrencyType.MAIN, reward.amount);
@@ -422,10 +427,10 @@ export const addExperience = async (exp: number): Promise<{ levelUp: boolean; le
           // Здесь должна быть логика определения типа валюты локации
           break;
         case RewardType.UNLOCK_TOOL:
-          if (reward.targetId) await unlockTool(reward.targetId);
+          if (reward.target_id || reward.targetId) await unlockTool(reward.target_id || reward.targetId as number);
           break;
         case RewardType.UNLOCK_LOCATION:
-          if (reward.targetId) await unlockLocation(reward.targetId);
+          if (reward.target_id || reward.targetId) await unlockLocation(reward.target_id || reward.targetId as number);
           break;
       }
     }
