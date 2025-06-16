@@ -553,11 +553,19 @@ app.post('/api/player/tap', async (req, res) => {
     const resourcesGained = Math.floor(toolPower * (0.5 + Math.random()));
     
     // Добавляем ресурсы
+    // Получаем правильный идентификатор валюты (currency_id или currency_type)
+    const currencyId = location.currency_id || location.currency_type || 'forest';
+    const currencyType = location.currency_type || location.currency_id || 'forest';
+    
+    // Сначала проверяем существование валюты
+    await getOrCreatePlayerCurrency(userId, currencyId);
+    
+    // Обновляем количество валюты
     await db.run(`
-      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, currency_type, amount)
-      VALUES (?, ?, ?, COALESCE((SELECT amount FROM player_currencies 
-        WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)), 0) + ?)
-    `, [userId, location.currency_type, location.currency_type, userId, location.currency_type, location.currency_type, resourcesGained]);
+      UPDATE player_currencies
+      SET amount = amount + ?
+      WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
+    `, [resourcesGained, userId, currencyType, currencyId]);
     
     // Генерируем опыт (равен количеству ресурсов)
     const experienceGained = resourcesGained;
