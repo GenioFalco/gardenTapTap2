@@ -230,6 +230,17 @@ const GameScreen: React.FC<GameScreenProps> = ({
   const [showNoEnergy, setShowNoEnergy] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [currencyInfo, setCurrencyInfo] = useState<Currency | null>(null);
+  const [characterAppearance, setCharacterAppearance] = useState<{
+    imagePath: string;
+    animationPath: string | null;
+    animationType: string | null;
+    frameCount: number | null;
+  }>({
+    imagePath: characterImageUrl,
+    animationPath: null,
+    animationType: null,
+    frameCount: null
+  });
 
   // Найти текущий и следующий доступный инструмент
   const currentTool = tools.find(tool => tool.id === equippedToolId);
@@ -256,6 +267,80 @@ const GameScreen: React.FC<GameScreenProps> = ({
     loadCurrencyInfo();
   }, [location.currencyType, location.currencyId]);
 
+  // Загрузка внешнего вида персонажа при изменении инструмента или локации
+  useEffect(() => {
+    const loadCharacterAppearance = async () => {
+      // Проверяем, что characterId определен (поддержка camelCase и snake_case)
+      const characterId = location.characterId || (location as any).character_id;
+      
+      if (!characterId) {
+        console.warn('characterId не определен для текущей локации:', location);
+        // Используем дефолтное изображение
+        setCharacterAppearance({
+          imagePath: characterImageUrl,
+          animationPath: null,
+          animationType: null,
+          frameCount: null
+        });
+        return;
+      }
+      
+      if (!equippedToolId) {
+        console.warn('equippedToolId не определен для текущей локации:', location);
+        // Используем дефолтное изображение
+        setCharacterAppearance({
+          imagePath: characterImageUrl,
+          animationPath: null,
+          animationType: null,
+          frameCount: null
+        });
+        return;
+      }
+      
+      try {
+        console.log(`Загрузка внешнего вида персонажа: characterId=${characterId}, toolId=${equippedToolId}`);
+        const appearance = await api.getCharacterAppearance(characterId, equippedToolId);
+        
+        if (appearance) {
+          console.log('Получен внешний вид персонажа:', appearance);
+          // Используем полученные данные, безопасно обрабатывая отсутствие полей
+          const imagePath = appearance.imagePath || characterImageUrl;
+          const animationPath = appearance.animationPath || null;
+          const animationType = appearance.animationType || null;
+          // frameCount может отсутствовать
+          const frameCount = appearance.frameCount !== undefined ? appearance.frameCount : null;
+          
+          setCharacterAppearance({
+            imagePath,
+            animationPath,
+            animationType,
+            frameCount
+          });
+        } else {
+          console.warn('Не найден внешний вид персонажа для данной комбинации character/tool');
+          // Используем дефолтное изображение
+          setCharacterAppearance({
+            imagePath: characterImageUrl,
+            animationPath: null,
+            animationType: null,
+            frameCount: null
+          });
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке внешнего вида персонажа:', error);
+        // Устанавливаем дефолтное изображение при ошибке
+        setCharacterAppearance({
+          imagePath: characterImageUrl,
+          animationPath: null,
+          animationType: null,
+          frameCount: null
+        });
+      }
+    };
+    
+    loadCharacterAppearance();
+  }, [location, equippedToolId, characterImageUrl]);
+
   // Попытка улучшить инструмент
   const handleUpgrade = useCallback(async () => {
     if (!nextTool) return;
@@ -279,13 +364,34 @@ const GameScreen: React.FC<GameScreenProps> = ({
     
     setIsAnimating(true);
     
+    // Если есть анимация, временно заменяем изображение на анимацию
+    const hasAnimation = characterAppearance.animationPath !== null && characterAppearance.animationType !== null;
+    
+    if (hasAnimation) {
+      const staticImage = characterAppearance.imagePath;
+      const animationDuration = characterAppearance.animationType === 'gif' ? 1000 : 500; // GIF дольше, спрайты быстрее
+      
+      setCharacterAppearance(prev => ({
+        ...prev,
+        imagePath: characterAppearance.animationPath || staticImage
+      }));
+      
+      // Возвращаем статичное изображение после завершения анимации
+      setTimeout(() => {
+        setCharacterAppearance(prev => ({
+          ...prev,
+          imagePath: staticImage
+        }));
+      }, animationDuration);
+    }
+    
     await onTap();
     
     // Останавливаем анимацию через небольшое время
     setTimeout(() => {
       setIsAnimating(false);
     }, 200);
-  }, [energy, onTap, isAnimating]);
+  }, [energy, onTap, isAnimating, characterAppearance]);
 
   // Клавиатурные сокращения
   useEffect(() => {
@@ -316,12 +422,25 @@ const GameScreen: React.FC<GameScreenProps> = ({
           transition={{ duration: 0.2 }}
           onClick={handleTap}
         >
-          <img 
-            src={characterImageUrl} 
-            alt="Персонаж"
-            className="w-56 h-56 md:w-64 md:h-64"
-            style={{ pointerEvents: energy <= 0 ? 'none' : 'auto' }}
-          />
+          {characterAppearance.imagePath && (
+            <img 
+              src={characterAppearance.imagePath} 
+              alt="Персонаж"
+              className="w-56 h-56 md:w-64 md:h-64"
+              style={{ 
+                pointerEvents: energy <= 0 ? 'none' : 'auto',
+                objectFit: 'contain'
+              }}
+            />
+          )}
+          {!characterAppearance.imagePath && (
+            <div 
+              className="w-56 h-56 md:w-64 md:h-64 bg-gray-700 flex items-center justify-center"
+              style={{ pointerEvents: energy <= 0 ? 'none' : 'auto' }}
+            >
+              <span className="text-white text-xl">Персонаж не найден</span>
+            </div>
+          )}
         </motion.div>
 
         {/* Всплывающие уведомления */}

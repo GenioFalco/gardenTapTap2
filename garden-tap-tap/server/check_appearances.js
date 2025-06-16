@@ -24,73 +24,125 @@ const db = new sqlite3.Database(dbPath, (err) => {
     }
 
     if (!table) {
-      console.log('Таблица character_appearances не существует!');
+      console.log('Таблица character_appearances не существует, создаем...');
+      createTable();
+    } else {
+      console.log('Таблица character_appearances существует, проверяем структуру...');
+      checkStructure();
+    }
+  });
+});
+
+// Создание таблицы character_appearances
+function createTable() {
+  db.run(`
+    CREATE TABLE character_appearances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      character_id INTEGER NOT NULL,
+      tool_id INTEGER NOT NULL,
+      image_path TEXT NOT NULL,
+      animation_path TEXT,
+      FOREIGN KEY (character_id) REFERENCES characters(id),
+      FOREIGN KEY (tool_id) REFERENCES tools(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error('Ошибка при создании таблицы:', err);
       db.close();
       return;
     }
-
-    console.log('Таблица character_appearances существует.');
     
-    // Получаем структуру таблицы
-    db.all("PRAGMA table_info(character_appearances)", (err, columns) => {
+    console.log('Таблица character_appearances создана успешно');
+    // Добавляем начальные данные
+    insertInitialData();
+  });
+}
+
+// Проверка структуры таблицы
+function checkStructure() {
+  db.all('PRAGMA table_info(character_appearances)', (err, columns) => {
+    if (err) {
+      console.error('Ошибка при проверке структуры таблицы:', err);
+      db.close();
+      return;
+    }
+    
+    console.log('Структура таблицы character_appearances:');
+    console.log(JSON.stringify(columns, null, 2));
+    
+    // Получаем данные из таблицы
+    db.all('SELECT * FROM character_appearances', (err, rows) => {
       if (err) {
-        console.error('Ошибка при получении структуры таблицы:', err.message);
+        console.error('Ошибка при получении данных из таблицы:', err);
         db.close();
-        process.exit(1);
+        return;
       }
       
-      console.log('\nСтруктура таблицы character_appearances:');
-      columns.forEach(column => {
-        console.log(`${column.cid}: ${column.name} (${column.type})`);
-      });
+      console.log('Данные таблицы character_appearances:');
+      console.log(JSON.stringify(rows, null, 2));
       
-      // Получаем данные из таблицы character_appearances напрямую
-      db.all(`SELECT * FROM character_appearances`, (err, rows) => {
-        if (err) {
-          console.error('Ошибка при получении данных из таблицы character_appearances:', err.message);
-          db.close();
-          process.exit(1);
-        }
-        
-        console.log('\nДанные из таблицы character_appearances (без JOIN):');
-        if (rows.length === 0) {
-          console.log('Таблица character_appearances пуста');
-        } else {
-          rows.forEach(row => {
-            console.log(row);
-          });
-        }
-        
-        // Теперь попробуем с JOIN
-        db.all(`
-          SELECT ca.*, c.name as character_name, t.name as tool_name
-          FROM character_appearances ca
-          JOIN characters c ON ca.character_id = c.id
-          JOIN tools t ON ca.tool_id = t.id
-        `, (err, joinRows) => {
-          if (err) {
-            console.error('Ошибка при JOIN-запросе:', err.message);
-          } else {
-            console.log('\nДанные из таблицы character_appearances (с JOIN):');
-            if (joinRows.length === 0) {
-              console.log('Результат JOIN-запроса пуст');
-            } else {
-              joinRows.forEach(row => {
-                console.log(row);
-              });
-            }
-          }
-          
-          // Закрываем соединение с базой данных
-          db.close((err) => {
-            if (err) {
-              console.error('Ошибка при закрытии базы данных:', err.message);
-            } else {
-              console.log('\nСоединение с базой данных закрыто.');
-            }
-          });
-        });
-      });
+      if (rows.length === 0) {
+        console.log('Таблица пуста, добавляем начальные данные...');
+        insertInitialData();
+      } else {
+        db.close();
+      }
     });
   });
-}); 
+}
+
+// Добавление начальных данных
+function insertInitialData() {
+  // Добавляем записи для лесоруба с разными инструментами
+  const appearances = [
+    {
+      character_id: 1,
+      tool_id: 1,
+      image_path: '/assets/characters/lumberjack.png',
+      animation_path: '/assets/characters/lumberjack_axe.gif'
+    },
+    {
+      character_id: 1,
+      tool_id: 2,
+      image_path: '/assets/characters/lumberjack.png',
+      animation_path: '/assets/characters/lumberjack_handsaw.gif'
+    },
+    {
+      character_id: 1,
+      tool_id: 3,
+      image_path: '/assets/characters/lumberjack.png',
+      animation_path: '/assets/characters/lumberjack_chainsaw.gif'
+    }
+  ];
+  
+  // Используем транзакцию для вставки всех записей
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+    
+    const stmt = db.prepare(`
+      INSERT INTO character_appearances (character_id, tool_id, image_path, animation_path)
+      VALUES (?, ?, ?, ?)
+    `);
+    
+    appearances.forEach(appearance => {
+      stmt.run(
+        appearance.character_id,
+        appearance.tool_id,
+        appearance.image_path,
+        appearance.animation_path
+      );
+    });
+    
+    stmt.finalize();
+    
+    db.run('COMMIT', err => {
+      if (err) {
+        console.error('Ошибка при добавлении данных:', err);
+      } else {
+        console.log('Начальные данные добавлены успешно');
+      }
+      
+      db.close();
+    });
+  });
+} 

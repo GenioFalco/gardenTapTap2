@@ -238,6 +238,11 @@ export const getUnlockedToolsByCharacterId = async (characterId: number): Promis
 
 // Получить экипированный инструмент для персонажа
 export const getEquippedTool = async (characterId: number): Promise<Tool | null> => {
+  if (!characterId || typeof characterId !== 'number') {
+    console.warn('getEquippedTool вызван с недопустимым characterId:', characterId);
+    return null;
+  }
+
   const equipped = await db.playerEquippedTools
     .where('characterId')
     .equals(characterId)
@@ -302,6 +307,12 @@ export const updatePlayerEnergy = async (energy: number): Promise<void> => {
 
 // Добавить ресурсы игроку
 export const addResources = async (currencyType: CurrencyType, amount: number): Promise<void> => {
+  // Если тип валюты не определен, используем тип по умолчанию
+  if (!currencyType) {
+    console.warn('addResources вызван с неопределенным типом валюты, используем FOREST');
+    currencyType = CurrencyType.FOREST;
+  }
+
   const currency = await db.playerCurrencies
     .where('currencyType')
     .equals(currencyType)
@@ -325,6 +336,12 @@ export const addResources = async (currencyType: CurrencyType, amount: number): 
 
 // Получить количество ресурсов игрока
 export const getResourceAmount = async (currencyType: CurrencyType): Promise<number> => {
+  // Если тип валюты не определен, используем тип по умолчанию
+  if (!currencyType) {
+    console.warn('getResourceAmount вызван с неопределенным типом валюты, используем FOREST');
+    currencyType = CurrencyType.FOREST;
+  }
+
   const currency = await db.playerCurrencies
     .where('currencyType')
     .equals(currencyType)
@@ -335,6 +352,12 @@ export const getResourceAmount = async (currencyType: CurrencyType): Promise<num
 
 // Потратить ресурсы
 export const spendResources = async (currencyType: CurrencyType, amount: number): Promise<boolean> => {
+  // Если тип валюты не определен, используем тип по умолчанию
+  if (!currencyType) {
+    console.warn('spendResources вызван с неопределенным типом валюты, используем FOREST');
+    currencyType = CurrencyType.FOREST;
+  }
+
   // Проверяем, достаточно ли ресурсов
   const currentAmount = await getResourceAmount(currencyType);
   if (currentAmount < amount) {
@@ -493,10 +516,16 @@ export const tap = async (locationId: number): Promise<{
     throw new Error(`Локация с ID ${locationId} не найдена`);
   }
   
+  // Безопасно получаем ID персонажа
+  const characterId = location.characterId || location.character_id;
+  if (typeof characterId !== 'number') {
+    throw new Error(`Для локации ${locationId} не определен персонаж`);
+  }
+  
   // Получаем экипированный инструмент
-  const tool = await getEquippedTool(location.characterId);
+  const tool = await getEquippedTool(characterId);
   if (!tool) {
-    throw new Error(`Не найден экипированный инструмент для персонажа ${location.characterId}`);
+    throw new Error(`Не найден экипированный инструмент для персонажа ${characterId}`);
   }
   
   // Рассчитываем полученные ресурсы (сила инструмента для локации)
@@ -505,8 +534,11 @@ export const tap = async (locationId: number): Promise<{
   // Рассчитываем полученный опыт (пока равен ресурсам)
   const experienceGained = resourcesGained;
   
+  // Безопасно определяем тип валюты
+  const currencyType = location.currencyType || location.currency_type as CurrencyType || CurrencyType.FOREST;
+  
   // Добавляем ресурсы
-  await addResources(location.currencyType, resourcesGained);
+  await addResources(currencyType, resourcesGained);
   
   // Добавляем опыт и проверяем повышение уровня
   const levelResult = await addExperience(experienceGained);
@@ -529,9 +561,17 @@ export const tap = async (locationId: number): Promise<{
 export const upgradeTool = async (toolId: number): Promise<boolean> => {
   // Получаем инструмент
   const tool = await db.tools.get(toolId);
+  if (!tool) {
+    console.warn(`Инструмент с ID ${toolId} не найден`);
+    return false;
+  }
+  
+  // Проверяем наличие необходимых полей
+  const currencyType = tool.currencyType || CurrencyType.FOREST;
+  const cost = tool.unlockCost || 0;
   
   // Проверяем, достаточно ли ресурсов
-  if (!tool || !(await spendResources(tool.currencyType, tool.unlockCost))) {
+  if (!(await spendResources(currencyType, cost))) {
     return false;
   }
   

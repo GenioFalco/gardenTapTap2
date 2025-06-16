@@ -33,11 +33,19 @@ function App() {
         const allLocations = await api.getLocations();
         const locationsWithPlaceholders = allLocations.map(location => ({
           ...location,
+          // Нормализуем поля для поддержки как camelCase, так и snake_case
+          characterId: location.characterId || location.character_id || 1, // По умолчанию 1
+          currencyType: (location.currencyType || location.currency_type || CurrencyType.FOREST) as CurrencyType,
+          currencyId: location.currencyId || location.currency_id || 'forest',
+          // Другие поля с значениями по умолчанию
+          description: location.description || 'Без описания',
+          unlockLevel: location.unlockLevel || 1,
+          resourceName: location.resourceName || 'Ресурсы',
           // Используем путь из базы данных или значение по умолчанию
-          background: location.background || '/assets/backgrounds/default.jpg',
+          background: location.background || '/assets/backgrounds/forest.jpg',
         }));
         
-        setLocations(locationsWithPlaceholders);
+        setLocations(locationsWithPlaceholders as Location[]);
         
         // Получаем прогресс игрока
         const progress = await api.getPlayerProgress();
@@ -50,9 +58,10 @@ function App() {
         setCurrentLocationId(defaultLocation.id);
         
         // Проверяем, что characterId определен
-        if (defaultLocation.characterId) {
+        const characterId = defaultLocation.characterId || defaultLocation.character_id;
+        if (characterId) {
           // Получаем инструменты для текущей локации с подстановкой изображений
-          const locationTools = await api.getToolsByCharacterId(defaultLocation.characterId);
+          const locationTools = await api.getToolsByCharacterId(characterId);
           console.log('Получены инструменты для локации:', locationTools);
           
           const toolsWithImages = locationTools.map((tool: Tool) => {
@@ -79,7 +88,8 @@ function App() {
         }
         
         // Получаем количество ресурсов для локации
-        const currencyIdentifier = defaultLocation.currencyType || defaultLocation.currencyId;
+        const currencyIdentifier = defaultLocation.currencyType || defaultLocation.currencyId || 
+                                  defaultLocation.currency_type || defaultLocation.currency_id;
         if (currencyIdentifier) {
           const resources = await api.getResourceAmount(currencyIdentifier);
           setResourceAmount(resources);
@@ -119,9 +129,10 @@ function App() {
       
       try {
         // Проверяем, что characterId определен
-        if (currentLocation.characterId) {
+        const characterId = currentLocation.characterId || currentLocation.character_id;
+        if (characterId) {
           // Получаем инструменты для текущей локации с подстановкой изображений
-          const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
+          const locationTools = await api.getToolsByCharacterId(characterId);
           const toolsWithImages = locationTools.map((tool: Tool) => {
             const imagePath = tool.imagePath || getToolImagePath(tool.name);
             
@@ -145,7 +156,8 @@ function App() {
         }
         
         // Проверяем, что currencyType или currencyId определены
-        const currencyIdentifier = currentLocation.currencyType || currentLocation.currencyId;
+        const currencyIdentifier = currentLocation.currencyType || currentLocation.currencyId || 
+                                  currentLocation.currency_type || currentLocation.currency_id;
         if (currencyIdentifier) {
           // Получаем количество ресурсов
           const resources = await api.getResourceAmount(currencyIdentifier);
@@ -345,7 +357,8 @@ function App() {
       const tapResult = await api.tap(currentLocation.id);
       
       // Обновляем данные на интерфейсе
-      const currencyIdentifier = currentLocation.currencyType || currentLocation.currencyId;
+      const currencyIdentifier = currentLocation.currencyType || currentLocation.currencyId || 
+                                currentLocation.currency_type || currentLocation.currency_id;
       if (currencyIdentifier) {
         const newResourceAmount = await api.getResourceAmount(currencyIdentifier);
         setResourceAmount(newResourceAmount);
@@ -364,7 +377,7 @@ function App() {
         const allLocations = await api.getLocations();
         const locationsWithPlaceholders = allLocations.map((location: Location) => ({
           ...location,
-          background: location.background || '/assets/backgrounds/default.jpg',
+          background: location.background || '/assets/backgrounds/forest.jpg',
         }));
         
         setLocations(locationsWithPlaceholders);
@@ -407,7 +420,8 @@ function App() {
       
       if (success) {
         // Обновляем количество ресурсов
-        const currencyIdentifier = currentLocation?.currencyType || currentLocation?.currencyId;
+        const currencyIdentifier = currentLocation?.currencyType || currentLocation?.currencyId || 
+                                  currentLocation?.currency_type || currentLocation?.currency_id;
         if (currencyIdentifier) {
           const newResourceAmount = await api.getResourceAmount(currencyIdentifier);
           setResourceAmount(newResourceAmount);
@@ -463,9 +477,10 @@ function App() {
       
       try {
         // Проверяем, что characterId определен
-        if (selectedLocation.characterId) {
+        const characterId = selectedLocation.characterId || selectedLocation.character_id;
+        if (characterId) {
           // Получаем инструменты для новой локации
-          const locationTools = await api.getToolsByCharacterId(selectedLocation.characterId);
+          const locationTools = await api.getToolsByCharacterId(characterId);
           const toolsWithImages = locationTools.map(tool => {
             const imagePath = tool.imagePath || getToolImagePath(tool.name);
             
@@ -483,13 +498,33 @@ function App() {
           });
           
           setTools(toolsWithImages as Tool[]);
+          
+          // Проверяем, есть ли экипированный инструмент для этого персонажа у игрока
+          if (playerProgress && playerProgress.equippedTools) {
+            // Безопасно получаем ID персонажа
+            const charId = Number(selectedLocation.characterId || selectedLocation.character_id);
+            if (typeof charId === 'number' && charId > 0) {
+              const equippedToolId = playerProgress.equippedTools[charId];
+            
+              // Если есть экипированный инструмент, загружаем внешний вид с этим инструментом
+              if (equippedToolId) {
+                try {
+                  const appearance = await api.getCharacterAppearance(charId, equippedToolId);
+                  console.log('Загружен внешний вид персонажа при смене локации:', appearance);
+                } catch (error) {
+                  console.error('Ошибка при загрузке внешнего вида персонажа:', error);
+                }
+              }
+            }
+          }
         } else {
           console.warn('characterId не определен для выбранной локации:', selectedLocation);
           setTools([]);
         }
         
         // Проверяем, что currencyType или currencyId определены
-        const currencyIdentifier = selectedLocation.currencyType || selectedLocation.currencyId;
+        const currencyIdentifier = selectedLocation.currencyType || selectedLocation.currencyId || 
+                                  selectedLocation.currency_type || selectedLocation.currency_id;
         if (currencyIdentifier) {
           // Получаем количество ресурсов для новой локации
           const resources = await api.getResourceAmount(currencyIdentifier);
@@ -508,12 +543,21 @@ function App() {
   const handleActivateTool = async (toolId: number) => {
     try {
       if (!currentLocation) return false;
-      if (!currentLocation.characterId) {
+      
+      // Безопасно получаем ID персонажа из текущей локации
+      let characterIdForEquip = 1; // По умолчанию 1
+      
+      if (typeof currentLocation.characterId === 'number') {
+        characterIdForEquip = currentLocation.characterId;
+      } else if (typeof currentLocation.character_id === 'number') {
+        characterIdForEquip = currentLocation.character_id;
+      } else {
         console.warn('characterId не определен для текущей локации:', currentLocation);
         return false;
       }
       
-      await api.equipTool(currentLocation.characterId, toolId);
+      // Вызываем API с гарантированно числовым ID
+      await api.equipTool(characterIdForEquip, toolId);
       
       // Обновляем прогресс после активации
       const progress = await api.getPlayerProgress();
@@ -530,6 +574,21 @@ function App() {
     return <div className="loading">Загрузка...</div>;
   }
   
+  // Определяем ID экипированного инструмента для текущей локации
+  const characterId: number = Number(currentLocation?.characterId || currentLocation?.character_id || 1);
+  // Безопасно получаем ID экипированного инструмента
+  let equippedToolId = 0;
+  if (playerProgress?.equippedTools && typeof characterId === 'number') {
+    equippedToolId = playerProgress.equippedTools[characterId] || 0;
+  }
+  
+  // Определяем тип валюты для текущей локации
+  const locationCurrencyType = (currentLocation.currencyType || 
+    (currentLocation.currency_type as CurrencyType) || 
+    currentLocation.currencyId || 
+    currentLocation.currency_id || 
+    CurrencyType.FOREST) as CurrencyType;
+  
   return (
     <div className="App">
       {/* Верхняя панель */}
@@ -543,7 +602,7 @@ function App() {
         maxEnergy={playerProgress.maxEnergy}
         gardenCoins={gardenCoins}
         locationCurrency={resourceAmount}
-        locationCurrencyType={(currentLocation.currencyType || currentLocation.currencyId || CurrencyType.FOREST) as CurrencyType}
+        locationCurrencyType={locationCurrencyType}
         lastEnergyRefillTime={playerProgress.lastEnergyRefillTime}
       />
       
@@ -551,9 +610,9 @@ function App() {
       {activeTab === "tap" && <GameScreen
         location={currentLocation}
         tools={tools}
-        equippedToolId={currentLocation.characterId ? (playerProgress.equippedTools[currentLocation.characterId] || 0) : 0}
+        equippedToolId={equippedToolId}
         resourceAmount={resourceAmount}
-        currencyType={(currentLocation.currencyType || currentLocation.currencyId || CurrencyType.FOREST) as CurrencyType}
+        currencyType={locationCurrencyType}
         energy={playerProgress.energy}
         maxEnergy={playerProgress.maxEnergy}
         level={playerProgress.level}
@@ -561,7 +620,6 @@ function App() {
         nextLevelExperience={nextLevelExp}
         onTap={handleTap}
         onUpgrade={handleUpgrade}
-        characterImageUrl={currentLocation.characterId ? `/assets/characters/${currentLocation.characterId}.gif` : '/assets/characters/lumberjack.gif'}
         gardenCoins={gardenCoins}
         onActivateTool={handleActivateTool}
       />}

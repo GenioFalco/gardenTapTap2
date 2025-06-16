@@ -79,6 +79,70 @@ app.get('/api/characters/:id', async (req, res) => {
   }
 });
 
+// Получить внешний вид персонажа с инструментом
+app.get('/api/characters/:characterId/appearance/:toolId', async (req, res) => {
+  try {
+    const { characterId, toolId } = req.params;
+    
+    // Получаем внешний вид персонажа с указанным инструментом из таблицы character_appearances
+    const appearance = await db.get(`
+      SELECT 
+        ca.id, 
+        ca.character_id as characterId, 
+        ca.tool_id as toolId, 
+        ca.image_path as imagePath, 
+        ca.animation_type as animationType, 
+        ca.animation_path as animationPath
+      FROM character_appearances ca
+      WHERE ca.character_id = ? AND ca.tool_id = ?
+    `, [characterId, toolId]);
+    
+    if (!appearance) {
+      // Если не найден конкретный внешний вид, возвращаем дефолтный для этого персонажа (с любым инструментом)
+      const defaultAppearance = await db.get(`
+        SELECT 
+          ca.id, 
+          ca.character_id as characterId, 
+          ca.tool_id as toolId, 
+          ca.image_path as imagePath, 
+          ca.animation_type as animationType, 
+          ca.animation_path as animationPath
+        FROM character_appearances ca
+        WHERE ca.character_id = ? 
+        LIMIT 1
+      `, [characterId]);
+      
+      if (!defaultAppearance) {
+        // Если в таблице character_appearances нет данных, используем данные из таблицы characters как запасной вариант
+        const characterData = await db.get(`
+          SELECT 
+            id as characterId, 
+            null as toolId,
+            null as imagePath,
+            animation_type as animationType, 
+            animation_path as animationPath,
+            frame_count as frameCount
+          FROM characters 
+          WHERE id = ?
+        `, [characterId]);
+        
+        if (!characterData) {
+          return res.status(404).json({ error: 'Внешний вид персонажа не найден' });
+        }
+        
+        return res.json(characterData);
+      }
+      
+      return res.json(defaultAppearance);
+    }
+    
+    res.json(appearance);
+  } catch (error) {
+    console.error('Ошибка при получении внешнего вида персонажа:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 // Получить инструменты для персонажа
 app.get('/api/characters/:id/tools', async (req, res) => {
   try {

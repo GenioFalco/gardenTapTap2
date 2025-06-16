@@ -19,14 +19,19 @@ export interface Currency {
 export interface Location {
   id: number;
   name: string;
-  description: string;
+  description?: string;  // Не всегда присутствует
   background: string;
-  unlockLevel: number;
-  characterId: number;
-  currencyId: string;  // Для использования с базой данных SQLite
-  currencyType: CurrencyType;  // Для обратной совместимости с API
-  resourceName: string;  // Для обратной совместимости с API
+  unlockLevel?: number;  // Может быть не определен
+  characterId?: number;  // Может быть получен из character_id
+  currencyId?: string;   // Может быть получен из currency_id
+  currencyType?: CurrencyType;  // Может быть получен из currency_type
+  resourceName?: string;  // Не всегда присутствует
   unlockCost?: number;
+  
+  // Поля в snake_case для обратной совместимости с сервером
+  character_id?: number;
+  currency_id?: string;
+  currency_type?: string;
 }
 
 // Интерфейс инструмента
@@ -107,7 +112,7 @@ export interface PlayerProgress {
   energy: number;
   maxEnergy: number;
   lastEnergyRefillTime: string;
-  equippedTools: Record<number, number>;
+  equippedTools: {[key: number]: number};  // key: characterId, value: toolId
   unlockedTools: number[];
   unlockedLocations: number[];
   currencies?: PlayerCurrency[];  // Валюты игрока
@@ -121,5 +126,5 @@ export interface CharacterAppearance {
   imagePath: string;
   animationType?: string;
   animationPath?: string;
-  frameCount?: number;
+  frameCount?: number | null;
 } 

@@ -1,6 +1,6 @@
 import { 
   Location, Character, Tool, Level, Reward, PlayerProgress, 
-  CurrencyType, RewardType, PlayerCurrency, Currency 
+  CurrencyType, RewardType, PlayerCurrency, Currency, CharacterAppearance 
 } from '../types';
 import CONFIG from '../config';
 
@@ -244,4 +244,9 @@ export const getCurrencyByType = async (currencyId: string): Promise<Currency | 
     console.error(`Ошибка при получении валюты с ID ${currencyId}:`, error);
     return null;
   }
+};
+
+// Получить внешний вид персонажа с инструментом
+export const getCharacterAppearance = async (characterId: number, toolId: number): Promise<CharacterAppearance> => {
+  return await fetchApi<CharacterAppearance>(`/characters/${characterId}/appearance/${toolId}`);
 }; 
