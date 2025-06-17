@@ -175,6 +175,7 @@ export const getLevelInfo = async (level: number): Promise<Level & { rewards: Re
 // Тап по кнопке (основная механика)
 export const tap = async (locationId: number): Promise<{ 
   resourcesGained: number; 
+  mainCurrencyGained: number;
   experienceGained: number;
   levelUp: boolean;
   level: number;
@@ -183,6 +184,7 @@ export const tap = async (locationId: number): Promise<{
 }> => {
   return await fetchApi<{
     resourcesGained: number;
+    mainCurrencyGained: number;
     experienceGained: number;
     levelUp: boolean;
     level: number;

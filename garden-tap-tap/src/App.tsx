@@ -362,7 +362,18 @@ function App() {
       if (currencyIdentifier) {
         const newResourceAmount = await api.getResourceAmount(currencyIdentifier);
         setResourceAmount(newResourceAmount);
+        
+        // Отображаем количество заработанных ресурсов локации
+        console.log(`Заработано ${tapResult.resourcesGained} ${currencyIdentifier}`);
       }
+      
+      // Отображаем количество заработанных основных монет
+      if (tapResult.mainCurrencyGained) {
+        console.log(`Заработано ${tapResult.mainCurrencyGained} сад-коинов`);
+      }
+      
+      // Отображаем заработанный опыт (всегда 1)
+      console.log(`Заработано 1 опыта`);
       
       // Обновляем прогресс
       const progress = await api.getPlayerProgress();

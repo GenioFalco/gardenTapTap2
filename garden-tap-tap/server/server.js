@@ -547,28 +547,40 @@ app.post('/api/player/tap', async (req, res) => {
     `, [userId, location.character_id]);
     
     // Если нет экипированного инструмента, используем базовое значение
-    const toolPower = equipped ? (equipped.location_coins_power || 1) : 1;
+    const locationCoinsPower = equipped ? (equipped.location_coins_power || 1) : 1;
+    const mainCoinsPower = equipped ? (equipped.main_coins_power || 0.5) : 0.5;
     
-    // Генерируем случайное количество ресурсов (от 50% до 150% от силы инструмента)
-    const resourcesGained = Math.floor(toolPower * (0.5 + Math.random()));
+    console.log(`Тап с инструментом: ${equipped ? equipped.name : 'базовый'}`);
+    console.log(`Сила для валюты локации: ${locationCoinsPower}`);
+    console.log(`Сила для основной валюты: ${mainCoinsPower}`);
     
-    // Добавляем ресурсы
-    // Получаем правильный идентификатор валюты (currency_id или currency_type)
-    const currencyId = location.currency_id || location.currency_type || 'forest';
-    const currencyType = location.currency_type || location.currency_id || 'forest';
+    // Получаем тип валюты локации
+    const locationCurrencyType = location.currency_type || location.currency_id || 'forest';
     
-    // Сначала проверяем существование валюты
-    await getOrCreatePlayerCurrency(userId, currencyId);
-    
-    // Обновляем количество валюты
+    // Обновляем валюту локации
+    await getOrCreatePlayerCurrency(userId, locationCurrencyType);
+    const locationCurrency = await getCurrencyIdByType(locationCurrencyType);
     await db.run(`
       UPDATE player_currencies
       SET amount = amount + ?
-      WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
-    `, [resourcesGained, userId, currencyType, currencyId]);
+      WHERE user_id = ? AND currency_id = ?
+    `, [locationCoinsPower, userId, locationCurrency.id.toString()]);
     
-    // Генерируем опыт (равен количеству ресурсов)
-    const experienceGained = resourcesGained;
+    console.log(`Добавлено ${locationCoinsPower} валюты ${locationCurrencyType} (ID: ${locationCurrency.id})`);
+    
+    // Обновляем основную валюту (сад-коины)
+    await getOrCreatePlayerCurrency(userId, 'main');
+    const mainCurrency = await getCurrencyIdByType('main');
+    await db.run(`
+      UPDATE player_currencies
+      SET amount = amount + ?
+      WHERE user_id = ? AND currency_id = ?
+    `, [mainCoinsPower, userId, mainCurrency.id.toString()]);
+    
+    console.log(`Добавлено ${mainCoinsPower} валюты main (ID: ${mainCurrency.id})`);
+    
+    // Фиксированный опыт - всегда 1 за тап
+    const experienceGained = 1;
     
     // Текущее время для обновления времени последнего изменения энергии
     const currentTime = new Date().toISOString();
@@ -594,8 +606,9 @@ app.post('/api/player/tap', async (req, res) => {
     console.log('Обновленный прогресс после тапа:', updatedProgress);
     
     res.json({
-      resourcesGained,
-      experienceGained,
+      resourcesGained: locationCoinsPower,  // Заработано валюты локации
+      mainCurrencyGained: mainCoinsPower,  // Заработано сад-коинов
+      experienceGained, // Заработано опыта (всегда 1)
       levelUp,
       level,
       rewards,
@@ -709,17 +722,11 @@ async function getOrCreatePlayerProgress(userId) {
     VALUES (?, 1, 0, 100, 100)
   `, [userId]);
   
-  // Создаем записи о валютах
-  await db.run(`
-    INSERT INTO player_currencies (user_id, currency_id, currency_type, amount)
-    VALUES (?, ?, ?, 0)
-  `, [userId, CurrencyType.MAIN, CurrencyType.MAIN]);
+  // Создаем запись основной валюты (сад-коины)
+  await getOrCreatePlayerCurrency(userId, 'main');
   
-  // Добавляем валюту леса
-  await db.run(`
-    INSERT INTO player_currencies (user_id, currency_id, currency_type, amount)
-    VALUES (?, ?, ?, 0)
-  `, [userId, CurrencyType.FOREST, CurrencyType.FOREST]);
+  // Создаем запись валюты леса
+  await getOrCreatePlayerCurrency(userId, 'forest');
   
   // Разблокируем первую локацию
   await db.run(`
@@ -746,34 +753,32 @@ async function getOrCreatePlayerProgress(userId) {
 }
 
 // Получение или создание валюты игрока
-async function getOrCreatePlayerCurrency(userId, currencyId) {
-  // Проверяем, есть ли запись о валюте (проверяем обе колонки)
+async function getOrCreatePlayerCurrency(userId, currencyType) {
+  // Получаем правильный ID и тип валюты из таблицы currencies
+  const { id, type } = await getCurrencyIdByType(currencyType);
+  
+  // Проверяем, есть ли запись о валюте
   const currency = await db.get(`
-    SELECT * FROM player_currencies WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
-  `, [userId, currencyId, currencyId]);
+    SELECT * FROM player_currencies 
+    WHERE user_id = ? AND currency_id = ?
+  `, [userId, id.toString()]);
   
   if (currency) {
-    // Если запись существует, но нет значения в currency_type, обновляем его
-    if (!currency.currency_type) {
-      await db.run(`
-        UPDATE player_currencies SET currency_type = ?
-        WHERE user_id = ? AND currency_id = ?
-      `, [currencyId, userId, currencyId]);
-    }
     return currency;
   }
   
-  // Создаем запись о валюте с заполнением обеих колонок
+  // Если записи нет, создаем новую с правильными ID и типом
+  console.log(`Создаем новую запись валюты ${type} (ID: ${id}) для пользователя ${userId}`);
+  
   await db.run(`
     INSERT INTO player_currencies (user_id, currency_id, currency_type, amount)
     VALUES (?, ?, ?, 0)
-  `, [userId, currencyId, currencyId]);
+  `, [userId, id.toString(), type]);
   
-  // Возвращаем созданную запись
   return {
     user_id: userId,
-    currency_id: currencyId,
-    currency_type: currencyId,
+    currency_id: id.toString(),
+    currency_type: type,
     amount: 0
   };
 }
@@ -838,11 +843,14 @@ async function processReward(userId, reward) {
   switch (reward.reward_type) {
     case RewardType.MAIN_CURRENCY:
       // Добавляем основную валюту
+      await getOrCreatePlayerCurrency(userId, 'main');
+      const mainCurrency = await getCurrencyIdByType('main');
       await db.run(`
         UPDATE player_currencies
         SET amount = amount + ?
-        WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
-      `, [reward.amount, userId, CurrencyType.MAIN, CurrencyType.MAIN]);
+        WHERE user_id = ? AND currency_id = ?
+      `, [reward.amount, userId, mainCurrency.id.toString()]);
+      console.log(`Награда: добавлено ${reward.amount} валюты main (ID: ${mainCurrency.id})`);
       break;
       
     case RewardType.LOCATION_CURRENCY:
@@ -852,11 +860,15 @@ async function processReward(userId, reward) {
       `, [reward.target_id]);
       
       if (location) {
+        const locationCurrencyType = location.currency_type || location.currency_id || 'forest';
+        await getOrCreatePlayerCurrency(userId, locationCurrencyType);
+        const locationCurrency = await getCurrencyIdByType(locationCurrencyType);
         await db.run(`
           UPDATE player_currencies
           SET amount = amount + ?
-          WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
-        `, [reward.amount, userId, location.currency_type, location.currency_type]);
+          WHERE user_id = ? AND currency_id = ?
+        `, [reward.amount, userId, locationCurrency.id.toString()]);
+        console.log(`Награда: добавлено ${reward.amount} валюты ${locationCurrencyType} (ID: ${locationCurrency.id})`);
       }
       break;
       
@@ -878,10 +890,53 @@ async function processReward(userId, reward) {
   }
 }
 
+// Функция для получения правильного идентификатора валюты
+async function getCurrencyIdByType(currencyType) {
+  // Нормализуем тип валюты к нижнему регистру
+  const normalizedType = currencyType.toLowerCase();
+  
+  try {
+    // Ищем валюту по типу
+    const currency = await db.get(`
+      SELECT id, currency_type FROM currencies 
+      WHERE currency_type = ?
+    `, [normalizedType]);
+    
+    if (currency) {
+      console.log(`Найдена валюта с типом ${normalizedType}, ID: ${currency.id}`);
+      return {
+        id: currency.id,
+        type: currency.currency_type
+      };
+    }
+    
+    // Если не нашли, возвращаем значения по умолчанию
+    console.warn(`Валюта с типом ${normalizedType} не найдена, используем значение по умолчанию`);
+    
+    // По умолчанию: forest = 1, main = 5
+    if (normalizedType === 'main') {
+      return { id: 5, type: 'main' };
+    } else if (normalizedType === 'forest') {
+      return { id: 1, type: 'forest' };
+    }
+    
+    // Для других типов возвращаем forest
+    return { id: 1, type: 'forest' };
+  } catch (error) {
+    console.error(`Ошибка при получении ID валюты для типа ${normalizedType}:`, error);
+    // По умолчанию возвращаем forest
+    return { id: 1, type: 'forest' };
+  }
+}
+
 // Асинхронно инициализируем базу данных и запускаем сервер
 async function startServer() {
   try {
     await initDatabase();
+    
+    // Очищаем дубликаты в таблице player_currencies
+    await cleanupPlayerCurrencies();
+    
     app.listen(port, () => {
       console.log(`Сервер запущен на порту ${port}`);
     });
@@ -891,5 +946,39 @@ async function startServer() {
   }
 }
 
+// Функция для очистки дубликатов в таблице player_currencies
+async function cleanupPlayerCurrencies() {
+  console.log('Начинаем очистку дубликатов в таблице player_currencies...');
+  
+  try {
+    // 1. Получаем все записи
+    const allCurrencies = await db.all('SELECT * FROM player_currencies');
+    console.log('Текущие записи в таблице player_currencies:', allCurrencies);
+    
+    // 2. Удаляем все записи из таблицы
+    await db.run('DELETE FROM player_currencies');
+    console.log('Все записи удалены из таблицы player_currencies');
+    
+    // 3. Создаем уникальные записи для каждого пользователя и типа валюты
+    const users = [...new Set(allCurrencies.map(c => c.user_id))];
+    
+    for (const userId of users) {
+      // Создаем основную валюту
+      await getOrCreatePlayerCurrency(userId, 'main');
+      
+      // Создаем валюту леса
+      await getOrCreatePlayerCurrency(userId, 'forest');
+    }
+    
+    // 4. Проверяем результат
+    const newCurrencies = await db.all('SELECT * FROM player_currencies');
+    console.log('Новые записи в таблице player_currencies после очистки:', newCurrencies);
+    
+    console.log('Очистка дубликатов в таблице player_currencies завершена успешно');
+  } catch (error) {
+    console.error('Ошибка при очистке дубликатов:', error);
+  }
+}
+
 // Запускаем сервер
-startServer(); 
+startServer();
