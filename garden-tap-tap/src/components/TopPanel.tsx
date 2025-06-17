@@ -155,7 +155,7 @@ const TopPanel: React.FC<TopPanelProps> = ({
               alt="Сад-коин" 
               className="w-5 h-5 mr-1" 
             />
-            <span className="text-white text-sm">{gardenCoins.toFixed(1)}</span>
+            <span className="text-white text-sm">{gardenCoins.toFixed(2)}</span>
           </div>
           
           {/* Валюта локации */}
@@ -165,7 +165,7 @@ const TopPanel: React.FC<TopPanelProps> = ({
               alt="Валюта локации" 
               className="w-5 h-5 mr-1" 
             />
-            <span className="text-white text-sm">{locationCurrency.toFixed(1)}</span>
+            <span className="text-white text-sm">{locationCurrency.toFixed(2)}</span>
           </div>
         </div>
       </div>
