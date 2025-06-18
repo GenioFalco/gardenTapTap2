@@ -3,8 +3,9 @@ import './App.css';
 import GameScreen from './components/GameScreen';
 import LocationSelector from './components/LocationSelector';
 import TopPanel from './components/TopPanel';
+import LevelUpModal from './components/LevelUpModal';
 import * as api from './lib/api';
-import { Location, Tool, PlayerProgress, CurrencyType } from './types';
+import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
 
 function App() {
   const [initialized, setInitialized] = useState(false);
@@ -19,6 +20,15 @@ function App() {
   const [userAvatar, setUserAvatar] = useState<string>('');
   const [gardenCoins, setGardenCoins] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<string>("tap");
+  
+  // Состояния для модального окна повышения уровня
+  const [showLevelUpModal, setShowLevelUpModal] = useState<boolean>(false);
+  const [currentLevel, setCurrentLevel] = useState<number>(1);
+  const [levelRewards, setLevelRewards] = useState<any[]>([]);
+  
+  // Кеши имен инструментов и локаций для отображения в модальном окне
+  const [toolNames, setToolNames] = useState<Record<number, string>>({});
+  const [locationNames, setLocationNames] = useState<Record<number, string>>({});
   
   // Генерация случайного имени пользователя, если не удалось получить из Telegram
   const generateRandomUserName = () => {
@@ -356,6 +366,11 @@ function App() {
     return () => clearTimeout(initialRefillTimer);
   }, [playerProgress, updateEnergy]);
   
+  // Функция закрытия модального окна
+  const handleCloseLevelUpModal = () => {
+    setShowLevelUpModal(false);
+  };
+
   // Обработка тапа (основная механика)
   const handleTap = async () => {
     if (!currentLocation || !playerProgress) return;
@@ -396,10 +411,54 @@ function App() {
       const progress = await api.getPlayerProgress();
       setPlayerProgress(progress);
       
-      // Если уровень повысился, обновляем данные о следующем уровне
+      // Если уровень повысился, обновляем данные о следующем уровне и показываем модальное окно
       if (tapResult.levelUp) {
         const nextLevel = await api.getLevelInfo(progress.level + 1);
         setNextLevelExp(nextLevel.requiredExp);
+        
+        // Подготовка данных для модального окна
+        setCurrentLevel(progress.level);
+        setLevelRewards(tapResult.rewards);
+        
+        // Обновляем кеши имен инструментов и локаций
+        const updatedToolNames = {...toolNames};
+        const updatedLocationNames = {...locationNames};
+        
+        // Если в наградах есть инструменты или локации, получаем их имена
+        for (const reward of tapResult.rewards) {
+          if ((reward.reward_type === RewardType.UNLOCK_TOOL) && reward.target_id) {
+            if (!updatedToolNames[reward.target_id]) {
+              try {
+                const toolInfo = await api.getToolInfo(reward.target_id);
+                if (toolInfo && toolInfo.name) {
+                  updatedToolNames[reward.target_id] = toolInfo.name;
+                }
+              } catch (error) {
+                console.error(`Не удалось получить информацию об инструменте ${reward.target_id}:`, error);
+              }
+            }
+          }
+          
+          if ((reward.reward_type === RewardType.UNLOCK_LOCATION) && reward.target_id) {
+            if (!updatedLocationNames[reward.target_id]) {
+              try {
+                const locationInfo = await api.getLocationInfo(reward.target_id);
+                if (locationInfo && locationInfo.name) {
+                  updatedLocationNames[reward.target_id] = locationInfo.name;
+                }
+              } catch (error) {
+                console.error(`Не удалось получить информацию о локации ${reward.target_id}:`, error);
+              }
+            }
+          }
+        }
+        
+        // Обновляем кеши
+        setToolNames(updatedToolNames);
+        setLocationNames(updatedLocationNames);
+        
+        // Показываем модальное окно
+        setShowLevelUpModal(true);
         
         // Могут быть разблокированы новые инструменты или локации
         const allLocations = await api.getLocations();
@@ -730,6 +789,17 @@ function App() {
         activeTab={activeTab}
         onChangeTab={setActiveTab}
       />
+      
+      {/* Модальное окно повышения уровня */}
+      {showLevelUpModal && (
+        <LevelUpModal
+          level={currentLevel}
+          rewards={levelRewards}
+          onClose={handleCloseLevelUpModal}
+          toolNames={toolNames}
+          locationNames={locationNames}
+        />
+      )}
     </div>
   );
 }

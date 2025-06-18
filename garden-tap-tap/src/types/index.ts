@@ -42,8 +42,12 @@ export interface Level {
 export enum RewardType {
   MAIN_CURRENCY = 'main_currency',
   LOCATION_CURRENCY = 'location_currency',
-  UNLOCK_LOCATION = 'unlock_location',
   UNLOCK_TOOL = 'unlock_tool',
+  UNLOCK_LOCATION = 'unlock_location',
+  TOOL = 'tool',
+  LOCATION = 'location',
+  CURRENCY = 'currency',
+  ENERGY = 'energy'
 }
 
 // Типы валют

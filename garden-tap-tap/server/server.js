@@ -527,6 +527,32 @@ app.get('/api/levels/:level', async (req, res) => {
   }
 });
 
+// Получить информацию о локации по ID
+app.get('/api/locations/:locationId', async (req, res) => {
+  try {
+    const { locationId } = req.params;
+    
+    // Получаем информацию о локации
+    const location = await db.get(`
+      SELECT 
+        id, name, background, resource_name as resourceName, 
+        character_id as characterId, unlock_level as unlockLevel,
+        unlock_cost as unlockCost, currency_type as currencyType
+      FROM locations
+      WHERE id = ?
+    `, [locationId]);
+    
+    if (!location) {
+      return res.status(404).json({ error: 'Локация не найдена' });
+    }
+    
+    res.json(location);
+  } catch (error) {
+    console.error('Ошибка при получении информации о локации:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 // Тап (основная механика)
 app.post('/api/player/tap', async (req, res) => {
   try {
@@ -719,6 +745,32 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Ошибка при улучшении инструмента:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Получить информацию об инструменте по ID
+app.get('/api/tools/:toolId', async (req, res) => {
+  try {
+    const { toolId } = req.params;
+    
+    // Получаем информацию об инструменте
+    const tool = await db.get(`
+      SELECT 
+        id, name, character_id as characterId, power,
+        unlock_level as unlockLevel, unlock_cost as unlockCost,
+        currency_type as currencyType, image_path as imagePath
+      FROM tools
+      WHERE id = ?
+    `, [toolId]);
+    
+    if (!tool) {
+      return res.status(404).json({ error: 'Инструмент не найден' });
+    }
+    
+    res.json(tool);
+  } catch (error) {
+    console.error('Ошибка при получении информации об инструменте:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });

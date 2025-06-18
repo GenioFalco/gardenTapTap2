@@ -251,4 +251,14 @@ export const getCurrencyByType = async (currencyId: string): Promise<Currency | 
 // Получить внешний вид персонажа с инструментом
 export const getCharacterAppearance = async (characterId: number, toolId: number): Promise<CharacterAppearance> => {
   return await fetchApi<CharacterAppearance>(`/characters/${characterId}/appearance/${toolId}`);
+};
+
+// Получить информацию об инструменте по ID
+export const getToolInfo = async (toolId: number): Promise<{id: number; name: string}> => {
+  return await fetchApi<{id: number; name: string}>(`/tools/${toolId}`);
+};
+
+// Получить информацию о локации по ID
+export const getLocationInfo = async (locationId: number): Promise<{id: number; name: string}> => {
+  return await fetchApi<{id: number; name: string}>(`/locations/${locationId}`);
 }; 
