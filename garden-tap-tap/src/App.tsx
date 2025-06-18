@@ -592,14 +592,12 @@ function App() {
           setResourceAmount(newResourceAmount);
         }
         
-        // Обновляем список инструментов и прогресс
+        // Обновляем прогресс (который содержит equippedTools и unlockedTools)
         const progress = await api.getPlayerProgress();
         setPlayerProgress(progress);
         
-        // Проверяем, разблокирован ли инструмент
-        if (currentLocation?.characterId && progress.unlockedTools.includes(toolId)) {
-          await api.equipTool(currentLocation.characterId, toolId);
-          
+        // Обновляем список инструментов для текущей локации
+        if (currentLocation?.characterId) {
           // Получаем обновленный список инструментов
           const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
           const toolsWithImages = locationTools.map((tool: Tool) => {
@@ -660,10 +658,17 @@ function App() {
       
       console.log('Нормализованная локация:', normalizedLocation);
       
+      // Сначала обновляем прогресс игрока для получения свежих данных
+      const progress = await api.getPlayerProgress();
+      setPlayerProgress(progress);
+      
       // Получаем инструменты для новой локации
       const characterId = selectedLocation.characterId || selectedLocation.character_id;
       if (characterId) {
+        // Получаем все доступные инструменты для этой локации
         const locationTools = await api.getToolsByCharacterId(characterId);
+        
+        // Обрабатываем каждый инструмент - добавляем информацию и совместимость полей
         const toolsWithImages = locationTools.map((tool: Tool) => {
           const imagePath = tool.imagePath || getToolImagePath(tool.name);
           
@@ -677,7 +682,19 @@ function App() {
           };
         });
         
+        // Устанавливаем инструменты
         setTools(toolsWithImages as Tool[]);
+        
+        // Здесь мы НЕ пытаемся автоматически установить инструмент,
+        // так как это уже сделано в таблице player_equipped_tools
+        // и загружено в progress.equippedTools
+        
+        // Лог текущего экипированного инструмента для отладки
+        if (progress.equippedTools && progress.equippedTools[characterId]) {
+          console.log(`Активный инструмент для персонажа ${characterId}: ${progress.equippedTools[characterId]}`);
+        } else {
+          console.log(`Не найден активный инструмент для персонажа ${characterId} в equippedTools:`, progress.equippedTools);
+        }
       } else {
         setTools([]);
       }
@@ -779,6 +796,7 @@ function App() {
         onUpgrade={handleUpgrade}
         gardenCoins={gardenCoins}
         onActivateTool={handleActivateTool}
+        unlockedTools={playerProgress.unlockedTools || []}
       />}
       
       {/* Экран локаций */}

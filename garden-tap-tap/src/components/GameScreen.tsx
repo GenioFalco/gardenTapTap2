@@ -14,7 +14,8 @@ const UpgradeModal = ({
   onActivateTool,
   locationCurrency,
   locationName,
-  locationCurrencyType
+  locationCurrencyType,
+  unlockedTools = [] // Массив ID разблокированных инструментов
 }: { 
   show: boolean; 
   onClose: () => void; 
@@ -26,9 +27,11 @@ const UpgradeModal = ({
   locationCurrency: number;
   locationName: string;
   locationCurrencyType: CurrencyType;
+  unlockedTools?: number[]; // Новый пропс для разблокированных инструментов
 }) => {
   const [activeTab, setActiveTab] = useState<'tools' | 'helpers'>('tools');
   const [helperActive, setHelperActive] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Помощник - заглушка для демонстрации
   const helper = {
@@ -42,6 +45,23 @@ const UpgradeModal = ({
   };
 
   if (!show) return null;
+  
+  // Обработчик покупки инструмента с проверкой ресурсов
+  const handleBuyTool = async (tool: Tool) => {
+    // Проверяем, достаточно ли ресурсов для покупки
+    if (tool.unlockCost > locationCurrency) {
+      setErrorMessage(`Недостаточно ресурсов: необходимо ${tool.unlockCost} ${locationCurrencyType.toLowerCase()}`);
+      setTimeout(() => setErrorMessage(null), 3000);
+      return;
+    }
+    
+    // Пытаемся купить инструмент
+    const success = await onBuyTool(tool.id);
+    if (!success) {
+      setErrorMessage('Не удалось приобрести инструмент');
+      setTimeout(() => setErrorMessage(null), 3000);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
@@ -58,6 +78,13 @@ const UpgradeModal = ({
         <div className="p-4 border-b border-gray-700">
           <h2 className="text-xl font-bold text-white">Улучшения</h2>
         </div>
+        
+        {/* Сообщение об ошибке */}
+        {errorMessage && (
+          <div className="bg-red-500 text-white p-2 text-center">
+            {errorMessage}
+          </div>
+        )}
         
         {/* Табы */}
         <div className="flex border-b border-gray-700">
@@ -84,7 +111,17 @@ const UpgradeModal = ({
               {tools.map(tool => {
                 const isEquipped = tool.id === equippedToolId;
                 const isUnlockable = playerLevel >= tool.unlockLevel;
-                const isOwned = isEquipped || (isUnlockable && tool.unlockCost === 0); // Упрощение для примера
+                
+                // Проверяем, является ли инструмент разблокированным:
+                // 1. Если он уже экипирован
+                // 2. Если он есть в массиве unlockedTools
+                // 3. Если его стоимость 0
+                const isOwned = isEquipped || 
+                               unlockedTools.includes(tool.id) || 
+                               tool.unlockCost === 0;
+                
+                // Показываем сообщение о недостаточности ресурсов
+                const notEnoughResources = tool.unlockCost > locationCurrency;
                 
                 return (
                   <div 
@@ -128,12 +165,24 @@ const UpgradeModal = ({
                           </button>
                         )
                       ) : (
-                        <button 
-                          className="w-full bg-yellow-500 hover:bg-yellow-600 text-black py-1 px-4 rounded"
-                          onClick={() => onBuyTool(tool.id)}
-                        >
-                          Купить за {tool.unlockCost} {tool.currencyType}
-                        </button>
+                        <div>
+                          <div className="flex justify-between items-center mb-1 text-xs">
+                            <span>{locationCurrency} / {tool.unlockCost} {tool.currencyType.toLowerCase()}</span>
+                            {notEnoughResources && 
+                              <span className="text-red-400">Недостаточно ресурсов</span>
+                            }
+                          </div>
+                          <button 
+                            className={`w-full py-1 px-4 rounded ${
+                              notEnoughResources 
+                                ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+                                : 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                            }`}
+                            onClick={() => handleBuyTool(tool)}
+                          >
+                            Купить за {tool.unlockCost} {tool.currencyType.toLowerCase()}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -206,6 +255,7 @@ interface GameScreenProps {
   onActivateTool: (toolId: number) => Promise<boolean | void>;
   characterImageUrl?: string;
   gardenCoins?: number;
+  unlockedTools?: number[]; // Добавляем список разблокированных инструментов
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({
@@ -224,6 +274,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
   onActivateTool,
   characterImageUrl = '/assets/characters/lumberjack.png',
   gardenCoins = 0,
+  unlockedTools = [], // По умолчанию пустой массив
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [showNotEnoughResources, setShowNotEnoughResources] = useState(false);
@@ -509,6 +560,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
         locationCurrency={resourceAmount}
         locationName={location.name}
         locationCurrencyType={currencyType}
+        unlockedTools={unlockedTools}
       />
     </div>
   );
