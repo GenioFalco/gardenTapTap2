@@ -261,4 +261,14 @@ export const getToolInfo = async (toolId: number): Promise<{id: number; name: st
 // Получить информацию о локации по ID
 export const getLocationInfo = async (locationId: number): Promise<{id: number; name: string}> => {
   return await fetchApi<{id: number; name: string}>(`/locations/${locationId}`);
+};
+
+// Получить инструменты по уровню разблокировки
+export const getToolsByUnlockLevel = async (level: number): Promise<Tool[]> => {
+  return await fetchApi<Tool[]>(`/tools/unlock-level/${level}`);
+};
+
+// Получить локации по уровню разблокировки
+export const getLocationsByUnlockLevel = async (level: number): Promise<Location[]> => {
+  return await fetchApi<Location[]>(`/locations/unlock-level/${level}`);
 }; 

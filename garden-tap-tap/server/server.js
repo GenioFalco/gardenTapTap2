@@ -775,6 +775,36 @@ app.get('/api/tools/:toolId', async (req, res) => {
   }
 });
 
+// Получение инструментов по уровню разблокировки
+app.get('/api/tools/unlock-level/:level', async (req, res) => {
+  const level = parseInt(req.params.level);
+  
+  try {
+    const query = 'SELECT * FROM tools WHERE unlock_level = ?';
+    const tools = await db.all(query, [level]);
+    
+    res.json(tools);
+  } catch (error) {
+    console.error('Ошибка при получении инструментов по уровню:', error);
+    res.status(500).json({ error: 'Ошибка при получении инструментов', details: error.message });
+  }
+});
+
+// Получение локаций по уровню разблокировки
+app.get('/api/locations/unlock-level/:level', async (req, res) => {
+  const level = parseInt(req.params.level);
+  
+  try {
+    const query = 'SELECT * FROM locations WHERE unlock_level = ?';
+    const locations = await db.all(query, [level]);
+    
+    res.json(locations);
+  } catch (error) {
+    console.error('Ошибка при получении локаций по уровню:', error);
+    res.status(500).json({ error: 'Ошибка при получении локаций', details: error.message });
+  }
+});
+
 // Вспомогательные функции
 
 // Получение или создание прогресса игрока

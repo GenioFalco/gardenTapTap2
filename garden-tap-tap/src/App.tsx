@@ -7,6 +7,28 @@ import LevelUpModal from './components/LevelUpModal';
 import * as api from './lib/api';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
 
+// Определение типа для совместимости с LevelUpModal
+interface ModalReward {
+  id: number;
+  level_id: number;
+  reward_type: string;
+  amount: number;
+  target_id?: number;
+  currency_id?: string;
+}
+
+// Функция для преобразования общего типа Reward в ModalReward
+const convertToModalReward = (reward: any): ModalReward => {
+  return {
+    id: reward.id,
+    level_id: reward.levelId || reward.level_id,
+    reward_type: reward.rewardType || reward.reward_type,
+    amount: reward.amount,
+    target_id: reward.targetId || reward.target_id,
+    currency_id: reward.currencyId || reward.currency_id
+  };
+};
+
 function App() {
   const [initialized, setInitialized] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -418,15 +440,94 @@ function App() {
         
         // Подготовка данных для модального окна
         setCurrentLevel(progress.level);
-        setLevelRewards(tapResult.rewards);
         
-        // Обновляем кеши имен инструментов и локаций
+        // Копируем награды из результата тапа и преобразуем их в формат ModalReward
+        let allRewards = tapResult.rewards.map(reward => convertToModalReward(reward));
+        const newLevel = progress.level;
+        
+        // Проверяем, есть ли инструменты, доступные на новом уровне
+        try {
+          const availableTools = await api.getToolsByUnlockLevel(newLevel);
+          console.log(`Инструменты, доступные на уровне ${newLevel}:`, availableTools);
+          
+          // Добавляем инструменты в награды
+          if (availableTools && availableTools.length > 0) {
+            availableTools.forEach((tool: Tool) => {
+              // Проверяем, нет ли уже такой же награды в списке
+              const existingReward = allRewards.find(r => 
+                r.reward_type === RewardType.UNLOCK_TOOL && r.target_id === tool.id
+              );
+              
+              if (!existingReward) {
+                const newReward: ModalReward = {
+                  id: Math.random() * 10000, // Генерируем случайный ID для награды
+                  level_id: newLevel,
+                  reward_type: RewardType.UNLOCK_TOOL,
+                  amount: 0,
+                  target_id: tool.id
+                };
+                allRewards.push(newReward);
+                
+                // Добавляем инструмент в кеш имен
+                if (tool.name) {
+                  setToolNames(prev => ({
+                    ...prev,
+                    [tool.id]: tool.name
+                  }));
+                }
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Ошибка при проверке доступных инструментов:', error);
+        }
+        
+        // Проверяем, есть ли локации, доступные на новом уровне
+        try {
+          const availableLocations = await api.getLocationsByUnlockLevel(newLevel);
+          console.log(`Локации, доступные на уровне ${newLevel}:`, availableLocations);
+          
+          // Добавляем локации в награды
+          if (availableLocations && availableLocations.length > 0) {
+            availableLocations.forEach((location: Location) => {
+              // Проверяем, нет ли уже такой же награды в списке
+              const existingReward = allRewards.find(r => 
+                r.reward_type === RewardType.UNLOCK_LOCATION && r.target_id === location.id
+              );
+              
+              if (!existingReward) {
+                const newReward: ModalReward = {
+                  id: Math.random() * 10000, // Генерируем случайный ID для награды
+                  level_id: newLevel,
+                  reward_type: RewardType.UNLOCK_LOCATION,
+                  amount: 0,
+                  target_id: location.id
+                };
+                allRewards.push(newReward);
+                
+                // Добавляем локацию в кеш имен
+                if (location.name) {
+                  setLocationNames(prev => ({
+                    ...prev,
+                    [location.id]: location.name
+                  }));
+                }
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Ошибка при проверке доступных локаций:', error);
+        }
+        
+        setLevelRewards(allRewards);
+        
+        // Обновляем кеши имен инструментов и локаций для остальных наград
         const updatedToolNames = {...toolNames};
         const updatedLocationNames = {...locationNames};
         
         // Если в наградах есть инструменты или локации, получаем их имена
-        for (const reward of tapResult.rewards) {
-          if ((reward.reward_type === RewardType.UNLOCK_TOOL) && reward.target_id) {
+        for (const reward of allRewards) {
+          if (reward.reward_type === RewardType.UNLOCK_TOOL && reward.target_id) {
             if (!updatedToolNames[reward.target_id]) {
               try {
                 const toolInfo = await api.getToolInfo(reward.target_id);
@@ -439,7 +540,7 @@ function App() {
             }
           }
           
-          if ((reward.reward_type === RewardType.UNLOCK_LOCATION) && reward.target_id) {
+          if (reward.reward_type === RewardType.UNLOCK_LOCATION && reward.target_id) {
             if (!updatedLocationNames[reward.target_id]) {
               try {
                 const locationInfo = await api.getLocationInfo(reward.target_id);
@@ -470,27 +571,6 @@ function App() {
         }));
         
         setLocations(locationsWithPlaceholders);
-        
-        if (currentLocation.characterId) {
-          const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
-          const toolsWithImages = locationTools.map((tool: Tool) => {
-            const imagePath = tool.imagePath || getToolImagePath(tool.name);
-            
-            // Обеспечиваем совместимость полей в разных форматах
-            return { 
-              ...tool, 
-              imagePath,
-              // Если поля в camelCase отсутствуют, но есть в snake_case, копируем их
-              mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
-              locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
-              // Убедимся, что обязательные поля всегда определены
-              main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
-              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
-            };
-          });
-          
-          setTools(toolsWithImages as Tool[]);
-        }
       }
     } catch (error) {
       console.error('Ошибка при тапе:', error);
