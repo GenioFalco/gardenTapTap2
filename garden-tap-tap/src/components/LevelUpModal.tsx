@@ -33,6 +33,10 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({
         return '/assets/currencies/garden_coin.png';
       case 'forest':
         return '/assets/currencies/wood.png';
+      case 'garden':
+        return '/assets/currencies/vegetable.png';
+      case 'winter':
+        return '/assets/currencies/snowflake.png';
       case 'mountain':
         return '/assets/currencies/stone.png';
       case 'desert':
@@ -51,6 +55,10 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({
         return 'Сад-коины';
       case 'forest':
         return 'Дерево';
+      case 'garden':
+        return 'Овощи';
+      case 'winter':
+        return 'Снежинки';
       case 'mountain':
         return 'Камень';
       case 'desert':
@@ -198,6 +206,88 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({
                     </motion.div>
                   </li>
                 );
+              } else if (reward.reward_type === RewardType.ENERGY || reward.reward_type === 'energy') {
+                content = (
+                  <li key={reward.id} className="flex items-center bg-gray-700 rounded-lg p-2">
+                    <motion.img 
+                      src="/assets/ui/energy_icon.png" 
+                      alt="Энергия" 
+                      className="w-8 h-8 mr-3"
+                      initial={{ scale: 0.8, rotate: -15 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ 
+                        duration: 0.5, 
+                        delay: index * 0.1 + 0.2,
+                        type: "spring",
+                        stiffness: 200
+                      }}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.1 + 0.4 }}
+                    >
+                      <span className="font-medium">Макс. энергия</span>
+                      <span className="text-yellow-400 ml-2">+{reward.amount}</span>
+                    </motion.div>
+                  </li>
+                );
+              } else if (reward.reward_type === 'currency') {
+                // Универсальный тип для любой валюты с указанным currency_id
+                const currencyType = reward.currency_id || 'main';
+                content = (
+                  <li key={reward.id} className="flex items-center bg-gray-700 rounded-lg p-2">
+                    <motion.img 
+                      src={getCurrencyImage(currencyType)} 
+                      alt="Валюта" 
+                      className="w-8 h-8 mr-3"
+                      initial={{ scale: 0.8, rotate: -15 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ 
+                        duration: 0.5, 
+                        delay: index * 0.1 + 0.2,
+                        type: "spring",
+                        stiffness: 200
+                      }}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.1 + 0.4 }}
+                    >
+                      <span className="font-medium">{getCurrencyName(currencyType)}</span>
+                      <span className="text-yellow-400 ml-2">+{reward.amount}</span>
+                    </motion.div>
+                  </li>
+                );
+              } else if (reward.reward_type.endsWith('_currency')) {
+                // Для специфических валют типа forest_currency, garden_currency и т.д.
+                const currencyType = reward.reward_type.split('_')[0];
+                content = (
+                  <li key={reward.id} className="flex items-center bg-gray-700 rounded-lg p-2">
+                    <motion.img 
+                      src={getCurrencyImage(currencyType)} 
+                      alt="Валюта" 
+                      className="w-8 h-8 mr-3"
+                      initial={{ scale: 0.8, rotate: -15 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ 
+                        duration: 0.5, 
+                        delay: index * 0.1 + 0.2,
+                        type: "spring",
+                        stiffness: 200
+                      }}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.1 + 0.4 }}
+                    >
+                      <span className="font-medium">{getCurrencyName(currencyType)}</span>
+                      <span className="text-yellow-400 ml-2">+{reward.amount}</span>
+                    </motion.div>
+                  </li>
+                );
               } else {
                 content = (
                   <li key={reward.id} className="flex items-center bg-gray-700 rounded-lg p-2">
@@ -212,7 +302,7 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3, delay: index * 0.1 + 0.4 }}
                     >
-                      Неизвестная награда
+                      Неизвестная награда ({reward.reward_type})
                     </motion.span>
                   </li>
                 );

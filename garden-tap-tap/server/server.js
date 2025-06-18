@@ -962,33 +962,89 @@ async function addExperience(userId, exp) {
 
 // Обработка награды
 async function processReward(userId, reward) {
+  console.log(`Обрабатываем награду:`, reward);
+  
   switch (reward.reward_type) {
     case RewardType.MAIN_CURRENCY:
-      // Добавляем основную валюту
-      const mainCurrency = await getOrCreatePlayerCurrency(userId, 'main');
+      // Добавляем валюту, указанную в currency_id или основную валюту
+      const currencyTypeMain = reward.currency_id || 'main';
+      const currencyMain = await getOrCreatePlayerCurrency(userId, currencyTypeMain);
       await db.run(`
         UPDATE player_currencies
         SET amount = amount + ?
         WHERE user_id = ? AND currency_id = ?
-      `, [reward.amount, userId, mainCurrency.currency_id]);
-      console.log(`Награда: добавлено ${reward.amount} валюты main (ID: ${mainCurrency.currency_id})`);
+      `, [reward.amount, userId, currencyMain.currency_id]);
+      console.log(`Награда: добавлено ${reward.amount} валюты ${currencyTypeMain} (ID: ${currencyMain.currency_id})`);
       break;
       
     case RewardType.LOCATION_CURRENCY:
-      // Добавляем валюту локации
-      const location = await db.get(`
-        SELECT * FROM locations WHERE id = ?
-      `, [reward.target_id]);
-      
-      if (location) {
-        const locationCurrencyType = location.currency_type || 'forest';
-        const locationCurrency = await getOrCreatePlayerCurrency(userId, locationCurrencyType);
+      // Обрабатываем специфическую валюту локации, если указан currency_id
+      if (reward.currency_id) {
+        const specificCurrency = await getOrCreatePlayerCurrency(userId, reward.currency_id);
         await db.run(`
           UPDATE player_currencies
           SET amount = amount + ?
           WHERE user_id = ? AND currency_id = ?
-        `, [reward.amount, userId, locationCurrency.currency_id]);
-        console.log(`Награда: добавлено ${reward.amount} валюты ${locationCurrencyType} (ID: ${locationCurrency.currency_id})`);
+        `, [reward.amount, userId, specificCurrency.currency_id]);
+        console.log(`Награда: добавлено ${reward.amount} валюты ${reward.currency_id} (ID: ${specificCurrency.currency_id})`);
+      } 
+      // Если указан target_id, получаем тип валюты из локации
+      else if (reward.target_id) {
+        const location = await db.get(`
+          SELECT * FROM locations WHERE id = ?
+        `, [reward.target_id]);
+        
+        if (location) {
+          const locationCurrencyType = location.currency_type || 'forest';
+          const locationCurrency = await getOrCreatePlayerCurrency(userId, locationCurrencyType);
+          await db.run(`
+            UPDATE player_currencies
+            SET amount = amount + ?
+            WHERE user_id = ? AND currency_id = ?
+          `, [reward.amount, userId, locationCurrency.currency_id]);
+          console.log(`Награда: добавлено ${reward.amount} валюты ${locationCurrencyType} (ID: ${locationCurrency.currency_id})`);
+        }
+      }
+      // По умолчанию используем forest
+      else {
+        const defaultCurrency = await getOrCreatePlayerCurrency(userId, 'forest');
+        await db.run(`
+          UPDATE player_currencies
+          SET amount = amount + ?
+          WHERE user_id = ? AND currency_id = ?
+        `, [reward.amount, userId, defaultCurrency.currency_id]);
+        console.log(`Награда: добавлено ${reward.amount} валюты forest (ID: ${defaultCurrency.currency_id})`);
+      }
+      break;
+      
+    // Динамическая обработка специальных типов валют
+    case 'forest_currency':
+    case 'garden_currency':
+    case 'winter_currency':
+    case 'mountain_currency':
+    case 'desert_currency':
+    case 'lake_currency':
+      // Извлекаем тип валюты из reward_type (например, forest_currency -> forest)
+      const specialCurrencyType = reward.reward_type.split('_')[0];
+      const specialCurrency = await getOrCreatePlayerCurrency(userId, specialCurrencyType);
+      await db.run(`
+        UPDATE player_currencies
+        SET amount = amount + ?
+        WHERE user_id = ? AND currency_id = ?
+      `, [reward.amount, userId, specialCurrency.currency_id]);
+      console.log(`Награда: добавлено ${reward.amount} валюты ${specialCurrencyType} (ID: ${specialCurrency.currency_id})`);
+      break;
+      
+    // Универсальная обработка валют по currency_id
+    case 'currency':
+      if (reward.currency_id) {
+        const currencyFromId = await getOrCreatePlayerCurrency(userId, reward.currency_id);
+        await db.run(`
+          UPDATE player_currencies
+          SET amount = amount + ?
+          WHERE user_id = ? AND currency_id = ?
+        `, [reward.amount, userId, currencyFromId.currency_id]);
+        console.log(`Награда (currency): добавлено ${reward.amount} валюты ${reward.currency_id} (ID: ${currencyFromId.currency_id})`);
       }
       break;
       
@@ -1006,6 +1062,22 @@ async function processReward(userId, reward) {
         INSERT OR IGNORE INTO player_locations (user_id, location_id)
         VALUES (?, ?)
       `, [userId, reward.target_id]);
+      break;
+      
+    case RewardType.ENERGY:
+      // Увеличиваем максимальную энергию, если указана награда этого типа
+      if (reward.amount > 0) {
+        await db.run(`
+          UPDATE player_progress
+          SET max_energy = max_energy + ?
+          WHERE user_id = ?
+        `, [reward.amount, userId]);
+        console.log(`Награда: увеличение максимальной энергии на ${reward.amount}`);
+      }
+      break;
+      
+    default:
+      console.warn(`Неизвестный тип награды: ${reward.reward_type}`);
       break;
   }
 }

@@ -12,7 +12,8 @@ const RewardType = {
   MAIN_CURRENCY: 'main_currency',
   LOCATION_CURRENCY: 'location_currency',
   UNLOCK_TOOL: 'unlock_tool',
-  UNLOCK_LOCATION: 'unlock_location'
+  UNLOCK_LOCATION: 'unlock_location',
+  ENERGY: 'energy'
 };
 
 // Путь к файлу базы данных
