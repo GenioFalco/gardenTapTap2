@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Location, Tool, CurrencyType, Currency } from '../types';
 import * as api from '../lib/api';
+import HelperModal from './HelperModal'; // Импортируем компонент модального окна помощников
 
 // Компонент модального окна улучшения инструментов
 const UpgradeModal = ({ 
@@ -277,23 +278,24 @@ const GameScreen: React.FC<GameScreenProps> = ({
   gardenCoins = 0,
   unlockedTools = [], // По умолчанию пустой массив
 }) => {
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [showNotEnoughResources, setShowNotEnoughResources] = useState(false);
-  const [showNoEnergy, setShowNoEnergy] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [currencyInfo, setCurrencyInfo] = useState<Currency | null>(null);
+  const [showHelperModal, setShowHelperModal] = useState(false); // Новое состояние для модального окна помощников
   const [characterAppearance, setCharacterAppearance] = useState<{
-    imagePath: string;
+    imagePath: string | null;
     animationPath: string | null;
     animationType: string | null;
     frameCount: number | null;
   }>({
-    imagePath: characterImageUrl,
+    imagePath: null,
     animationPath: null,
     animationType: null,
     frameCount: null
   });
-
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [showNoEnergy, setShowNoEnergy] = useState(false);
+  const [showNotEnoughResources, setShowNotEnoughResources] = useState(false);
+  const [currencyInfo, setCurrencyInfo] = useState<Currency | null>(null);
+  
   // Найти текущий и следующий доступный инструмент
   const currentTool = tools.find(tool => tool.id === equippedToolId);
   const nextToolIndex = tools.findIndex(tool => tool.id === equippedToolId) + 1;
@@ -536,12 +538,20 @@ const GameScreen: React.FC<GameScreenProps> = ({
             </div>
           </div>
 
-          <button 
-            className="w-full bg-yellow-500 hover:bg-yellow-600 py-1 px-2 rounded text-white text-xs mt-0.5"
-            onClick={() => setShowUpgradeModal(true)}
-          >
-            Улучшить
-          </button>
+          <div className="flex space-x-2">
+            <button 
+              className="flex-1 bg-yellow-500 hover:bg-yellow-600 py-1 px-2 rounded text-white text-xs mt-0.5"
+              onClick={() => setShowUpgradeModal(true)}
+            >
+              Улучшить
+            </button>
+            <button 
+              className="flex-1 bg-green-600 hover:bg-green-700 py-1 px-2 rounded text-white text-xs mt-0.5"
+              onClick={() => setShowHelperModal(true)}
+            >
+              Помощники
+            </button>
+          </div>
         </div>
       </div>
 
@@ -562,6 +572,21 @@ const GameScreen: React.FC<GameScreenProps> = ({
         locationName={location.name}
         locationCurrencyType={currencyType}
         unlockedTools={unlockedTools}
+      />
+      
+      {/* Модальное окно помощников */}
+      <HelperModal
+        show={showHelperModal}
+        onClose={() => setShowHelperModal(false)}
+        locationId={location.id}
+        locationName={location.name}
+        playerLevel={level}
+        locationCurrency={resourceAmount}
+        locationCurrencyType={currencyType}
+        onHelpersChanged={() => {
+          // Тут можно добавить обновление состояния игры после изменений с помощниками
+          // Например, перезагрузить данные о валюте
+        }}
       />
     </div>
   );

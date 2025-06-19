@@ -1,6 +1,6 @@
 import { 
   Location, Character, Tool, Level, Reward, PlayerProgress, 
-  CurrencyType, RewardType, PlayerCurrency, Currency, CharacterAppearance 
+  CurrencyType, RewardType, PlayerCurrency, Currency, CharacterAppearance, Helper 
 } from '../types';
 import CONFIG from '../config';
 
@@ -273,4 +273,30 @@ export const getToolsByUnlockLevel = async (level: number): Promise<Tool[]> => {
 // Получить локации по уровню разблокировки
 export const getLocationsByUnlockLevel = async (level: number): Promise<Location[]> => {
   return await fetchApi<Location[]>(`/locations/unlock-level/${level}`);
+};
+
+// Получить помощников для локации
+export const getHelpersByLocationId = async (locationId: number): Promise<Helper[]> => {
+  return await fetchApi<Helper[]>(`/player/locations/${locationId}/helpers`);
+};
+
+// Купить помощника
+export const buyHelper = async (helperId: number): Promise<{ success: boolean }> => {
+  return await fetchApi<{ success: boolean }>(`/player/helpers/${helperId}/buy`, {
+    method: 'POST'
+  });
+};
+
+// Активировать/деактивировать помощника
+export const toggleHelper = async (helperId: number): Promise<{ success: boolean, active: boolean }> => {
+  return await fetchApi<{ success: boolean, active: boolean }>(`/player/helpers/${helperId}/toggle`, {
+    method: 'POST'
+  });
+};
+
+// Собрать награду от помощников
+export const collectHelpersReward = async (): Promise<{ collected: number, locationId: number | null, currencyType: string | null }> => {
+  return await fetchApi<{ collected: number, locationId: number | null, currencyType: string | null }>(`/player/helpers/collect`, {
+    method: 'POST'
+  });
 }; 

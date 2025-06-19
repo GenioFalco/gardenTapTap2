@@ -129,4 +129,19 @@ export interface CharacterAppearance {
   animationType?: string;
   animationPath?: string;
   frameCount?: number | null;
+}
+
+// Интерфейс помощника
+export interface Helper {
+  id: number;
+  name: string;
+  description: string;
+  locationId: number;
+  unlockLevel: number;
+  unlockCost: number;
+  currencyType: CurrencyType;
+  incomePerHour: number;
+  imagePath: string;
+  isUnlocked?: boolean;  // Куплен ли помощник
+  isActive?: boolean;    // Активен ли помощник в данный момент
 } 

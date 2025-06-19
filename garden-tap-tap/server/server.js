@@ -177,8 +177,7 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
     
     // Получаем инструменты персонажа
     const characterTools = await db.all(`
-      SELECT t.* FROM tools t
-      WHERE t.character_id = ?
+      SELECT * FROM tools WHERE character_id = ?
     `, [characterId]);
     
     // Получаем разблокированные инструменты
@@ -191,7 +190,7 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
     // Получаем уровень игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
     
-    // Добавляем информацию о разблокировке к каждому инструменту
+    // Добавляем флаг is_unlocked к инструментам
     const toolsWithUnlockInfo = characterTools.map(tool => {
       return {
         ...tool,
@@ -199,11 +198,9 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
       };
     });
     
-    // Возвращаем инструменты с информацией о разблокировке
-    console.log('API: Получены инструменты для персонажа', characterId, ':', toolsWithUnlockInfo);
     res.json(toolsWithUnlockInfo);
   } catch (error) {
-    console.error('Ошибка при получении инструментов игрока:', error);
+    console.error('Ошибка при получении инструментов:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -797,6 +794,257 @@ app.get('/api/locations/unlock-level/:level', async (req, res) => {
   } catch (error) {
     console.error('Ошибка при получении локаций по уровню:', error);
     res.status(500).json({ error: 'Ошибка при получении локаций', details: error.message });
+  }
+});
+
+// Получить помощников для локации
+app.get('/api/player/locations/:locationId/helpers', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { locationId } = req.params;
+    
+    // Получаем помощников для локации
+    const locationHelpers = await db.all(`
+      SELECT * FROM helpers WHERE location_id = ?
+    `, [locationId]);
+    
+    // Получаем купленных помощников
+    const unlockedHelpers = await db.all(`
+      SELECT helper_id FROM player_helpers WHERE user_id = ?
+    `, [userId]);
+    
+    const unlockedHelperIds = unlockedHelpers.map(helper => helper.helper_id);
+    
+    // Получаем активных помощников
+    const activeHelpers = await db.all(`
+      SELECT helper_id, location_id FROM player_active_helpers WHERE user_id = ?
+    `, [userId]);
+    
+    const activeHelperIds = activeHelpers.map(helper => helper.helper_id);
+    const activeLocationIds = activeHelpers.map(helper => helper.location_id);
+    
+    // Узнаем, есть ли активные помощники на других локациях
+    const hasActiveHelperInOtherLocation = activeHelpers.some(helper => 
+      helper.location_id != locationId
+    );
+    
+    // Получаем уровень игрока
+    const playerProgress = await getOrCreatePlayerProgress(userId);
+    
+    // Добавляем флаги к помощникам
+    const helpersWithInfo = locationHelpers.map(helper => {
+      return {
+        ...helper,
+        is_unlocked: unlockedHelperIds.includes(helper.id),
+        is_active: activeHelperIds.includes(helper.id),
+        can_activate: !hasActiveHelperInOtherLocation || activeLocationIds.includes(parseInt(locationId))
+      };
+    });
+    
+    res.json(helpersWithInfo);
+  } catch (error) {
+    console.error('Ошибка при получении помощников:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Купить помощника
+app.post('/api/player/helpers/:helperId/buy', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { helperId } = req.params;
+    
+    // Получаем информацию о помощнике
+    const helper = await db.get(`
+      SELECT * FROM helpers WHERE id = ?
+    `, [helperId]);
+    
+    if (!helper) {
+      return res.status(404).json({ error: 'Помощник не найден' });
+    }
+    
+    // Получаем уровень игрока и проверяем, достаточен ли он
+    const playerProgress = await getOrCreatePlayerProgress(userId);
+    
+    if (playerProgress.level < helper.unlock_level) {
+      return res.status(400).json({ error: 'Недостаточный уровень' });
+    }
+    
+    // Проверяем, не куплен ли уже помощник
+    const isAlreadyUnlocked = await db.get(`
+      SELECT * FROM player_helpers WHERE user_id = ? AND helper_id = ?
+    `, [userId, helperId]);
+    
+    if (isAlreadyUnlocked) {
+      return res.status(400).json({ error: 'Помощник уже куплен' });
+    }
+    
+    // Проверяем наличие ресурсов
+    const playerCurrency = await db.get(`
+      SELECT amount FROM player_currencies WHERE user_id = ? AND currency_type = ?
+    `, [userId, helper.currency_type]);
+    
+    if (!playerCurrency || playerCurrency.amount < helper.unlock_cost) {
+      return res.status(400).json({ error: 'Недостаточно ресурсов' });
+    }
+    
+    // Списываем ресурсы
+    await db.run(`
+      UPDATE player_currencies
+      SET amount = amount - ?
+      WHERE user_id = ? AND currency_type = ?
+    `, [helper.unlock_cost, userId, helper.currency_type]);
+    
+    // Добавляем помощника в таблицу купленных
+    await db.run(`
+      INSERT INTO player_helpers (user_id, helper_id)
+      VALUES (?, ?)
+    `, [userId, helperId]);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ошибка при покупке помощника:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Активировать/деактивировать помощника
+app.post('/api/player/helpers/:helperId/toggle', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { helperId } = req.params;
+    
+    // Получаем информацию о помощнике
+    const helper = await db.get(`
+      SELECT * FROM helpers WHERE id = ?
+    `, [helperId]);
+    
+    if (!helper) {
+      return res.status(404).json({ error: 'Помощник не найден' });
+    }
+    
+    // Проверяем, куплен ли помощник
+    const isUnlocked = await db.get(`
+      SELECT * FROM player_helpers WHERE user_id = ? AND helper_id = ?
+    `, [userId, helperId]);
+    
+    if (!isUnlocked) {
+      return res.status(400).json({ error: 'Помощник не приобретен' });
+    }
+    
+    // Проверяем, активен ли уже помощник
+    const isActive = await db.get(`
+      SELECT * FROM player_active_helpers WHERE user_id = ? AND helper_id = ?
+    `, [userId, helperId]);
+    
+    if (isActive) {
+      // Деактивируем помощника
+      await db.run(`
+        DELETE FROM player_active_helpers
+        WHERE user_id = ? AND helper_id = ?
+      `, [userId, helperId]);
+      
+      return res.json({ success: true, active: false });
+    } else {
+      // Проверяем наличие активных помощников на других локациях
+      const activeHelperInOtherLocation = await db.get(`
+        SELECT * FROM player_active_helpers
+        WHERE user_id = ? AND location_id != ?
+      `, [userId, helper.location_id]);
+      
+      if (activeHelperInOtherLocation) {
+        return res.status(400).json({ 
+          error: 'У вас уже активен помощник на другой локации',
+          activeHelperId: activeHelperInOtherLocation.helper_id,
+          activeLocationId: activeHelperInOtherLocation.location_id
+        });
+      }
+      
+      // Активируем помощника
+      await db.run(`
+        INSERT INTO player_active_helpers (user_id, helper_id, location_id, activated_time)
+        VALUES (?, ?, ?, datetime('now'))
+      `, [userId, helperId, helper.location_id]);
+      
+      return res.json({ success: true, active: true });
+    }
+  } catch (error) {
+    console.error('Ошибка при активации помощника:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Собрать награду от помощников
+app.post('/api/player/helpers/collect', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем всех активных помощников пользователя
+    const activeHelpers = await db.all(`
+      SELECT h.*, pah.activated_time, pah.location_id
+      FROM player_active_helpers pah
+      JOIN helpers h ON pah.helper_id = h.id
+      WHERE pah.user_id = ?
+    `, [userId]);
+    
+    if (activeHelpers.length === 0) {
+      return res.json({ collected: 0, locationId: null });
+    }
+    
+    // Для каждого помощника рассчитываем полученную валюту
+    let totalCollected = 0;
+    let locationId = null;
+    let currencyType = null;
+    
+    for (const helper of activeHelpers) {
+      // Расчет времени, прошедшего с момента активации
+      const activationTime = new Date(helper.activated_time);
+      const currentTime = new Date();
+      const hoursDiff = (currentTime - activationTime) / (1000 * 60 * 60);
+      
+      // Количество собранных ресурсов (округленное до 2 знаков)
+      const collected = Math.round(helper.income_per_hour * hoursDiff * 100) / 100;
+      totalCollected += collected;
+      
+      locationId = helper.location_id;
+      currencyType = helper.currency_type;
+      
+      // Обновляем время активации помощника на текущее
+      await db.run(`
+        UPDATE player_active_helpers
+        SET activated_time = datetime('now')
+        WHERE user_id = ? AND helper_id = ?
+      `, [userId, helper.id]);
+    }
+    
+    // Если есть, что начислять, добавляем валюту игроку
+    if (totalCollected > 0) {
+      // Проверяем, есть ли уже такая валюта у игрока
+      const existingCurrency = await db.get(`
+        SELECT * FROM player_currencies
+        WHERE user_id = ? AND currency_type = ?
+      `, [userId, currencyType]);
+      
+      if (existingCurrency) {
+        // Обновляем существующую валюту
+        await db.run(`
+          UPDATE player_currencies
+          SET amount = amount + ?
+          WHERE user_id = ? AND currency_type = ?
+        `, [totalCollected, userId, currencyType]);
+      } else {
+        // Создаем новую запись о валюте
+        await db.run(`
+          INSERT INTO player_currencies (user_id, currency_type, amount)
+          VALUES (?, ?, ?)
+        `, [userId, currencyType, totalCollected]);
+      }
+    }
+    
+    res.json({ collected: totalCollected, locationId, currencyType });
+  } catch (error) {
+    console.error('Ошибка при сборе награды от помощников:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
