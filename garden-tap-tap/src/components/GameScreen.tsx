@@ -140,7 +140,7 @@ const UpgradeModal = ({
                         <div className="flex justify-between">
                           <h4 className="text-white font-medium">{tool.name}</h4>
                           {isEquipped && (
-                            <span className="text-xs bg-yellow-500 text-black px-2 py-1 rounded">
+                            <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded">
                               Активен
                             </span>
                           )}
@@ -169,7 +169,6 @@ const UpgradeModal = ({
                       ) : (
                         <div>
                           <div className="flex justify-between items-center mb-1 text-xs">
-                            <span>{locationCurrency} / {tool.unlockCost} {tool.currencyType.toLowerCase()}</span>
                             {notEnoughResources && 
                               <span className="text-red-400">Недостаточно ресурсов</span>
                             }
@@ -178,11 +177,11 @@ const UpgradeModal = ({
                             className={`w-full py-1 px-4 rounded ${
                               notEnoughResources 
                                 ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
-                                : 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                                : 'bg-yellow-500 hover:bg-yellow-600 text-white'
                             }`}
                             onClick={() => handleBuyTool(tool)}
                           >
-                            Купить за {tool.unlockCost} {tool.currencyType.toLowerCase()}
+                            <span className="font-bold">{locationCurrency.toFixed(2)}/{tool.unlockCost}</span> {tool.currencyType.toLowerCase()}
                           </button>
                         </div>
                       )}
@@ -538,7 +537,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
           </div>
 
           <button 
-            className="w-full bg-yellow-500 hover:bg-yellow-600 py-1 px-2 rounded text-black text-xs mt-0.5"
+            className="w-full bg-yellow-500 hover:bg-yellow-600 py-1 px-2 rounded text-white text-xs mt-0.5"
             onClick={() => setShowUpgradeModal(true)}
           >
             Улучшить
