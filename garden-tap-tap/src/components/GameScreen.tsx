@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Location, Tool, CurrencyType, Currency } from '../types';
+import { Location, Tool, CurrencyType, Currency, Helper } from '../types';
 import * as api from '../lib/api';
-import HelperModal from './HelperModal'; // Импортируем компонент модального окна помощников
 
 // Компонент модального окна улучшения инструментов
 const UpgradeModal = ({ 
@@ -16,7 +15,8 @@ const UpgradeModal = ({
   locationCurrency,
   locationName,
   locationCurrencyType,
-  unlockedTools = [] // Массив ID разблокированных инструментов
+  unlockedTools = [], // Массив ID разблокированных инструментов
+  locationId // Добавляем ID локации для работы с помощниками
 }: { 
   show: boolean; 
   onClose: () => void; 
@@ -29,21 +29,23 @@ const UpgradeModal = ({
   locationName: string;
   locationCurrencyType: CurrencyType;
   unlockedTools?: number[]; // Новый пропс для разблокированных инструментов
+  locationId: number; // ID локации для работы с помощниками
 }) => {
   const [activeTab, setActiveTab] = useState<'tools' | 'helpers'>('tools');
-  const [helperActive, setHelperActive] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Помощник - заглушка для демонстрации
-  const helper = {
-    name: `Помощник ${locationName}`,
-    unlockLevel: 5,
-    cost: 500,
-    income: 180,
-    currency: locationCurrencyType,
-    unlocked: playerLevel >= 5,
-    purchased: false
-  };
+  
+  // Состояния для работы с помощниками
+  const [helpers, setHelpers] = useState<Helper[]>([]);
+  const [loadingHelpers, setLoadingHelpers] = useState<boolean>(true);
+  const [processingHelperId, setProcessingHelperId] = useState<number | null>(null);
+  const [recentlyCollected, setRecentlyCollected] = useState<number | null>(null);
+  
+  // Загрузка помощников при открытии вкладки
+  useEffect(() => {
+    if (show && activeTab === 'helpers') {
+      loadHelpers();
+    }
+  }, [show, activeTab, locationId]);
 
   if (!show) return null;
   
@@ -61,6 +63,69 @@ const UpgradeModal = ({
     if (!success) {
       setErrorMessage('Не удалось приобрести инструмент');
       setTimeout(() => setErrorMessage(null), 3000);
+    }
+  };
+  
+  // Функция загрузки помощников
+  const loadHelpers = async () => {
+    try {
+      setLoadingHelpers(true);
+      setErrorMessage(null);
+      const loadedHelpers = await api.getHelpersByLocationId(locationId);
+      setHelpers(loadedHelpers);
+    } catch (error) {
+      console.error('Ошибка при загрузке помощников:', error);
+      setErrorMessage('Не удалось загрузить помощников');
+    } finally {
+      setLoadingHelpers(false);
+    }
+  };
+  
+  // Обработчик покупки помощника
+  const handleBuyHelper = async (helper: Helper) => {
+    try {
+      setProcessingHelperId(helper.id);
+      setErrorMessage(null);
+      await api.buyHelper(helper.id);
+      await loadHelpers();
+    } catch (error: any) {
+      console.error('Ошибка при покупке помощника:', error);
+      setErrorMessage(error.message || 'Ошибка при покупке помощника');
+    } finally {
+      setProcessingHelperId(null);
+    }
+  };
+  
+  // Обработчик активации/деактивации помощника
+  const handleToggleHelper = async (helper: Helper) => {
+    try {
+      setProcessingHelperId(helper.id);
+      setErrorMessage(null);
+      await api.toggleHelper(helper.id);
+      await loadHelpers();
+    } catch (error: any) {
+      console.error('Ошибка при активации/деактивации помощника:', error);
+      setErrorMessage(error.message || 'Ошибка при активации/деактивации помощника');
+    } finally {
+      setProcessingHelperId(null);
+    }
+  };
+  
+  // Обработчик сбора награды от помощников
+  const handleCollectReward = async () => {
+    try {
+      setErrorMessage(null);
+      const result = await api.collectHelpersReward();
+      
+      if (result.collected > 0) {
+        setRecentlyCollected(result.collected);
+        setTimeout(() => setRecentlyCollected(null), 3000);
+      }
+      
+      await loadHelpers();
+    } catch (error: any) {
+      console.error('Ошибка при сборе награды:', error);
+      setErrorMessage(error.message || 'Ошибка при сборе награды');
     }
   };
 
@@ -195,44 +260,118 @@ const UpgradeModal = ({
             <div>
               <h3 className="text-white font-medium mb-4">Помощники</h3>
               
-              <div className="mb-4 p-3 rounded-lg bg-gray-900">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 mr-3 bg-gray-700 rounded-full flex items-center justify-center text-xl">
-                    👷
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-white font-medium">{helper.name}</h4>
-                    <div className="text-sm text-gray-400">
-                      +{helper.income} {helper.currency} в час
-                    </div>
-                  </div>
-                </div>
+              {/* Кнопка сбора наград */}
+              <div className="mb-4">
+                <button 
+                  onClick={handleCollectReward}
+                  className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded"
+                >
+                  Собрать награду от помощников
+                </button>
                 
-                <div className="mt-3">
-                  {!helper.unlocked ? (
-                    <div className="text-sm text-gray-400 text-center border border-gray-700 py-2 rounded">
-                      Доступен с {helper.unlockLevel} уровня
-                    </div>
-                  ) : !helper.purchased ? (
-                    <button 
-                      className="w-full bg-yellow-500 hover:bg-yellow-600 text-black py-1 px-4 rounded"
-                      onClick={() => alert('Помощник пока недоступен!')}
-                    >
-                      Нанять за {helper.cost} {helper.currency}
-                    </button>
-                  ) : (
-                    <label className="flex items-center justify-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={helperActive}
-                        onChange={() => setHelperActive(!helperActive)}
-                        className="mr-2" 
-                      />
-                      <span className="text-white">{helperActive ? 'Активен' : 'Неактивен'}</span>
-                    </label>
-                  )}
-                </div>
+                {recentlyCollected !== null && (
+                  <div className="mt-2 text-center text-green-400">
+                    Собрано: {recentlyCollected.toFixed(2)} {locationCurrencyType}
+                  </div>
+                )}
               </div>
+              
+              {/* Список помощников */}
+              {loadingHelpers ? (
+                <div className="text-center text-white py-4">Загрузка...</div>
+              ) : helpers.length === 0 ? (
+                <div className="text-center text-white py-4">Помощников пока нет</div>
+              ) : (
+                <div>
+                  {helpers.map(helper => {
+                    const isUnlocked = helper.isUnlocked || (helper as any).is_unlocked;
+                    const isActive = helper.isActive || (helper as any).is_active;
+                    const canActivate = (helper as any).can_activate;
+                    const helperCost = helper.unlockCost || (helper as any).unlock_cost || 0;
+                    const notEnoughResources = helperCost > locationCurrency;
+                    const isUnlockable = playerLevel >= (helper.unlockLevel || (helper as any).unlock_level || 1);
+                    const helperIncome = helper.incomePerHour || (helper as any).income_per_hour || 0;
+                    const helperCurrency = helper.currencyType || (helper as any).currency_type || locationCurrencyType;
+                    const helperUnlockLevel = helper.unlockLevel || (helper as any).unlock_level || 1;
+                    
+                    return (
+                      <div 
+                        key={helper.id} 
+                        className={`mb-4 p-3 rounded-lg ${isActive ? 'bg-gray-700' : 'bg-gray-900'}`}
+                      >
+                        <div className="flex items-center">
+                          <img 
+                            src={helper.imagePath || '/assets/helpers/apprentice.png'} 
+                            alt={helper.name} 
+                            className="w-12 h-12 mr-3 rounded-full"
+                          />
+                          <div className="flex-1">
+                            <div className="flex justify-between">
+                              <h4 className="text-white font-medium">{helper.name}</h4>
+                              {isActive && (
+                                <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded">
+                                  Активен
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              {helper.description}
+                            </div>
+                            <div className="text-sm text-green-400">
+                              +{helperIncome} {helperCurrency} в час
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3">
+                          {!isUnlockable ? (
+                            <div className="text-sm text-gray-400 text-center border border-gray-700 py-2 rounded">
+                              Доступен с уровня {helperUnlockLevel}
+                            </div>
+                          ) : isUnlocked ? (
+                            <button 
+                              className={`w-full ${
+                                isActive 
+                                  ? 'bg-red-600 hover:bg-red-700' 
+                                  : canActivate 
+                                    ? 'bg-green-600 hover:bg-green-700' 
+                                    : 'bg-gray-600'
+                              } text-white py-1 px-4 rounded ${
+                                processingHelperId === helper.id ? 'opacity-50 cursor-wait' : ''
+                              } ${!canActivate && !isActive ? 'cursor-not-allowed' : ''}`}
+                              onClick={() => handleToggleHelper(helper)}
+                              disabled={processingHelperId === helper.id || (!canActivate && !isActive)}
+                            >
+                              {isActive ? 'Деактивировать' : 'Активировать'}
+                            </button>
+                          ) : (
+                            <div>
+                              <div className="flex justify-between items-center mb-1 text-xs">
+                                {notEnoughResources && 
+                                  <span className="text-red-400">Недостаточно ресурсов</span>
+                                }
+                              </div>
+                              <button 
+                                className={`w-full py-1 px-4 rounded ${
+                                  notEnoughResources 
+                                    ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+                                    : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                } ${
+                                  processingHelperId === helper.id ? 'opacity-50 cursor-wait' : ''
+                                }`}
+                                onClick={() => handleBuyHelper(helper)}
+                                disabled={notEnoughResources || processingHelperId === helper.id}
+                              >
+                                <span className="font-bold">{locationCurrency.toFixed(2)}/{helperCost}</span> {helperCurrency}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -279,7 +418,6 @@ const GameScreen: React.FC<GameScreenProps> = ({
   unlockedTools = [], // По умолчанию пустой массив
 }) => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showHelperModal, setShowHelperModal] = useState(false); // Новое состояние для модального окна помощников
   const [characterAppearance, setCharacterAppearance] = useState<{
     imagePath: string | null;
     animationPath: string | null;
@@ -538,20 +676,12 @@ const GameScreen: React.FC<GameScreenProps> = ({
             </div>
           </div>
 
-          <div className="flex space-x-2">
-            <button 
-              className="flex-1 bg-yellow-500 hover:bg-yellow-600 py-1 px-2 rounded text-white text-xs mt-0.5"
-              onClick={() => setShowUpgradeModal(true)}
-            >
-              Улучшить
-            </button>
-            <button 
-              className="flex-1 bg-green-600 hover:bg-green-700 py-1 px-2 rounded text-white text-xs mt-0.5"
-              onClick={() => setShowHelperModal(true)}
-            >
-              Помощники
-            </button>
-          </div>
+          <button 
+            className="w-full bg-yellow-500 hover:bg-yellow-600 py-1 px-2 rounded text-white text-xs mt-0.5"
+            onClick={() => setShowUpgradeModal(true)}
+          >
+            Улучшить
+          </button>
         </div>
       </div>
 
@@ -572,21 +702,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
         locationName={location.name}
         locationCurrencyType={currencyType}
         unlockedTools={unlockedTools}
-      />
-      
-      {/* Модальное окно помощников */}
-      <HelperModal
-        show={showHelperModal}
-        onClose={() => setShowHelperModal(false)}
         locationId={location.id}
-        locationName={location.name}
-        playerLevel={level}
-        locationCurrency={resourceAmount}
-        locationCurrencyType={currencyType}
-        onHelpersChanged={() => {
-          // Тут можно добавить обновление состояния игры после изменений с помощниками
-          // Например, перезагрузить данные о валюте
-        }}
       />
     </div>
   );
