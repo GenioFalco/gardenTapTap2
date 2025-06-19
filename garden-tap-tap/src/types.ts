@@ -49,6 +49,8 @@ export interface Tool {
   // Поля в camelCase для совместимости с API
   mainCoinsPower?: number;
   locationCoinsPower?: number;
+  // Флаг, указывающий, разблокирован ли инструмент (добавляется сервером)
+  is_unlocked?: boolean;
 }
 
 // Интерфейс персонажа

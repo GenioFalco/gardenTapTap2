@@ -114,10 +114,12 @@ const UpgradeModal = ({
                 
                 // Проверяем, является ли инструмент разблокированным:
                 // 1. Если он уже экипирован
-                // 2. Если он есть в массиве unlockedTools
-                // 3. Если его стоимость 0
+                // 2. Если он есть в массиве unlockedTools (записи из таблицы player_tools)
+                // 3. Если он помечен как разблокированный (is_unlocked)
+                // 4. Если его стоимость 0
                 const isOwned = isEquipped || 
                                unlockedTools.includes(tool.id) || 
+                               (tool as any).is_unlocked === true ||
                                tool.unlockCost === 0;
                 
                 // Показываем сообщение о недостаточности ресурсов

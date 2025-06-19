@@ -191,12 +191,17 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
     // Получаем уровень игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
     
-    // Фильтруем доступные инструменты (разблокированные или доступные по уровню)
-    const availableTools = characterTools.filter(tool => {
-      return unlockedToolIds.includes(tool.id) || tool.unlock_level <= playerProgress.level;
+    // Добавляем информацию о разблокировке к каждому инструменту
+    const toolsWithUnlockInfo = characterTools.map(tool => {
+      return {
+        ...tool,
+        is_unlocked: unlockedToolIds.includes(tool.id)
+      };
     });
     
-    res.json(availableTools);
+    // Возвращаем инструменты с информацией о разблокировке
+    console.log('API: Получены инструменты для персонажа', characterId, ':', toolsWithUnlockInfo);
+    res.json(toolsWithUnlockInfo);
   } catch (error) {
     console.error('Ошибка при получении инструментов игрока:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -301,23 +306,13 @@ app.get('/api/player/progress', async (req, res) => {
       ])
     ];
     
-    // Получаем разблокированные инструменты
+    // Получаем ТОЛЬКО разблокированные (купленные) инструменты
     const unlockedTools = await db.all(`
       SELECT tool_id FROM player_tools WHERE user_id = ?
     `, [userId]);
     
-    // Добавляем инструменты, доступные по уровню
-    const levelUnlockedTools = await db.all(`
-      SELECT id FROM tools WHERE unlock_level <= ?
-    `, [playerProgress.level]);
-    
-    // Объединяем ID инструментов
-    const unlockedToolIds = [
-      ...new Set([
-        ...unlockedTools.map(tool => tool.tool_id),
-        ...levelUnlockedTools.map(tool => tool.id)
-      ])
-    ];
+    // Преобразуем в массив ID инструментов
+    const unlockedToolIds = unlockedTools.map(tool => tool.tool_id);
     
     // Получаем экипированные инструменты
     const equippedTools = await db.all(`

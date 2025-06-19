@@ -62,7 +62,9 @@ export const getToolsByCharacterId = async (characterId: number): Promise<Tool[]
 
 // Получить разблокированные инструменты игрока для персонажа
 export const getUnlockedToolsByCharacterId = async (characterId: number): Promise<Tool[]> => {
-  return await fetchApi<Tool[]>(`/player/characters/${characterId}/tools`);
+  const tools = await fetchApi<Tool[]>(`/player/characters/${characterId}/tools`);
+  console.log('Получены инструменты для персонажа:', tools);
+  return tools;
 };
 
 // Получить экипированный инструмент для персонажа
