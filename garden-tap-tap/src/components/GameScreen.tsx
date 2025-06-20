@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Location, Tool, CurrencyType, Currency, Helper } from '../types';
 import * as api from '../lib/api';
@@ -513,11 +513,31 @@ const GameScreen: React.FC<GameScreenProps> = ({
   const [showNoEnergy, setShowNoEnergy] = useState(false);
   const [showNotEnoughResources, setShowNotEnoughResources] = useState(false);
   const [currencyInfo, setCurrencyInfo] = useState<Currency | null>(null);
+  // Используем useRef для хранения счетчика анимаций
+  const animationQueueRef = useRef<number>(0);
+  const [animationQueueDisplay, setAnimationQueueDisplay] = useState<number>(0);
+  // Добавляем состояние для эффекта получения ресурсов
+  const [resourceGain, setResourceGain] = useState<{show: boolean, amount: number}>({show: false, amount: 0});
+  // Флаг для отслеживания, запущен ли процесс анимации
+  const isProcessingAnimationRef = useRef<boolean>(false);
+  // Ссылки на таймеры для их очистки
+  const timersRef = useRef<number[]>([]);
+  // Время последней активности анимации
+  const lastAnimationTimeRef = useRef<number>(0);
+  // Сохраняем статичное изображение персонажа
+  const staticImageRef = useRef<string | null>(characterAppearance.imagePath);
 
   // Найти текущий и следующий доступный инструмент
   const currentTool = tools.find(tool => tool.id === equippedToolId);
   const nextToolIndex = tools.findIndex(tool => tool.id === equippedToolId) + 1;
   const nextTool = nextToolIndex < tools.length ? tools[nextToolIndex] : null;
+
+  // Обновляем ссылку на статичное изображение при изменении персонажа
+  useEffect(() => {
+    if (!isAnimating) {
+      staticImageRef.current = characterAppearance.imagePath;
+    }
+  }, [characterAppearance.imagePath, isAnimating]);
 
   // Загрузка информации о валюте локации
   useEffect(() => {
@@ -625,6 +645,118 @@ const GameScreen: React.FC<GameScreenProps> = ({
     }
   }, [nextTool, onUpgrade]);
 
+  // Очистка таймеров при размонтировании компонента
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(timer => window.clearTimeout(timer));
+      timersRef.current = [];
+    };
+  }, []);
+
+  // Проверка на зависшие анимации
+  useEffect(() => {
+    // Если анимация активна, но долго не обновлялась, сбрасываем её
+    const checkStuckAnimation = window.setInterval(() => {
+      if (isProcessingAnimationRef.current) {
+        const now = Date.now();
+        // Если прошло больше 5 секунд с последнего обновления анимации
+        if (now - lastAnimationTimeRef.current > 5000) {
+          console.log("Анимация зависла, сбрасываем");
+          // Сбрасываем состояние анимации
+          isProcessingAnimationRef.current = false;
+          setIsAnimating(false);
+          // Очищаем очередь анимаций
+          animationQueueRef.current = 0;
+          setAnimationQueueDisplay(0);
+          // Возвращаем обычное изображение персонажа
+          if (characterAppearance.animationPath) {
+            setCharacterAppearance(prev => ({
+              ...prev,
+              imagePath: staticImageRef.current || characterAppearance.imagePath
+            }));
+          }
+        }
+      }
+    }, 1000);
+
+    timersRef.current.push(checkStuckAnimation);
+    return () => {
+      window.clearInterval(checkStuckAnimation);
+    };
+  }, [characterAppearance]);
+
+  // Функция для проигрывания следующей анимации в очереди
+  const processNextAnimation = useCallback(() => {
+    // Обновляем время последней активности анимации
+    lastAnimationTimeRef.current = Date.now();
+    
+    // Если очередь пуста или уже идет обработка, выходим
+    if (animationQueueRef.current <= 0 || !isProcessingAnimationRef.current) {
+      isProcessingAnimationRef.current = false;
+      setIsAnimating(false);
+      return;
+    }
+
+    // Уменьшаем счетчик
+    animationQueueRef.current -= 1;
+    setAnimationQueueDisplay(animationQueueRef.current);
+    
+    // Показываем эффект получения ресурсов
+    const gainAmount = currentTool?.locationCoinsPower || 1;
+    setResourceGain({show: true, amount: gainAmount});
+    const resourceTimer = window.setTimeout(() => setResourceGain({show: false, amount: 0}), 800);
+    timersRef.current.push(resourceTimer);
+    
+    // Устанавливаем флаг анимации
+    setIsAnimating(true);
+    
+    // Определяем длительность анимации
+    const animationDuration = 800; // Фиксированная длительность для всех анимаций
+    
+    // Если у персонажа есть анимация, показываем её
+    if (characterAppearance.animationPath) {
+      // Используем сохраненное статичное изображение
+      const staticImage = staticImageRef.current || characterAppearance.imagePath;
+      
+      // Показываем анимацию
+      setCharacterAppearance(prev => ({
+        ...prev,
+        imagePath: characterAppearance.animationPath || staticImage
+      }));
+      
+      // Возвращаем обычное изображение после окончания анимации
+      const imageTimer = window.setTimeout(() => {
+        setCharacterAppearance(prev => ({
+          ...prev,
+          imagePath: staticImage
+        }));
+        
+        // Проверяем очередь и запускаем следующую анимацию или завершаем процесс
+        const nextTimer = window.setTimeout(() => {
+          if (animationQueueRef.current > 0) {
+            processNextAnimation();
+          } else {
+            isProcessingAnimationRef.current = false;
+            setIsAnimating(false);
+          }
+        }, 200);
+        timersRef.current.push(nextTimer);
+      }, animationDuration);
+      timersRef.current.push(imageTimer);
+    } else {
+      // Если нет специальной анимации, просто ждем и проверяем очередь
+      const waitTimer = window.setTimeout(() => {
+        if (animationQueueRef.current > 0) {
+          processNextAnimation();
+        } else {
+          isProcessingAnimationRef.current = false;
+          setIsAnimating(false);
+        }
+      }, animationDuration);
+      timersRef.current.push(waitTimer);
+    }
+  }, [characterAppearance, currentTool]);
+
   // Тап по персонажу
   const handleTap = useCallback(async () => {
     if (energy <= 0) {
@@ -633,38 +765,27 @@ const GameScreen: React.FC<GameScreenProps> = ({
       return;
     }
     
-    if (isAnimating) return; // Предотвращаем повторную анимацию
-    
-    setIsAnimating(true);
-    
-    // Если есть анимация, временно заменяем изображение на анимацию
-    const hasAnimation = characterAppearance.animationPath !== null && characterAppearance.animationType !== null;
-    
-    if (hasAnimation) {
-      const staticImage = characterAppearance.imagePath;
-      const animationDuration = characterAppearance.animationType === 'gif' ? 1000 : 500; // GIF дольше, спрайты быстрее
-      
-      setCharacterAppearance(prev => ({
-        ...prev,
-        imagePath: characterAppearance.animationPath || staticImage
-      }));
-      
-      // Возвращаем статичное изображение после завершения анимации
-      setTimeout(() => {
-        setCharacterAppearance(prev => ({
-          ...prev,
-          imagePath: staticImage
-        }));
-      }, animationDuration);
+    // Ограничиваем максимальное количество анимаций в очереди
+    if (animationQueueRef.current >= 10) {
+      // Если очередь слишком большая, просто добавляем ресурсы без добавления анимации
+      await onTap();
+      return;
     }
     
+    // Увеличиваем счетчик анимаций
+    animationQueueRef.current += 1;
+    setAnimationQueueDisplay(animationQueueRef.current);
+    
+    // Если процесс анимации не запущен, запускаем его
+    if (!isProcessingAnimationRef.current) {
+      isProcessingAnimationRef.current = true;
+      processNextAnimation();
+    }
+    
+    // Сразу вызываем onTap для начисления ресурсов
     await onTap();
     
-    // Останавливаем анимацию через небольшое время
-    setTimeout(() => {
-      setIsAnimating(false);
-    }, 200);
-  }, [energy, onTap, isAnimating, characterAppearance]);
+  }, [energy, onTap, processNextAnimation]);
 
   // Клавиатурные сокращения
   useEffect(() => {
@@ -690,7 +811,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
       <div className="flex-1 flex items-center justify-center relative">
         {/* Персонаж (кликабельный) - используем изображение вместо canvas */}
         <motion.div 
-          className={`cursor-pointer relative ${isAnimating ? 'animate-bounce-small' : ''}`}
+          className={`cursor-pointer relative`}
           animate={isAnimating ? { scale: 0.95 } : { scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleTap}
@@ -699,7 +820,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
             <img 
               src={characterAppearance.imagePath} 
               alt="Персонаж"
-              className="w-56 h-56 md:w-64 md:h-64"
+              className={`w-56 h-56 md:w-64 md:h-64 ${isAnimating ? 'animate-pulse' : ''}`}
               style={{ 
                 pointerEvents: energy <= 0 ? 'none' : 'auto',
                 objectFit: 'contain'
@@ -712,6 +833,23 @@ const GameScreen: React.FC<GameScreenProps> = ({
               style={{ pointerEvents: energy <= 0 ? 'none' : 'auto' }}
             >
               <span className="text-white text-xl">Персонаж не найден</span>
+            </div>
+          )}
+          
+          {/* Визуальный эффект при тапе */}
+          {isAnimating && (
+            <motion.div
+              className="absolute inset-0 rounded-full bg-white opacity-30"
+              initial={{ scale: 0.8, opacity: 0.5 }}
+              animate={{ scale: 1.2, opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            />
+          )}
+          
+          {/* Счетчик тапов в очереди */}
+          {animationQueueDisplay > 1 && (
+            <div className="absolute top-0 right-0 bg-yellow-500 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center text-sm">
+              {animationQueueDisplay}
             </div>
           )}
         </motion.div>
@@ -736,6 +874,19 @@ const GameScreen: React.FC<GameScreenProps> = ({
             exit={{ opacity: 0 }}
           >
             Нет энергии
+          </motion.div>
+        )}
+        
+        {/* Эффект получения ресурсов */}
+        {resourceGain.show && (
+          <motion.div
+            className="absolute text-xl font-bold text-yellow-300"
+            initial={{ opacity: 0, y: 0 }}
+            animate={{ opacity: 1, y: -50 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1 }}
+          >
+            +{resourceGain.amount} {currencyType}
           </motion.div>
         )}
       </div>
