@@ -817,7 +817,7 @@ app.get('/api/player/locations/:locationId/helpers', async (req, res) => {
     
     // Получаем активных помощников
     const activeHelpers = await db.all(`
-      SELECT helper_id, location_id FROM player_active_helpers WHERE user_id = ?
+      SELECT helper_id, location_id, activated_time FROM player_active_helpers WHERE user_id = ?
     `, [userId]);
     
     const activeHelperIds = activeHelpers.map(helper => helper.helper_id);
@@ -833,11 +833,15 @@ app.get('/api/player/locations/:locationId/helpers', async (req, res) => {
     
     // Добавляем флаги к помощникам
     const helpersWithInfo = locationHelpers.map(helper => {
+      // Находим запись активного помощника, если есть
+      const activeHelper = activeHelpers.find(ah => ah.helper_id === helper.id);
+      
       return {
         ...helper,
         is_unlocked: unlockedHelperIds.includes(helper.id),
         is_active: activeHelperIds.includes(helper.id),
-        can_activate: !hasActiveHelperInOtherLocation || activeLocationIds.includes(parseInt(locationId))
+        can_activate: !hasActiveHelperInOtherLocation || activeLocationIds.includes(parseInt(locationId)),
+        activated_time: activeHelper ? activeHelper.activated_time : null
       };
     });
     
@@ -961,10 +965,13 @@ app.post('/api/player/helpers/:helperId/toggle', async (req, res) => {
       }
       
       // Активируем помощника
+      const now = new Date();
+      console.log(`Активация помощника ${helperId}, время: ${now.toISOString()}`);
+      
       await db.run(`
         INSERT INTO player_active_helpers (user_id, helper_id, location_id, activated_time)
-        VALUES (?, ?, ?, datetime('now'))
-      `, [userId, helperId, helper.location_id]);
+        VALUES (?, ?, ?, ?)
+      `, [userId, helperId, helper.location_id, now.toISOString()]);
       
       return res.json({ success: true, active: true });
     }
@@ -1000,21 +1007,30 @@ app.post('/api/player/helpers/collect', async (req, res) => {
       // Расчет времени, прошедшего с момента активации
       const activationTime = new Date(helper.activated_time);
       const currentTime = new Date();
-      const hoursDiff = (currentTime - activationTime) / (1000 * 60 * 60);
+      const timeDiffMs = currentTime.getTime() - activationTime.getTime();
+      const hoursDiff = timeDiffMs / (1000 * 60 * 60);
       
-      // Количество собранных ресурсов (округленное до 2 знаков)
-      const collected = Math.round(helper.income_per_hour * hoursDiff * 100) / 100;
+      console.log(`Помощник ${helper.id}: активирован ${helper.activated_time}, прошло ${hoursDiff.toFixed(2)} часов`);
+      
+      // Количество собранных ресурсов (округленное до целого числа)
+      // Ограничиваем максимальное время накопления 4 часами
+      const cappedHoursDiff = Math.min(hoursDiff, 4);
+      const collected = Math.round(helper.income_per_hour * cappedHoursDiff);
+      console.log(`Помощник ${helper.id}: доход ${helper.income_per_hour} в час, собрано ${collected} за ${cappedHoursDiff.toFixed(2)} часов (реальное время: ${hoursDiff.toFixed(2)} часов)`);
       totalCollected += collected;
       
       locationId = helper.location_id;
       currencyType = helper.currency_type;
       
       // Обновляем время активации помощника на текущее
+      const newActivationTime = new Date().toISOString();
+      console.log(`Обновление времени активации помощника ${helper.id} на ${newActivationTime}`);
+      
       await db.run(`
         UPDATE player_active_helpers
-        SET activated_time = datetime('now')
+        SET activated_time = ?
         WHERE user_id = ? AND helper_id = ?
-      `, [userId, helper.id]);
+      `, [newActivationTime, userId, helper.id]);
     }
     
     // Если есть, что начислять, добавляем валюту игроку
@@ -1044,6 +1060,26 @@ app.post('/api/player/helpers/collect', async (req, res) => {
     res.json({ collected: totalCollected, locationId, currencyType });
   } catch (error) {
     console.error('Ошибка при сборе награды от помощников:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Получить активных помощников с временем активации
+app.get('/api/player/helpers/active', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем всех активных помощников пользователя с временем активации
+    const activeHelpers = await db.all(`
+      SELECT h.*, pah.activated_time, pah.location_id
+      FROM player_active_helpers pah
+      JOIN helpers h ON pah.helper_id = h.id
+      WHERE pah.user_id = ?
+    `, [userId]);
+    
+    res.json(activeHelpers);
+  } catch (error) {
+    console.error('Ошибка при получении активных помощников:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });

@@ -39,11 +39,16 @@ const UpgradeModal = ({
   const [loadingHelpers, setLoadingHelpers] = useState<boolean>(true);
   const [processingHelperId, setProcessingHelperId] = useState<number | null>(null);
   const [recentlyCollected, setRecentlyCollected] = useState<number | null>(null);
+  const [accumulatedResources, setAccumulatedResources] = useState<Record<number, number>>({});
   
   // Загрузка помощников при открытии вкладки
   useEffect(() => {
     if (show && activeTab === 'helpers') {
       loadHelpers();
+      
+      // Запускаем интервал для обновления накопленных ресурсов
+      const interval = setInterval(calculateAccumulatedResources, 5000); // Обновляем каждые 5 секунд
+      return () => clearInterval(interval);
     }
   }, [show, activeTab, locationId]);
 
@@ -66,13 +71,64 @@ const UpgradeModal = ({
     }
   };
   
+  // Функция расчета накопленных ресурсов
+  const calculateAccumulatedResources = () => {
+    const accumulated: Record<number, number> = {};
+    
+    helpers.forEach(helper => {
+      const isActive = helper.isActive || (helper as any).is_active;
+      if (isActive) {
+        const activatedTime = (helper as any).activated_time;
+        if (activatedTime) {
+          try {
+            const activationTime = new Date(activatedTime);
+            const currentTime = new Date();
+            const hoursDiff = (currentTime.getTime() - activationTime.getTime()) / (1000 * 60 * 60);
+            const helperIncome = helper.incomePerHour || (helper as any).income_per_hour || 0;
+            accumulated[helper.id] = Math.round(helperIncome * hoursDiff * 100) / 100;
+            console.log(`Помощник ${helper.id}: накоплено ${accumulated[helper.id]} (${hoursDiff.toFixed(2)} часов)`);
+          } catch (error) {
+            console.error('Ошибка при расчете накопленных ресурсов:', error);
+          }
+        } else {
+          console.log(`Помощник ${helper.id} активен, но нет времени активации`);
+        }
+      }
+    });
+    
+    setAccumulatedResources(accumulated);
+    console.log('Накопленные ресурсы:', accumulated);
+  };
+  
   // Функция загрузки помощников
   const loadHelpers = async () => {
     try {
       setLoadingHelpers(true);
       setErrorMessage(null);
+      
+      // Загружаем помощников для локации
       const loadedHelpers = await api.getHelpersByLocationId(locationId);
-      setHelpers(loadedHelpers);
+      
+      // Загружаем активных помощников с временем активации
+      const activeHelpers = await api.getActiveHelpers();
+      console.log('Активные помощники:', activeHelpers);
+      
+      // Объединяем данные
+      const mergedHelpers = loadedHelpers.map(helper => {
+        const activeHelper = activeHelpers.find(ah => ah.id === helper.id);
+        if (activeHelper) {
+          return {
+            ...helper,
+            activated_time: activeHelper.activated_time
+          };
+        }
+        return helper;
+      });
+      
+      setHelpers(mergedHelpers);
+      
+      // Рассчитываем накопленные ресурсы сразу после загрузки
+      setTimeout(calculateAccumulatedResources, 100);
     } catch (error) {
       console.error('Ошибка при загрузке помощников:', error);
       setErrorMessage('Не удалось загрузить помощников');
@@ -118,10 +174,18 @@ const UpgradeModal = ({
       const result = await api.collectHelpersReward();
       
       if (result.collected > 0) {
-        setRecentlyCollected(result.collected);
-        setTimeout(() => setRecentlyCollected(null), 3000);
+        // Округляем до целого числа для более наглядного отображения
+        const roundedCollected = Math.round(result.collected);
+        setRecentlyCollected(roundedCollected);
+        
+        // Анимация исчезновения через 2 секунды
+        setTimeout(() => setRecentlyCollected(null), 2000);
       }
       
+      // Сбрасываем накопленные ресурсы
+      setAccumulatedResources({});
+      
+      // Обновляем данные о помощниках
       await loadHelpers();
     } catch (error: any) {
       console.error('Ошибка при сборе награды:', error);
@@ -261,7 +325,7 @@ const UpgradeModal = ({
               <h3 className="text-white font-medium mb-4">Помощники</h3>
               
               {/* Кнопка сбора наград */}
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <button 
                   onClick={handleCollectReward}
                   className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded"
@@ -270,9 +334,15 @@ const UpgradeModal = ({
                 </button>
                 
                 {recentlyCollected !== null && (
-                  <div className="mt-2 text-center text-green-400">
-                    Собрано: {recentlyCollected.toFixed(2)} {locationCurrencyType}
-                  </div>
+                  <motion.div 
+                    className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full text-xl font-bold text-yellow-300"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: -30 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 1.5 }}
+                  >
+                    +{recentlyCollected.toFixed(0)} {locationCurrencyType}
+                  </motion.div>
                 )}
               </div>
               
@@ -309,8 +379,9 @@ const UpgradeModal = ({
                             <div className="flex justify-between">
                               <h4 className="text-white font-medium">{helper.name}</h4>
                               {isActive && (
-                                <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded">
-                                  Активен
+                                <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded flex items-center">
+                                  <span className="mr-1">Активен</span>
+                                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
                                 </span>
                               )}
                             </div>
@@ -318,7 +389,14 @@ const UpgradeModal = ({
                               {helper.description}
                             </div>
                             <div className="text-sm text-green-400">
-                              +{helperIncome} {helperCurrency} в час
+                              {isActive ? (
+                                <div className="flex items-center">
+                                  <span>+{helperIncome} {helperCurrency} в час</span>
+                                  <span className="ml-2 text-yellow-400 animate-pulse">⚡</span>
+                                </div>
+                              ) : (
+                                <span>+{helperIncome} {helperCurrency} в час</span>
+                              )}
                             </div>
                           </div>
                         </div>

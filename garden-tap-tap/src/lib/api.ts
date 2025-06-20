@@ -280,6 +280,11 @@ export const getHelpersByLocationId = async (locationId: number): Promise<Helper
   return await fetchApi<Helper[]>(`/player/locations/${locationId}/helpers`);
 };
 
+// Получить активных помощников с временем активации
+export const getActiveHelpers = async (): Promise<any[]> => {
+  return await fetchApi<any[]>(`/player/helpers/active`);
+};
+
 // Купить помощника
 export const buyHelper = async (helperId: number): Promise<{ success: boolean }> => {
   return await fetchApi<{ success: boolean }>(`/player/helpers/${helperId}/buy`, {
