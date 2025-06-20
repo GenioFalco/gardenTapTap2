@@ -1,6 +1,7 @@
 import { 
   Location, Character, Tool, Level, Reward, PlayerProgress, 
-  CurrencyType, RewardType, PlayerCurrency, Currency, CharacterAppearance, Helper 
+  CurrencyType, Currency, CharacterAppearance, Helper 
+  // RewardType, PlayerCurrency - не используются
 } from '../types';
 import CONFIG from '../config';
 

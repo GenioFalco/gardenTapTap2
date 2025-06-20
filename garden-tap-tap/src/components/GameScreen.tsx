@@ -39,9 +39,11 @@ const UpgradeModal = ({
   const [loadingHelpers, setLoadingHelpers] = useState<boolean>(true);
   const [processingHelperId, setProcessingHelperId] = useState<number | null>(null);
   const [recentlyCollected, setRecentlyCollected] = useState<number | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [accumulatedResources, setAccumulatedResources] = useState<Record<number, number>>({});
   
   // Загрузка помощников при открытии вкладки
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (show && activeTab === 'helpers') {
       loadHelpers();
@@ -611,7 +613,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
     loadCharacterAppearance();
   }, [location, equippedToolId, characterImageUrl]);
 
-  // Попытка улучшить инструмент
+  // Попытка улучшить инструмент (временно не используется)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleUpgrade = useCallback(async () => {
     if (!nextTool) return;
     
