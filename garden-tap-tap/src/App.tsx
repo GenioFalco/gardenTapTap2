@@ -756,6 +756,72 @@ function App() {
     equippedToolId = playerProgress.equippedTools[characterId] || 0;
   }
   
+  // Функция для получения названия валюты по её типу
+  const getCurrencyName = (currencyType: string): string => {
+    switch (currencyType.toLowerCase()) {
+      case 'forest':
+        return 'Дерево';
+      case 'garden':
+        return 'Овощи';
+      case 'winter':
+        return 'Снежинки';
+      case 'mountain':
+        return 'Камень';
+      case 'desert':
+        return 'Песок';
+      case 'lake':
+        return 'Вода';
+      case 'main':
+        return 'Сад-коины';
+      default:
+        return 'Ресурсы';
+    }
+  };
+  
+  // Функция для получения пути к изображению валюты по её типу
+  const getCurrencyImage = (currencyType: string): string => {
+    switch (currencyType.toLowerCase()) {
+      case 'main':
+        return '/assets/currencies/garden_coin.png';
+      case 'forest':
+        return '/assets/currencies/wood.png';
+      case 'garden':
+        return '/assets/currencies/vegetable.png';
+      case 'winter':
+        return '/assets/currencies/snowflake.png';
+      case 'mountain':
+        return '/assets/currencies/stone.png';
+      case 'desert':
+        return '/assets/currencies/sand.png';
+      case 'lake':
+        return '/assets/currencies/water.png';
+      default:
+        return '/assets/currencies/garden_coin.png'; // Используем монету по умолчанию
+    }
+  };
+  
+  // Функция для получения эмодзи для валюты
+  const getCurrencyEmoji = (currencyType: string): string => {
+    switch (currencyType.toLowerCase()) {
+      case 'main':
+        return '🪙';
+      case 'forest':
+        return '🪵';
+      case 'garden':
+        return '🥕';
+      case 'winter':
+        return '❄️';
+      case 'mountain':
+        return '🪨';
+      case 'desert':
+        return '🏜️';
+      case 'lake':
+        return '💧';
+      default:
+        return '💎';
+    }
+  };
+
   // Определяем тип валюты для текущей локации
   const locationCurrencyType = (currentLocation.currencyType || 
     (currentLocation.currency_type as CurrencyType) || 
@@ -811,7 +877,7 @@ function App() {
             <p className="text-sm text-white opacity-80">Выберите локацию для сбора ресурсов</p>
           </div>
           
-          <div className="grid grid-cols-1 gap-6 pb-24 max-h-[calc(100vh-220px)] overflow-y-auto relative z-10">
+          <div className="grid grid-cols-1 gap-4 pb-24 max-h-[calc(100vh-220px)] overflow-y-auto relative z-10">
             {locations.map((location) => {
               const isUnlocked = playerProgress.unlockedLocations.includes(location.id);
               const isActive = location.id === currentLocationId;
@@ -829,12 +895,12 @@ function App() {
               return (
                 <div 
                   key={location.id} 
-                  className={`location-card rounded-xl overflow-hidden bg-gradient-to-br ${gradientColors} 
+                  className={`location-card rounded-xl overflow-hidden bg-gray-800 bg-opacity-80 
                     ${!isUnlocked ? 'grayscale' : ''} 
                     ${isActive ? 'ring-2 ring-yellow-400' : ''} 
-                    transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg bg-opacity-90 shadow`}
+                    transition-all duration-300 shadow backdrop-blur-sm`}
                 >
-                  <div className="flex h-32 relative">
+                                      <div className="flex h-28 relative">
                     {/* Изображение локации */}
                     <div className="w-1/3 h-full overflow-hidden">
                       <img 
@@ -845,7 +911,7 @@ function App() {
                       
                       {/* Индикатор активной локации */}
                       {isActive && (
-                        <div className="absolute top-2 left-2 bg-yellow-500 text-xs px-2 py-1 rounded-full text-white font-medium flex items-center">
+                        <div className="absolute top-2 left-2 bg-green-600 text-xs px-2 py-1 rounded-full text-white font-medium flex items-center">
                           <span className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse"></span>
                           Активна
                         </div>
@@ -853,36 +919,66 @@ function App() {
                     </div>
                     
                     {/* Информация о локации */}
-                    <div className="w-2/3 p-4 flex flex-col justify-between">
-                      <div>
-                        <h3 className="text-lg font-bold text-white mb-1">{location.name}</h3>
-                        <p className="text-sm text-white opacity-75 line-clamp-2">{location.description || 'Нет описания'}</p>
+                                         <div className="w-2/3 p-4 flex flex-col justify-between">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-2xl font-bold text-white">{location.name}</h3>
                       </div>
                       
-                      <div className="flex items-center justify-between mt-2">
-                        {/* Информация о ресурсе */}
+                      <div className="flex items-center justify-between mt-3">
+                        {/* Информация о ресурсах локации */}
                         <div className="flex items-center">
-                          <div className="w-6 h-6 rounded-full bg-gray-200 mr-2 overflow-hidden flex items-center justify-center">
-                            <img 
-                              src={`/assets/currencies/${(location.currencyType || 'default').toLowerCase()}.png`} 
-                              alt={location.resourceName}
-                              className="w-5 h-5 object-contain"
-                              onError={(e) => {
-                                // Если изображение не загрузилось, заменяем на эмодзи
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = 'none';
-                                target.parentElement!.innerHTML = '💎';
-                              }}
-                            />
-                          </div>
-                          <span className="text-xs text-white">{location.resourceName}</span>
+                          {isUnlocked ? (
+                            <div className="flex items-center bg-yellow-500 px-2 py-1 rounded shadow-sm">
+                              <div className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center">
+                                <img 
+                                  src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
+                                  alt={location.resourceName || "Ресурс"}
+                                  className="w-4 h-4 object-contain"
+                                  onError={(e) => {
+                                    // Если изображение не загрузилось, заменяем на эмодзи
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    const currencyType = String(location.currencyType || '').toLowerCase();
+                                    target.parentElement!.innerHTML = getCurrencyEmoji(currencyType);
+                                  }}
+                                />
+                              </div>
+                              <span className="text-xs text-white mx-1 font-medium">
+                                {getCurrencyName(String(location.currencyType || '').toLowerCase())}:
+                              </span>
+                              <span className="text-sm font-bold text-white">
+                                {location.id === currentLocationId
+                                  ? resourceAmount.toFixed(0) 
+                                  : '0'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center opacity-60">
+                              <div className="w-5 h-5 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center">
+                                <img 
+                                  src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
+                                  alt={location.resourceName || "Ресурс"}
+                                  className="w-4 h-4 object-contain opacity-70"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    const currencyType = String(location.currencyType || '').toLowerCase();
+                                    target.parentElement!.innerHTML = getCurrencyEmoji(currencyType);
+                                  }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-400 ml-1">
+                                {getCurrencyName(String(location.currencyType || '').toLowerCase())}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         
                         {/* Кнопка выбора или информация о разблокировке */}
-                        {isUnlocked ? (
+                                                  {isUnlocked ? (
                           <button 
-                            className={`px-4 py-1.5 rounded bg-gradient-to-r from-yellow-500 to-yellow-600 text-white text-sm font-medium
-                              shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0`}
+                            className={`px-4 py-1.5 rounded bg-yellow-500 text-white text-sm font-medium
+                              hover:bg-yellow-600 transition-all duration-200`}
                             onClick={() => {
                               handleLocationChange(location.id);
                               setActiveTab("tap");
@@ -891,13 +987,12 @@ function App() {
                             {isActive ? 'Играть' : 'Выбрать'}
                           </button>
                         ) : (
-                          <div className="flex flex-col items-end">
-                            <span className="text-xs text-white opacity-80">Уровень {location.unlockLevel || 1}</span>
-                            <div className="flex items-center mt-1">
-                              <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <div className="bg-gray-700 bg-opacity-70 px-3 py-2 rounded">
+                            <div className="flex items-center">
+                              <svg className="w-5 h-5 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                               </svg>
-                              <span className="text-xs text-white">Заблокировано</span>
+                              <span className="text-white">Уровень {location.unlockLevel || 1}</span>
                             </div>
                           </div>
                         )}
