@@ -33,7 +33,7 @@ const UpgradeModal = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'tools' | 'helpers'>('tools');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
+
   // Состояния для работы с помощниками
   const [helpers, setHelpers] = useState<Helper[]>([]);
   const [loadingHelpers, setLoadingHelpers] = useState<boolean>(true);
@@ -369,15 +369,15 @@ const UpgradeModal = ({
                         key={helper.id} 
                         className={`mb-4 p-3 rounded-lg ${isActive ? 'bg-gray-700' : 'bg-gray-900'}`}
                       >
-                        <div className="flex items-center">
+                <div className="flex items-center">
                           <img 
                             src={helper.imagePath || '/assets/helpers/apprentice.png'} 
                             alt={helper.name} 
                             className="w-12 h-12 mr-3 rounded-full"
                           />
-                          <div className="flex-1">
+                  <div className="flex-1">
                             <div className="flex justify-between">
-                              <h4 className="text-white font-medium">{helper.name}</h4>
+                    <h4 className="text-white font-medium">{helper.name}</h4>
                               {isActive && (
                                 <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded flex items-center">
                                   <span className="mr-1">Активен</span>
@@ -385,7 +385,7 @@ const UpgradeModal = ({
                                 </span>
                               )}
                             </div>
-                            <div className="text-sm text-gray-400">
+                    <div className="text-sm text-gray-400 text-left">
                               {helper.description}
                             </div>
                             <div className="text-sm text-green-400">
@@ -397,17 +397,17 @@ const UpgradeModal = ({
                               ) : (
                                 <span>+{helperIncome} {helperCurrency} в час</span>
                               )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="mt-3">
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-3">
                           {!isUnlockable ? (
-                            <div className="text-sm text-gray-400 text-center border border-gray-700 py-2 rounded">
+                    <div className="text-sm text-gray-400 text-center border border-gray-700 py-2 rounded">
                               Доступен с уровня {helperUnlockLevel}
-                            </div>
+                    </div>
                           ) : isUnlocked ? (
-                            <button 
+                    <button 
                               className={`w-full ${
                                 isActive 
                                   ? 'bg-red-600 hover:bg-red-700' 
@@ -421,8 +421,8 @@ const UpgradeModal = ({
                               disabled={processingHelperId === helper.id || (!canActivate && !isActive)}
                             >
                               {isActive ? 'Деактивировать' : 'Активировать'}
-                            </button>
-                          ) : (
+                    </button>
+                  ) : (
                             <div>
                               <div className="flex justify-between items-center mb-1 text-xs">
                                 {notEnoughResources && 
@@ -443,9 +443,9 @@ const UpgradeModal = ({
                                 <span className="font-bold">{locationCurrency.toFixed(2)}/{helperCost}</span> {helperCurrency}
                               </button>
                             </div>
-                          )}
-                        </div>
-                      </div>
+                  )}
+                </div>
+              </div>
                     );
                   })}
                 </div>
@@ -511,7 +511,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
   const [showNoEnergy, setShowNoEnergy] = useState(false);
   const [showNotEnoughResources, setShowNotEnoughResources] = useState(false);
   const [currencyInfo, setCurrencyInfo] = useState<Currency | null>(null);
-  
+
   // Найти текущий и следующий доступный инструмент
   const currentTool = tools.find(tool => tool.id === equippedToolId);
   const nextToolIndex = tools.findIndex(tool => tool.id === equippedToolId) + 1;

@@ -173,7 +173,7 @@ const HelperModal: React.FC<HelperModalProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="text-sm text-gray-400">
+                        <div className="text-sm text-gray-400 text-left">
                           {helper.description}
                         </div>
                         <div className="text-sm text-green-400">
