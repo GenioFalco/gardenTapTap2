@@ -804,48 +804,118 @@ function App() {
         <div className="h-screen w-full pt-36 mt-1 px-4 overflow-hidden relative">
           <div className="absolute inset-0 z-0" 
                style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
-          <div className="grid grid-cols-1 gap-4 pb-20 max-h-[calc(100vh-180px)] overflow-y-auto relative z-10">
+          
+          {/* Заголовок раздела */}
+          <div className="text-center mb-6 relative z-10">
+            <h2 className="text-2xl font-bold text-white drop-shadow-lg">Доступные локации</h2>
+            <p className="text-sm text-white opacity-80">Выберите локацию для сбора ресурсов</p>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6 pb-24 max-h-[calc(100vh-220px)] overflow-y-auto relative z-10">
             {locations.map((location) => {
               const isUnlocked = playerProgress.unlockedLocations.includes(location.id);
               const isActive = location.id === currentLocationId;
               
+              // Определяем цвет градиента в зависимости от типа локации
+              let gradientColors = "from-blue-700 to-blue-900";
+              const currencyType = String(location.currencyType || '').toUpperCase();
+              if (currencyType === "FOREST") gradientColors = "from-green-700 to-green-900";
+              if (currencyType === "GARDEN") gradientColors = "from-emerald-700 to-emerald-900";
+              if (currencyType === "DESERT") gradientColors = "from-amber-700 to-amber-900";
+              if (currencyType === "WINTER") gradientColors = "from-cyan-700 to-cyan-900";
+              if (currencyType === "MOUNTAIN") gradientColors = "from-stone-700 to-stone-900";
+              if (currencyType === "LAKE") gradientColors = "from-blue-700 to-blue-900";
+              
               return (
                 <div 
                   key={location.id} 
-                  className={`location-card p-4 rounded-lg ${
-                    isActive ? 'bg-blue-700' : 'bg-gray-700'
-                  } ${!isUnlocked ? 'opacity-50 grayscale' : ''} relative overflow-hidden bg-opacity-80`}
+                  className={`location-card rounded-xl overflow-hidden bg-gradient-to-br ${gradientColors} 
+                    ${!isUnlocked ? 'grayscale' : ''} 
+                    ${isActive ? 'ring-2 ring-yellow-400' : ''} 
+                    transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg bg-opacity-90 shadow`}
                 >
-                  {!isUnlocked && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 rounded-lg">
-                      <span className="text-sm font-medium">{`Доступно с уровня ${location.unlockLevel}`}</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center">
-                    <div className="w-16 h-16 rounded-full bg-gray-600 mr-4 overflow-hidden">
+                  <div className="flex h-32 relative">
+                    {/* Изображение локации */}
+                    <div className="w-1/3 h-full overflow-hidden">
                       <img 
                         src={location.background} 
                         alt={location.name}
                         className="w-full h-full object-cover"
                       />
+                      
+                      {/* Индикатор активной локации */}
+                      {isActive && (
+                        <div className="absolute top-2 left-2 bg-yellow-500 text-xs px-2 py-1 rounded-full text-white font-medium flex items-center">
+                          <span className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse"></span>
+                          Активна
+                        </div>
+                      )}
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-white">{location.name}</h3>
-                      <p className="text-sm text-white opacity-75">{location.description}</p>
+                    
+                    {/* Информация о локации */}
+                    <div className="w-2/3 p-4 flex flex-col justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold text-white mb-1">{location.name}</h3>
+                        <p className="text-sm text-white opacity-75 line-clamp-2">{location.description || 'Нет описания'}</p>
+                      </div>
+                      
+                      <div className="flex items-center justify-between mt-2">
+                        {/* Информация о ресурсе */}
+                        <div className="flex items-center">
+                          <div className="w-6 h-6 rounded-full bg-gray-200 mr-2 overflow-hidden flex items-center justify-center">
+                            <img 
+                              src={`/assets/currencies/${(location.currencyType || 'default').toLowerCase()}.png`} 
+                              alt={location.resourceName}
+                              className="w-5 h-5 object-contain"
+                              onError={(e) => {
+                                // Если изображение не загрузилось, заменяем на эмодзи
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.parentElement!.innerHTML = '💎';
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs text-white">{location.resourceName}</span>
+                        </div>
+                        
+                        {/* Кнопка выбора или информация о разблокировке */}
+                        {isUnlocked ? (
+                          <button 
+                            className={`px-4 py-1.5 rounded bg-gradient-to-r from-yellow-500 to-yellow-600 text-white text-sm font-medium
+                              shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0`}
+                            onClick={() => {
+                              handleLocationChange(location.id);
+                              setActiveTab("tap");
+                            }}
+                          >
+                            {isActive ? 'Играть' : 'Выбрать'}
+                          </button>
+                        ) : (
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-white opacity-80">Уровень {location.unlockLevel || 1}</span>
+                            <div className="flex items-center mt-1">
+                              <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-xs text-white">Заблокировано</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {isUnlocked && (
-                      <button 
-                        className={`ml-4 px-4 py-2 rounded bg-yellow-500 text-white transform transition-transform hover:scale-105 active:scale-95`}
-                        onClick={() => {
-                          handleLocationChange(location.id);
-                          setActiveTab("tap");
-                        }}
-                      >
-                        {isActive ? 'Активна' : 'Выбрать'}
-                      </button>
-                    )}
                   </div>
+                  
+                  {/* Полоса прогресса для заблокированных локаций */}
+                  {!isUnlocked && (
+                    <div className="h-1.5 bg-gray-700 w-full">
+                      <div 
+                        className="h-full bg-yellow-500" 
+                        style={{ 
+                          width: `${Math.min(100, (playerProgress.level / (location.unlockLevel || 1)) * 100)}%` 
+                        }}
+                      ></div>
+                    </div>
+                  )}
                 </div>
               );
             })}
