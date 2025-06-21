@@ -696,7 +696,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
       setIsAnimating(false);
       return;
     }
-
+    
     // Уменьшаем счетчик
     animationQueueRef.current -= 1;
     setAnimationQueueDisplay(animationQueueRef.current);

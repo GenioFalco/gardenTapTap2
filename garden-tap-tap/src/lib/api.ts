@@ -3,10 +3,10 @@ import {
   CurrencyType, Currency, CharacterAppearance, Helper 
   // RewardType, PlayerCurrency - не используются
 } from '../types';
-import CONFIG from '../config';
+import { config } from '../config';
 
 // Базовый URL для API
-const API_BASE_URL = CONFIG.API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = `${config.apiUrl}/api`;
 
 // Функция для выполнения fetch-запросов
 const fetchApi = async <T>(

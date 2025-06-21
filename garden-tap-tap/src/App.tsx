@@ -914,8 +914,8 @@ function App() {
                         <div className="absolute top-2 left-2 bg-green-600 text-xs px-2 py-1 rounded-full text-white font-medium flex items-center">
                           <span className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse"></span>
                           Активна
-                        </div>
-                      )}
+                    </div>
+                  )}
                     </div>
                     
                     {/* Информация о локации */}
@@ -926,11 +926,11 @@ function App() {
                       
                       <div className="flex items-center justify-between mt-3">
                         {/* Информация о ресурсах локации */}
-                        <div className="flex items-center">
+                  <div className="flex items-center">
                           {isUnlocked ? (
                             <div className="flex items-center bg-yellow-500 px-2 py-1 rounded shadow-sm">
                               <div className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center">
-                                <img 
+                      <img 
                                   src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
                                   alt={location.resourceName || "Ресурс"}
                                   className="w-4 h-4 object-contain"
@@ -941,8 +941,8 @@ function App() {
                                     const currencyType = String(location.currencyType || '').toLowerCase();
                                     target.parentElement!.innerHTML = getCurrencyEmoji(currencyType);
                                   }}
-                                />
-                              </div>
+                      />
+                    </div>
                               <span className="text-xs text-white mx-1 font-medium">
                                 {getCurrencyName(String(location.currencyType || '').toLowerCase())}:
                               </span>
@@ -951,7 +951,7 @@ function App() {
                                   ? resourceAmount.toFixed(0) 
                                   : '0'}
                               </span>
-                            </div>
+                    </div>
                           ) : (
                             <div className="flex items-center opacity-60">
                               <div className="w-5 h-5 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center">
@@ -976,16 +976,16 @@ function App() {
                         
                         {/* Кнопка выбора или информация о разблокировке */}
                                                   {isUnlocked ? (
-                          <button 
+                      <button 
                             className={`px-4 py-1.5 rounded bg-yellow-500 text-white text-sm font-medium
                               hover:bg-yellow-600 transition-all duration-200`}
-                            onClick={() => {
-                              handleLocationChange(location.id);
-                              setActiveTab("tap");
-                            }}
-                          >
+                        onClick={() => {
+                          handleLocationChange(location.id);
+                          setActiveTab("tap");
+                        }}
+                      >
                             {isActive ? 'Играть' : 'Выбрать'}
-                          </button>
+                      </button>
                         ) : (
                           <div className="bg-gray-700 bg-opacity-70 px-3 py-2 rounded">
                             <div className="flex items-center">
@@ -995,8 +995,8 @@ function App() {
                               <span className="text-white">Уровень {location.unlockLevel || 1}</span>
                             </div>
                           </div>
-                        )}
-                      </div>
+                    )}
+                  </div>
                     </div>
                   </div>
                   
