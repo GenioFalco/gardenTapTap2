@@ -2,7 +2,7 @@
   "name": "garden-tap-tap",
   "version": "0.1.0",
   "private": true,
-  "homepage": ".",
+  "homepage": "https://geniofalco.github.io/gardenTapTap2",
   "dependencies": {
     "@craco/craco": "^7.1.0",
     "@testing-library/dom": "^10.4.0",
@@ -27,7 +27,9 @@
     "test": "craco test",
     "eject": "react-scripts eject",
     "server": "cd server && npm run dev",
-    "dev": "concurrently \"npm run start\" \"npm run server\""
+    "dev": "concurrently \"npm run start\" \"npm run server\"",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -49,6 +51,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
+    "gh-pages": "^6.3.0",
     "nodemon": "^3.1.10"
   }
 }
