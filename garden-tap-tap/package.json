@@ -2,7 +2,7 @@
   "name": "garden-tap-tap",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://geniofalco.github.io/gardenTapTap2",
+  "homepage": ".",
   "dependencies": {
     "@craco/craco": "^7.1.0",
     "@testing-library/dom": "^10.4.0",
@@ -23,7 +23,7 @@
   },
   "scripts": {
     "start": "craco start",
-    "build": "craco build",
+    "build": "GENERATE_SOURCEMAP=false craco build",
     "test": "craco test",
     "eject": "react-scripts eject",
     "server": "cd server && npm run dev",

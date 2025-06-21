@@ -31,23 +31,37 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 16
+          cache: 'npm'
+          cache-dependency-path: garden-tap-tap/package-lock.json
           
       - name: Install dependencies
         run: |
           cd garden-tap-tap
-          npm ci
+          npm ci --legacy-peer-deps
+        
+      - name: List files in directory
+        run: |
+          ls -la garden-tap-tap
+          echo "Current directory structure:"
+          find garden-tap-tap -type f -name "*.json" | sort
           
       - name: Build
         run: |
           cd garden-tap-tap
-          npm run build
+          CI=false npm run build
           touch build/.nojekyll
         env:
-          REACT_APP_API_URL: ${{ secrets.API_URL || 'https://geniofalco.github.io/gardenTapTap2' }}
+          REACT_APP_API_URL: 'https://geniofalco.github.io/gardenTapTap2'
+          
+      - name: List build output
+        run: |
+          ls -la garden-tap-tap/build
+          echo "Build directory content:"
+          find garden-tap-tap/build -type f | sort | head -20
           
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v4
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
