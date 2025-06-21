@@ -29,6 +29,7 @@ jobs:
         run: |
           cd garden-tap-tap
           npm run build
+          touch build/.nojekyll
         env:
           REACT_APP_API_URL: ${{ secrets.API_URL || 'https://your-deployed-api-url.com' }}
 
