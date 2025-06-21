@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "name": "Сад",
+    "base_resource_yield": 1,
+    "unlock_level": 1,
+    "character_id": 1,
+    "is_unlocked": true
+  },
+  {
+    "id": 2,
+    "name": "Огород",
+    "base_resource_yield": 2,
+    "unlock_level": 3,
+    "character_id": 1,
+    "is_unlocked": true
+  },
+  {
+    "id": 3,
+    "name": "Теплица",
+    "base_resource_yield": 3,
+    "unlock_level": 6,
+    "character_id": 2,
+    "is_unlocked": false
+  }
+] 
