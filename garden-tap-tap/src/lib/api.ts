@@ -8,6 +8,16 @@ import { config } from '../config';
 // Базовый URL для API
 const API_BASE_URL = `${config.apiUrl}/api`;
 
+// Функция для получения идентификатора пользователя из Telegram WebApp
+const getUserId = (): string => {
+  if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe?.user?.id) {
+    // Получаем ID пользователя из Telegram WebApp
+    return window.Telegram.WebApp.initDataUnsafe.user.id.toString();
+  }
+  // Для разработки и тестирования
+  return 'test_user';
+};
+
 // Функция для выполнения fetch-запросов
 const fetchApi = async <T>(
   endpoint: string, 
@@ -15,11 +25,13 @@ const fetchApi = async <T>(
 ): Promise<T> => {
   const url = `${API_BASE_URL}${endpoint}`;
   
+  // Получаем ID пользователя Telegram для аутентификации
+  const userId = getUserId();
+  
   // Добавляем заголовки для идентификации пользователя
-  // В реальном приложении здесь будет токен авторизации
   const headers = {
     'Content-Type': 'application/json',
-    'x-user-id': 'test_user',
+    'x-user-id': userId,
     ...options.headers
   };
   

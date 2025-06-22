@@ -14,11 +14,65 @@ app.use(express.static('../public')); // Статические файлы
 
 // Middleware для извлечения user_id
 app.use((req, res, next) => {
-  // Извлекаем user_id из заголовка или используем тестовый id
-  const userId = req.headers['x-user-id'] || 'test_user';
-  req.userId = userId;
+  // Извлекаем user_id из заголовка
+  const userId = req.headers['x-user-id'];
+  
+  if (!userId) {
+    // Если ID не найден в заголовке, используем тестовый ID
+    req.userId = 'test_user';
+    console.log('Using test user ID');
+  } else {
+    // Преобразуем числовые ID (Telegram user IDs) в строки для совместимости с БД
+    req.userId = userId.toString();
+    
+    // Проверим, это числовой ID из Telegram или строка для тестирования
+    const isNumericId = /^\d+$/.test(userId);
+    
+    console.log(`Request from user: ${req.userId}, ID type: ${isNumericId ? 'Telegram numeric ID' : 'String ID'}`);
+  }
+  
+  // Проверяем, существует ли запись пользователя, и создаем, если нет
+  ensureUserExists(req.userId).catch(err => {
+    console.error(`Error ensuring user exists: ${err.message}`);
+  });
+  
   next();
 });
+
+// Функция для проверки существования пользователя и создания при необходимости
+async function ensureUserExists(userId) {
+  try {
+    // Проверяем, существует ли пользователь в БД
+    const user = await db.get('SELECT user_id FROM player_progress WHERE user_id = ?', [userId]);
+    
+    if (!user) {
+      console.log(`Creating new user: ${userId}`);
+      
+      // Создаем прогресс для нового пользователя с начальными значениями
+      await db.run(`
+        INSERT INTO player_progress (
+          user_id, level, experience, energy, max_energy, last_energy_refill_time
+        ) VALUES (?, 1, 0, 10, 10, datetime('now'))
+      `, [userId]);
+      
+      // Добавляем начальные инструменты
+      await db.run(`
+        INSERT INTO player_tools (user_id, tool_id) VALUES (?, 1)
+      `, [userId]);
+      
+      // Добавляем начальные ресурсы
+      await db.run(`
+        INSERT INTO player_currencies (user_id, currency_id, amount) 
+        VALUES (?, 'main', 0), (?, 'forest', 0)
+      `, [userId, userId]);
+      
+      console.log(`User ${userId} initialized with starting values`);
+    }
+  } catch (error) {
+    console.error(`Error in ensureUserExists: ${error.message}`);
+    throw error;
+  }
+}
 
 // API endpoints
 

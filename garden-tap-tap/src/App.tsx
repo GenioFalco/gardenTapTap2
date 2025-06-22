@@ -5,6 +5,7 @@ import LocationSelector from './components/LocationSelector';
 import TopPanel from './components/TopPanel';
 import LevelUpModal from './components/LevelUpModal';
 import * as api from './lib/api';
+import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
 
 // Определение типа для совместимости с LevelUpModal
@@ -221,34 +222,55 @@ function App() {
   // Инициализация Telegram WebApp SDK
   useEffect(() => {
     // Проверяем, находимся ли мы в Telegram WebApp
-    if (window.Telegram && window.Telegram.WebApp) {
+    if (config.isTelegramWebApp && window.Telegram && window.Telegram.WebApp) {
       const tg = window.Telegram.WebApp;
       
-      // Инициализируем WebApp
-      tg.expand(); // Разворачиваем на весь экран
-      tg.enableClosingConfirmation(); // Просим подтвердить закрытие
+      // Инициализируем WebApp согласно конфигурации
+      if (config.telegram.expand) {
+        tg.expand(); // Разворачиваем на весь экран
+      }
       
-      // Устанавливаем цвет темы (опционально)
-      tg.setHeaderColor('#000000');
-      tg.setBackgroundColor('#1e1e1e');
+      if (config.telegram.enableClosingConfirmation) {
+        tg.enableClosingConfirmation(); // Просим подтвердить закрытие
+      }
+      
+      // Устанавливаем цвет темы
+      tg.setHeaderColor(config.telegram.headerColor);
+      tg.setBackgroundColor(config.telegram.backgroundColor);
       
       // Получаем данные пользователя
       const user = tg.initDataUnsafe?.user;
       if (user) {
-        setUserName(user.username || `${user.first_name} ${user.last_name || ''}`);
+        // Формируем имя пользователя из доступных данных
+        const displayName = user.username || 
+                           (user.first_name && user.last_name 
+                             ? `${user.first_name} ${user.last_name}` 
+                             : user.first_name || 'Unknown User');
+        
+        setUserName(displayName);
+        
         if (user.photo_url) {
           setUserAvatar(user.photo_url);
         }
+        
+        console.log(`Telegram user: ${displayName} (ID: ${user.id})`);
       } else {
         // Если не удалось получить данные из Telegram, генерируем случайное имя
         setUserName(generateRandomUserName());
+        console.log('Using generated username (no Telegram user data available)');
       }
+      
+      // Настроим тему на основе colorScheme Telegram
+      document.documentElement.setAttribute('data-theme', config.theme);
       
       // Активируем приложение
       tg.ready();
+      console.log('Telegram WebApp initialized');
     } else {
       // Для разработки вне Telegram
       setUserName(generateRandomUserName());
+      document.documentElement.setAttribute('data-theme', config.theme);
+      console.log('Running outside Telegram WebApp');
     }
   }, []);
   
@@ -388,14 +410,77 @@ function App() {
     return () => clearTimeout(initialRefillTimer);
   }, [playerProgress, updateEnergy]);
   
-  // Функция закрытия модального окна
+  // Функция закрытия модального окна с возможностью поделиться достижением
   const handleCloseLevelUpModal = () => {
     setShowLevelUpModal(false);
+    
+    // Предлагаем поделиться достижением в Telegram, если доступно
+    if (window.Telegram && window.Telegram.WebApp) {
+      const currentLevelForShare = currentLevel; // Сохраняем текущее значение уровня
+      
+      // Создаем кнопку "Поделиться" в Telegram
+      if (window.Telegram.WebApp.MainButton) {
+        window.Telegram.WebApp.MainButton.setText('Поделиться достижением');
+        window.Telegram.WebApp.MainButton.onClick(() => {
+          shareAchievement(currentLevelForShare);
+          window.Telegram.WebApp.MainButton.hide(); // Скрываем после нажатия
+        });
+        window.Telegram.WebApp.MainButton.show();
+        
+        // Автоматически скрываем кнопку через 5 секунд
+        setTimeout(() => {
+          if (window.Telegram.WebApp.MainButton.isVisible) {
+            window.Telegram.WebApp.MainButton.hide();
+          }
+        }, 5000);
+      }
+    }
+  };
+  
+  // Функция для шеринга достижений в Telegram
+  const shareAchievement = (level: number) => {
+    if (window.Telegram && window.Telegram.WebApp) {
+      try {
+        // Пример текста сообщения о достижении
+        const message = `🎮 Я достиг ${level} уровня в Garden Tap Tap! 🌱`;
+        
+        // Используем Telegram WebApp для открытия диалога шеринга
+        window.Telegram.WebApp.switchInlineQuery(message, ['users', 'groups', 'channels']);
+      } catch (error) {
+        console.error('Ошибка при попытке поделиться:', error);
+        showTelegramAlert('Не удалось поделиться достижением');
+      }
+    }
+  };
+  
+  // Функция для показа всплывающих уведомлений через Telegram
+  const showTelegramAlert = (message: string) => {
+    if (window.Telegram && window.Telegram.WebApp) {
+      try {
+        window.Telegram.WebApp.showPopup({
+          title: 'Garden Tap Tap',
+          message,
+          buttons: [{ type: 'ok' }]
+        });
+      } catch (error) {
+        console.error('Ошибка при показе уведомления:', error);
+        // Фолбек для устаревших версий Telegram
+        alert(message);
+      }
+    } else {
+      // Фолбек для разработки и тестирования
+      alert(message);
+    }
   };
 
-  // Обработка тапа (основная механика)
+  // Обработка тапа с вибрацией для Telegram
   const handleTap = async () => {
     if (!currentLocation || !playerProgress) return;
+    
+    // Вибрация при тапе, если доступна в Telegram
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
     
     try {
       // Получаем правильный идентификатор валюты
@@ -561,6 +646,11 @@ function App() {
         // Показываем модальное окно
         setShowLevelUpModal(true);
         
+        // Добавляем вибрацию при повышении уровня, если доступна в Telegram
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+        }
+        
         // Могут быть разблокированы новые инструменты или локации
         const allLocations = await api.getLocations();
         const locationsWithPlaceholders = allLocations.map((location: Location) => ({
@@ -577,56 +667,81 @@ function App() {
     }
   };
   
-  // Улучшение инструмента
+  // Показываем MainButton при покупке инструмента
   const handleUpgrade = async (toolId: number): Promise<boolean> => {
+    if (!currentLocation) {
+      return false;
+    }
+    
     try {
-      // Вызываем функцию улучшения
+      // Показываем кнопку в Telegram, если доступна
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.MainButton) {
+        window.Telegram.WebApp.MainButton.setText('Покупаем...');
+        window.Telegram.WebApp.MainButton.show();
+      }
+      
+      // Вызываем API для апгрейда инструмента
       const success = await api.upgradeTool(toolId);
       
       if (success) {
-        // Обновляем количество ресурсов
-        const currencyIdentifier = currentLocation?.currencyType || currentLocation?.currencyId || 
-                                  currentLocation?.currency_type || currentLocation?.currency_id;
-        if (currencyIdentifier) {
-          const newResourceAmount = await api.getResourceAmount(currencyIdentifier);
-          setResourceAmount(newResourceAmount);
+        console.log(`Инструмент ${toolId} успешно прокачан`);
+        
+        // Вибрация при успешной покупке
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
         }
         
-        // Обновляем прогресс (который содержит equippedTools и unlockedTools)
-        const progress = await api.getPlayerProgress();
-        setPlayerProgress(progress);
+        // Обновляем локальное состояние
+        const updatedTools = await api.getUnlockedToolsByCharacterId(1);
+        setTools(updatedTools);
         
-        // Обновляем список инструментов для текущей локации
-        if (currentLocation?.characterId) {
-          // Получаем обновленный список инструментов
-          const locationTools = await api.getToolsByCharacterId(currentLocation.characterId);
-          const toolsWithImages = locationTools.map((tool: Tool) => {
-            const imagePath = tool.imagePath || getToolImagePath(tool.name);
-            
-            // Обеспечиваем совместимость полей в разных форматах
-            return { 
-              ...tool, 
-              imagePath,
-              // Если поля в camelCase отсутствуют, но есть в snake_case, копируем их
-              mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
-              locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
-              // Убедимся, что обязательные поля всегда определены
-              main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
-              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
-            };
-          });
-          
-          setTools(toolsWithImages as Tool[]);
+        // Обновляем ресурсы
+        const updatedMainCurrency = await api.getResourceAmount(CurrencyType.MAIN);
+        setGardenCoins(updatedMainCurrency);
+        
+        // Обновляем ресурсы текущей локации с проверкой на undefined
+        const currencyId = currentLocation.currencyId?.toLowerCase() || currentLocation.currencyType?.toLowerCase() || 'forest';
+        const updatedLocationCurrency = await api.getResourceAmount(currencyId as CurrencyType);
+        setResourceAmount(updatedLocationCurrency);
+        
+        // Обновляем прогресс игрока
+        const updatedProgress = await api.getPlayerProgress();
+        setPlayerProgress(updatedProgress);
+        
+        // Скрываем кнопку в Telegram, если доступна
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.MainButton) {
+          window.Telegram.WebApp.MainButton.hide();
         }
         
-        // Обновляем сад-коины
-        const coins = await api.getResourceAmount(CurrencyType.MAIN);
-        setGardenCoins(coins);
+        return true;
+      } else {
+        console.warn(`Не удалось прокачать инструмент ${toolId}`);
+        
+        // Вибрация при ошибке
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
+        }
+        
+        // Скрываем кнопку в Telegram, если доступна
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.MainButton) {
+          window.Telegram.WebApp.MainButton.hide();
+        }
+        
+        return false;
+      }
+    } catch (error) {
+      console.error('Ошибка при прокачке инструмента:', error);
+      
+      // Вибрация при ошибке
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
       }
       
-      return success;
-    } catch (error) {
-      console.error('Ошибка при улучшении инструмента:', error);
+      // Скрываем кнопку в Telegram, если доступна
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.MainButton) {
+        window.Telegram.WebApp.MainButton.hide();
+      }
+      
       return false;
     }
   };
@@ -1077,6 +1192,36 @@ declare global {
         enableClosingConfirmation: () => void;
         setHeaderColor: (color: string) => void;
         setBackgroundColor: (color: string) => void;
+        colorScheme?: 'light' | 'dark';
+        switchInlineQuery: (query: string, types: string[]) => void;
+        showPopup: (params: {
+          title?: string;
+          message: string;
+          buttons?: Array<{
+            type: 'ok' | 'close' | 'cancel' | 'destructive';
+            text?: string;
+            id?: string;
+          }>;
+        }) => Promise<{id: string, button_id?: string}>;
+        MainButton: {
+          text: string;
+          color: string;
+          textColor: string;
+          isVisible: boolean;
+          isActive: boolean;
+          setText: (text: string) => void;
+          show: () => void;
+          hide: () => void;
+          enable: () => void;
+          disable: () => void;
+          onClick: (callback: () => void) => void;
+          offClick: (callback: () => void) => void;
+        };
+        HapticFeedback: {
+          impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
+          notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
+          selectionChanged: () => void;
+        };
         initDataUnsafe?: {
           user?: {
             id: number;
