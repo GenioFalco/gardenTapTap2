@@ -227,11 +227,11 @@ function App() {
       
       // Инициализируем WebApp согласно конфигурации
       if (config.telegram.expand) {
-        tg.expand(); // Разворачиваем на весь экран
+      tg.expand(); // Разворачиваем на весь экран
       }
       
       if (config.telegram.enableClosingConfirmation) {
-        tg.enableClosingConfirmation(); // Просим подтвердить закрытие
+      tg.enableClosingConfirmation(); // Просим подтвердить закрытие
       }
       
       // Устанавливаем цвет темы
@@ -725,8 +725,8 @@ function App() {
         // Скрываем кнопку в Telegram, если доступна
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.MainButton) {
           window.Telegram.WebApp.MainButton.hide();
-        }
-        
+      }
+      
         return false;
       }
     } catch (error) {
@@ -936,7 +936,7 @@ function App() {
         return '💎';
     }
   };
-
+  
   // Определяем тип валюты для текущей локации
   const locationCurrencyType = (currentLocation.currencyType || 
     (currentLocation.currency_type as CurrencyType) || 
@@ -982,7 +982,7 @@ function App() {
       
       {/* Экран локаций */}
       {activeTab === "locations" && (
-        <div className="h-screen w-full pt-36 mt-1 px-4 overflow-hidden relative">
+        <div className="h-screen w-full pt-36 mt-1 px-4 overflow-hidden relative pb-24">
           <div className="absolute inset-0 z-0" 
                style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
           
@@ -992,7 +992,7 @@ function App() {
             <p className="text-sm text-white opacity-80">Выберите локацию для сбора ресурсов</p>
           </div>
           
-          <div className="grid grid-cols-1 gap-4 pb-24 max-h-[calc(100vh-220px)] overflow-y-auto relative z-10">
+          <div className="grid grid-cols-1 gap-4 max-h-[calc(100vh-220px)] overflow-y-auto relative z-10">
             {locations.map((location) => {
               const isUnlocked = playerProgress.unlockedLocations.includes(location.id);
               const isActive = location.id === currentLocationId;
@@ -1041,11 +1041,11 @@ function App() {
                       
                       <div className="flex items-center justify-between mt-3">
                         {/* Информация о ресурсах локации */}
-                  <div className="flex items-center">
+                        <div className="flex items-center max-w-[60%] overflow-hidden">
                           {isUnlocked ? (
-                            <div className="flex items-center bg-yellow-500 px-2 py-1 rounded shadow-sm">
-                              <div className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center">
-                      <img 
+                            <div className="flex items-center bg-yellow-500 px-2 py-1 rounded shadow-sm mr-2 overflow-hidden">
+                              <div className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center flex-shrink-0">
+                                <img 
                                   src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
                                   alt={location.resourceName || "Ресурс"}
                                   className="w-4 h-4 object-contain"
@@ -1056,9 +1056,9 @@ function App() {
                                     const currencyType = String(location.currencyType || '').toLowerCase();
                                     target.parentElement!.innerHTML = getCurrencyEmoji(currencyType);
                                   }}
-                      />
-                    </div>
-                              <span className="text-xs text-white mx-1 font-medium">
+                                />
+                              </div>
+                              <span className="text-xs text-white mx-1 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
                                 {getCurrencyName(String(location.currencyType || '').toLowerCase())}:
                               </span>
                               <span className="text-sm font-bold text-white">
@@ -1066,10 +1066,10 @@ function App() {
                                   ? resourceAmount.toFixed(0) 
                                   : '0'}
                               </span>
-                    </div>
+                            </div>
                           ) : (
-                            <div className="flex items-center opacity-60">
-                              <div className="w-5 h-5 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center">
+                            <div className="flex items-center opacity-60 mr-2">
+                              <div className="w-5 h-5 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center flex-shrink-0">
                                 <img 
                                   src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
                                   alt={location.resourceName || "Ресурс"}
@@ -1082,7 +1082,7 @@ function App() {
                                   }}
                                 />
                               </div>
-                              <span className="text-xs text-gray-400 ml-1">
+                              <span className="text-xs text-gray-400 ml-1 whitespace-nowrap overflow-hidden text-ellipsis">
                                 {getCurrencyName(String(location.currencyType || '').toLowerCase())}
                               </span>
                             </div>

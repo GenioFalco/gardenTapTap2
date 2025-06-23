@@ -561,31 +561,32 @@ const GameScreen: React.FC<GameScreenProps> = ({
 
   // Загрузка внешнего вида персонажа при изменении инструмента или локации
   useEffect(() => {
+    // Значение по умолчанию для персонажа на время загрузки
+    const defaultCharacterImage = '/assets/characters/lumberjack.png';
+    
+    // Предзагрузка изображения по умолчанию для плавной смены
+    const preloadImage = new Image();
+    preloadImage.src = defaultCharacterImage;
+    
+    // Сразу устанавливаем изображение по умолчанию, чтобы избежать черного квадрата
+    setCharacterAppearance({
+      imagePath: defaultCharacterImage,
+      animationPath: null,
+      animationType: null,
+      frameCount: null
+    });
+    
     const loadCharacterAppearance = async () => {
       // Проверяем, что characterId определен (поддержка camelCase и snake_case)
       const characterId = location.characterId || (location as any).character_id;
       
       if (!characterId) {
         console.warn('characterId не определен для текущей локации:', location);
-        // Используем дефолтное изображение
-        setCharacterAppearance({
-          imagePath: characterImageUrl,
-          animationPath: null,
-          animationType: null,
-          frameCount: null
-        });
         return;
       }
       
       if (!equippedToolId) {
         console.warn('equippedToolId не определен для текущей локации:', location);
-        // Используем дефолтное изображение
-        setCharacterAppearance({
-          imagePath: characterImageUrl,
-          animationPath: null,
-          animationType: null,
-          frameCount: null
-        });
         return;
       }
       
@@ -602,35 +603,43 @@ const GameScreen: React.FC<GameScreenProps> = ({
           // frameCount может отсутствовать
           const frameCount = appearance.frameCount !== undefined ? appearance.frameCount : null;
           
-          setCharacterAppearance({
-            imagePath,
-            animationPath,
-            animationType,
-            frameCount
-          });
+          // Предзагрузка изображения перед установкой
+          if (imagePath) {
+            const img = new Image();
+            img.onload = () => {
+              // Устанавливаем внешний вид только после успешной загрузки изображения
+              setCharacterAppearance({
+                imagePath,
+                animationPath,
+                animationType,
+                frameCount
+              });
+              
+              // Сохраняем статичное изображение для дальнейшего использования
+              staticImageRef.current = imagePath;
+            };
+            img.onerror = () => {
+              console.error('Ошибка загрузки изображения персонажа:', imagePath);
+              // В случае ошибки загрузки оставляем текущее изображение
+            };
+            img.src = imagePath;
+          }
         } else {
           console.warn('Не найден внешний вид персонажа для данной комбинации character/tool');
-          // Используем дефолтное изображение
-          setCharacterAppearance({
-            imagePath: characterImageUrl,
-            animationPath: null,
-            animationType: null,
-            frameCount: null
-          });
         }
       } catch (error) {
         console.error('Ошибка при загрузке внешнего вида персонажа:', error);
-        // Устанавливаем дефолтное изображение при ошибке
-        setCharacterAppearance({
-          imagePath: characterImageUrl,
-          animationPath: null,
-          animationType: null,
-          frameCount: null
-        });
       }
     };
     
-    loadCharacterAppearance();
+    // Даем небольшую задержку перед загрузкой, чтобы страница успела отрендериться с изображением по умолчанию
+    const loadTimer = setTimeout(() => {
+      loadCharacterAppearance();
+    }, 100);
+    
+    return () => {
+      clearTimeout(loadTimer);
+    };
   }, [location, equippedToolId, characterImageUrl]);
 
   // Попытка улучшить инструмент (временно не используется)
