@@ -561,20 +561,27 @@ const GameScreen: React.FC<GameScreenProps> = ({
 
   // Загрузка внешнего вида персонажа при изменении инструмента или локации
   useEffect(() => {
-    // Значение по умолчанию для персонажа на время загрузки
-    const defaultCharacterImage = '/assets/characters/lumberjack.png';
-    
-    // Предзагрузка изображения по умолчанию для плавной смены
+    // Предварительно загружаем изображение по умолчанию
     const preloadImage = new Image();
-    preloadImage.src = defaultCharacterImage;
+    preloadImage.src = characterImageUrl;
     
-    // Сразу устанавливаем изображение по умолчанию, чтобы избежать черного квадрата
+    // Сначала не показываем никакого изображения, чтобы избежать показа рамки
     setCharacterAppearance({
-      imagePath: defaultCharacterImage,
+      imagePath: null,
       animationPath: null,
       animationType: null,
       frameCount: null
     });
+    
+    // Когда изображение загружено, устанавливаем его
+    preloadImage.onload = () => {
+      setCharacterAppearance({
+        imagePath: characterImageUrl,
+        animationPath: null,
+        animationType: null,
+        frameCount: null
+      });
+    };
     
     const loadCharacterAppearance = async () => {
       // Проверяем, что characterId определен (поддержка camelCase и snake_case)
@@ -820,29 +827,26 @@ const GameScreen: React.FC<GameScreenProps> = ({
       <div className="flex-1 flex items-center justify-center relative">
         {/* Персонаж (кликабельный) - используем изображение вместо canvas */}
         <motion.div 
-          className={`cursor-pointer relative`}
+          className={`cursor-pointer relative w-56 h-56 md:w-64 md:h-64 flex items-center justify-center`}
           animate={isAnimating ? { scale: 0.95 } : { scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleTap}
+          style={{ 
+            pointerEvents: energy <= 0 ? 'none' : 'auto',
+          }}
         >
-          {characterAppearance.imagePath && (
+          {characterAppearance.imagePath ? (
             <img 
               src={characterAppearance.imagePath} 
-              alt="Персонаж"
-              className={`w-56 h-56 md:w-64 md:h-64 ${isAnimating ? 'animate-pulse' : ''}`}
+              alt=""
+              className={`w-full h-full ${isAnimating ? 'animate-pulse' : ''}`}
               style={{ 
-                pointerEvents: energy <= 0 ? 'none' : 'auto',
-                objectFit: 'contain'
+                objectFit: 'contain',
+                opacity: 1
               }}
             />
-          )}
-          {!characterAppearance.imagePath && (
-            <div 
-              className="w-56 h-56 md:w-64 md:h-64 bg-gray-700 flex items-center justify-center"
-              style={{ pointerEvents: energy <= 0 ? 'none' : 'auto' }}
-            >
-              <span className="text-white text-xl">Персонаж не найден</span>
-            </div>
+          ) : (
+            <span className="text-white text-xl animate-pulse">Загрузка...</span>
           )}
           
           {/* Визуальный эффект при тапе */}
