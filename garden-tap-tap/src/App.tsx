@@ -4,6 +4,7 @@ import GameScreen from './components/GameScreen';
 import LocationSelector from './components/LocationSelector';
 import TopPanel from './components/TopPanel';
 import LevelUpModal from './components/LevelUpModal';
+import LoadingScreen from './components/LoadingScreen';
 import * as api from './lib/api';
 import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
@@ -31,6 +32,7 @@ const convertToModalReward = (reward: any): ModalReward => {
 };
 
 function App() {
+  const [loading, setLoading] = useState<boolean>(true);
   const [initialized, setInitialized] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
   const [currentLocationId, setCurrentLocationId] = useState<number>(1);
@@ -148,8 +150,14 @@ function App() {
         setGardenCoins(coins);
         
         setInitialized(true);
+        
+        // Имитируем немного дополнительного времени загрузки для отображения загрузочного экрана
+        setTimeout(() => {
+          setLoading(false);
+        }, 2000);
       } catch (error) {
         console.error('Ошибка при инициализации:', error);
+        setLoading(false);
       }
     };
     
@@ -946,8 +954,12 @@ function App() {
   
   return (
     <div className="App">
-      {/* Верхняя панель */}
-      <TopPanel
+      {loading ? (
+        <LoadingScreen onLoadComplete={() => setLoading(false)} />
+      ) : (
+        <>
+          {/* Верхняя панель */}
+          <TopPanel
         userName={userName}
         userAvatar={userAvatar}
         level={playerProgress.level}
@@ -1177,6 +1189,8 @@ function App() {
           toolNames={toolNames}
           locationNames={locationNames}
         />
+      )}
+        </>
       )}
     </div>
   );
