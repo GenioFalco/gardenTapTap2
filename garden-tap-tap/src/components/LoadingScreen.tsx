@@ -7,11 +7,27 @@ interface LoadingScreenProps {
 const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadComplete }) => {
   const [progress, setProgress] = useState(0);
   const [backgroundImage, setBackgroundImage] = useState<string>('');
+  const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     // Выбираем случайный фон из 4 доступных
     const randomBgNumber = Math.floor(Math.random() * 4) + 1;
-    setBackgroundImage(`/assets/loading/loading_bg_${randomBgNumber}.jpg`);
+    setBackgroundImage(`${process.env.PUBLIC_URL}/assets/loading/loading_bg_${randomBgNumber}.jpg`);
+    
+    // Проверяем, был ли уже показан начальный загрузчик
+    const initialLoaderShown = sessionStorage.getItem('initialLoaderShown');
+    
+    if (initialLoaderShown) {
+      // Если начальный загрузчик уже был показан, скрываем этот экран загрузки
+      setIsVisible(false);
+      if (onLoadComplete) {
+        onLoadComplete();
+      }
+      return;
+    }
+    
+    // Отмечаем, что начальный загрузчик был показан
+    sessionStorage.setItem('initialLoaderShown', 'true');
     
     // Имитация загрузки
     let currentProgress = 0;
@@ -33,6 +49,10 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadComplete }) => {
     
     return () => clearInterval(interval);
   }, [onLoadComplete]);
+  
+  if (!isVisible) {
+    return null;
+  }
   
   return (
     <div 
