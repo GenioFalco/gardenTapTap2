@@ -21,3 +21,8 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Database files
+server/garden_tap_tap.db
+*.db
+*.sqlite
