@@ -615,12 +615,12 @@ const GameScreen: React.FC<GameScreenProps> = ({
             const img = new Image();
             img.onload = () => {
               // Устанавливаем внешний вид только после успешной загрузки изображения
-              setCharacterAppearance({
-                imagePath,
-                animationPath,
-                animationType,
-                frameCount
-              });
+          setCharacterAppearance({
+            imagePath,
+            animationPath,
+            animationType,
+            frameCount
+          });
               
               // Сохраняем статичное изображение для дальнейшего использования
               staticImageRef.current = imagePath;
@@ -641,7 +641,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
     
     // Даем небольшую задержку перед загрузкой, чтобы страница успела отрендериться с изображением по умолчанию
     const loadTimer = setTimeout(() => {
-      loadCharacterAppearance();
+    loadCharacterAppearance();
     }, 100);
     
     return () => {

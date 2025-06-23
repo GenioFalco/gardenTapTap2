@@ -958,8 +958,8 @@ function App() {
         <LoadingScreen onLoadComplete={() => setLoading(false)} />
       ) : (
         <>
-          {/* Верхняя панель */}
-          <TopPanel
+      {/* Верхняя панель */}
+      <TopPanel
         userName={userName}
         userAvatar={userAvatar}
         level={playerProgress.level}
