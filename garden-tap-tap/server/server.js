@@ -391,6 +391,15 @@ app.get('/api/player/progress', async (req, res) => {
     };
     
     console.log('Sending player progress:', response);
+    
+    // Перед возвратом рассчитываем и начисляем доход от помощников
+    try {
+      await calculateHelperIncome(userId);
+    } catch (error) {
+      console.error('Ошибка при расчете дохода от помощников:', error);
+      // Продолжаем выполнение, не прерывая загрузку прогресса
+    }
+    
     res.json(response);
   } catch (error) {
     console.error('Ошибка при получении прогресса игрока:', error);
@@ -492,41 +501,21 @@ app.post('/api/player/update-energy', async (req, res) => {
 // Получить количество ресурсов игрока
 app.get('/api/player/resources/:currencyType', async (req, res) => {
   try {
-    const { userId } = req;
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ error: 'Не указан идентификатор пользователя' });
+    }
+    
     const { currencyType } = req.params;
     
-    // Нормализуем тип валюты к нижнему регистру
-    const normalizedType = currencyType.toLowerCase();
+    console.log(`Запрос на получение ресурсов: userId=${userId}, currencyType=${currencyType}`);
     
-    // Создаем запись валюты, если её нет
-    try {
-      await getOrCreatePlayerCurrency(userId, normalizedType);
-    } catch (error) {
-      console.error(`Ошибка при создании записи валюты ${normalizedType}:`, error);
-      // Продолжаем выполнение, чтобы попробовать получить существующую запись
-    }
+    // Используем нашу улучшенную функцию для получения и создания валюты
+    const playerCurrency = await getOrCreatePlayerCurrency(userId, currencyType);
     
-    // Получаем ID валюты из таблицы currencies или используем значения по умолчанию
-    let currencyId;
-    try {
-      const currency = await db.get(`
-        SELECT id FROM currencies WHERE currency_type = ?
-      `, [normalizedType]);
-      
-      currencyId = currency ? currency.id.toString() : (normalizedType === 'main' ? '5' : '1');
-    } catch (error) {
-      console.error(`Ошибка при получении ID валюты для типа ${normalizedType}:`, error);
-      currencyId = normalizedType === 'main' ? '5' : '1';
-    }
+    console.log(`Найдена валюта:`, playerCurrency);
     
-    // Получаем количество валюты
-    const result = await db.get(`
-      SELECT amount FROM player_currencies
-      WHERE user_id = ? AND currency_id = ?
-    `, [userId, currencyId]);
-    
-    const amount = result ? result.amount : 0;
-    res.json({ amount });
+    res.json({ amount: playerCurrency.amount });
   } catch (error) {
     console.error('Ошибка при получении количества ресурсов:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -1138,6 +1127,393 @@ app.get('/api/player/helpers/active', async (req, res) => {
   }
 });
 
+// API для получения помощников по ID локации
+app.get('/api/helpers/location/:locationId', async (req, res) => {
+  try {
+    const locationId = parseInt(req.params.locationId);
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Не указан идентификатор пользователя' });
+    }
+    
+    // Получаем всех помощников для указанной локации
+    const helpers = await db.all(`
+      SELECT h.*, 
+             CASE WHEN ph.helper_id IS NOT NULL THEN 1 ELSE 0 END as is_unlocked,
+             ph.level as level
+      FROM helpers h
+      LEFT JOIN player_helpers ph ON h.id = ph.helper_id AND ph.user_id = ?
+      WHERE h.location_id = ?
+      ORDER BY h.unlock_level ASC
+    `, [userId, locationId]);
+    
+    res.json(helpers);
+  } catch (error) {
+    console.error('Ошибка при получении помощников:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API для получения уровней всех помощников
+app.get('/api/helpers/levels', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Не указан идентификатор пользователя' });
+    }
+    
+    // Получаем уровни всех помощников, которые есть у пользователя
+    const ownedHelpers = await db.all(`
+      SELECT helper_id, level FROM player_helpers WHERE user_id = ?
+    `, [userId]);
+    
+    // Получаем информацию о уровнях для всех помощников пользователя
+    const helperLevels = [];
+    
+    for (const helper of ownedHelpers) {
+      const levels = await db.all(`
+        SELECT * FROM helper_levels 
+        WHERE helper_id = ? AND level <= ?
+        ORDER BY level ASC
+      `, [helper.helper_id, helper.level + 1]); // Получаем текущий уровень и следующий
+      
+      helperLevels.push(...levels);
+    }
+    
+    res.json(helperLevels);
+  } catch (error) {
+    console.error('Ошибка при получении уровней помощников:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API для получения уровня конкретного помощника
+app.get('/api/helpers/:helperId/level', async (req, res) => {
+  try {
+    const helperId = parseInt(req.params.helperId);
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Не указан идентификатор пользователя' });
+    }
+    
+    // Получаем текущий уровень помощника
+    const helperData = await db.get(`
+      SELECT helper_id, level FROM player_helpers 
+      WHERE user_id = ? AND helper_id = ?
+    `, [userId, helperId]);
+    
+    if (!helperData) {
+      return res.status(404).json({ error: 'Помощник не найден или не куплен' });
+    }
+    
+    // Получаем информацию о текущем уровне
+    const currentLevel = await db.get(`
+      SELECT * FROM helper_levels 
+      WHERE helper_id = ? AND level = ?
+    `, [helperId, helperData.level]);
+    
+    // Получаем информацию о следующем уровне (если не максимальный)
+    const helper = await db.get(`SELECT max_level FROM helpers WHERE id = ?`, [helperId]);
+    
+    if (helperData.level < helper.max_level) {
+      const nextLevel = await db.get(`
+        SELECT * FROM helper_levels 
+        WHERE helper_id = ? AND level = ?
+      `, [helperId, helperData.level + 1]);
+      
+      res.json({
+        current_level: currentLevel,
+        next_level: nextLevel,
+        is_max_level: false
+      });
+    } else {
+      res.json({
+        current_level: currentLevel,
+        next_level: null,
+        is_max_level: true
+      });
+    }
+  } catch (error) {
+    console.error('Ошибка при получении уровня помощника:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API для покупки помощника
+app.post('/api/helpers/buy', async (req, res) => {
+  try {
+    const { helperId } = req.body;
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Не указан идентификатор пользователя' });
+    }
+    
+    // Получаем информацию о помощнике
+    const helper = await db.get(`SELECT * FROM helpers WHERE id = ?`, [helperId]);
+    
+    if (!helper) {
+      return res.status(404).json({ error: 'Помощник не найден' });
+    }
+    
+    // Проверяем, разблокирован ли уже помощник
+    const isUnlocked = await db.get(`
+      SELECT 1 FROM player_helpers 
+      WHERE user_id = ? AND helper_id = ?
+    `, [userId, helperId]);
+    
+    if (isUnlocked) {
+      return res.status(400).json({ error: 'Помощник уже куплен' });
+    }
+    
+    // Получаем уровень игрока
+    const playerProgress = await db.get(`
+      SELECT level FROM player_progress WHERE user_id = ?
+    `, [userId]);
+    
+    if (!playerProgress) {
+      return res.status(404).json({ error: 'Прогресс игрока не найден' });
+    }
+    
+    // Проверяем, достиг ли игрок необходимого уровня
+    if (playerProgress.level < helper.unlock_level) {
+      return res.status(400).json({ 
+        error: `Необходим уровень ${helper.unlock_level} для покупки этого помощника` 
+      });
+    }
+    
+    // Получаем количество валюты игрока
+    const playerCurrency = await db.get(`
+      SELECT amount FROM player_currencies 
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, helper.currency_type]);
+    
+    if (!playerCurrency || playerCurrency.amount < helper.unlock_cost) {
+      return res.status(400).json({ 
+        error: `Недостаточно ресурсов. Необходимо ${helper.unlock_cost} ${helper.currency_type}` 
+      });
+    }
+    
+    // Начинаем транзакцию
+    await db.run('BEGIN TRANSACTION');
+    
+    try {
+      // Списываем ресурсы
+      await db.run(`
+        UPDATE player_currencies 
+        SET amount = amount - ? 
+        WHERE user_id = ? AND currency_id = ?
+      `, [helper.unlock_cost, userId, helper.currency_type]);
+      
+      // Добавляем помощника игроку
+      await db.run(`
+        INSERT INTO player_helpers (user_id, helper_id, level) 
+        VALUES (?, ?, 1)
+      `, [userId, helperId]);
+      
+      // Фиксируем транзакцию
+      await db.run('COMMIT');
+      
+      res.json({ success: true });
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Ошибка при покупке помощника:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API для улучшения помощника
+app.post('/api/helpers/upgrade', async (req, res) => {
+  try {
+    const { helperId } = req.body;
+    const userId = req.headers['x-user-id'];
+    
+    console.log(`Запрос на улучшение помощника: helperId=${helperId}, userId=${userId}`);
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Не указан идентификатор пользователя' });
+    }
+    
+    if (!helperId) {
+      return res.status(400).json({ error: 'Не указан ID помощника' });
+    }
+    
+    // Получаем текущий уровень помощника
+    const helperData = await db.get(`
+      SELECT helper_id, level FROM player_helpers 
+      WHERE user_id = ? AND helper_id = ?
+    `, [userId, helperId]);
+    
+    console.log('Данные помощника:', helperData);
+    
+    if (!helperData) {
+      return res.status(404).json({ error: 'Помощник не найден или не куплен' });
+    }
+    
+    // Получаем информацию о помощнике
+    const helper = await db.get(`SELECT id, max_level, currency_type FROM helpers WHERE id = ?`, [helperId]);
+    
+    console.log('Информация о помощнике:', helper);
+    
+    // Проверяем, не достигнут ли максимальный уровень
+    if (helperData.level >= helper.max_level) {
+      return res.status(400).json({ error: 'Достигнут максимальный уровень помощника' });
+    }
+    
+    // Получаем информацию о следующем уровне
+    const nextLevel = await db.get(`
+      SELECT * FROM helper_levels 
+      WHERE helper_id = ? AND level = ?
+    `, [helperId, helperData.level + 1]);
+    
+    console.log('Информация о следующем уровне:', nextLevel);
+    
+    if (!nextLevel) {
+      return res.status(404).json({ error: 'Информация о следующем уровне не найдена' });
+    }
+    
+    // Получаем валюту игрока используя нашу улучшенную функцию
+    const playerCurrency = await getOrCreatePlayerCurrency(userId, helper.currency_type);
+    
+    console.log('Валюта игрока:', playerCurrency, 'Требуется:', nextLevel.upgrade_cost);
+    
+    if (!playerCurrency || playerCurrency.amount < nextLevel.upgrade_cost) {
+      return res.status(400).json({ 
+        error: `Недостаточно ресурсов. Необходимо ${nextLevel.upgrade_cost} ${helper.currency_type}` 
+      });
+    }
+    
+    // Начинаем транзакцию
+    await db.run('BEGIN TRANSACTION');
+    
+    try {
+      // Списываем ресурсы
+      await db.run(`
+        UPDATE player_currencies 
+        SET amount = amount - ? 
+        WHERE user_id = ? AND currency_id = ?
+      `, [nextLevel.upgrade_cost, userId, playerCurrency.currency_id]);
+      
+      // Увеличиваем уровень помощника
+      await db.run(`
+        UPDATE player_helpers 
+        SET level = level + 1 
+        WHERE user_id = ? AND helper_id = ?
+      `, [userId, helperId]);
+      
+      // Фиксируем транзакцию
+      await db.run('COMMIT');
+      
+      const newLevel = helperData.level + 1;
+      console.log(`Помощник успешно улучшен. Новый уровень: ${newLevel}`);
+      
+      res.json({ success: true, level: newLevel });
+    } catch (error) {
+      console.error('Ошибка в транзакции:', error);
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Ошибка при улучшении помощника:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Расчет прибыли от помощников - запускается периодически или при входе игрока
+async function calculateHelperIncome(userId) {
+  try {
+    // Получаем всех помощников игрока с их уровнями
+    const helpers = await db.all(`
+      SELECT h.id, h.location_id, h.currency_type, ph.level
+      FROM player_helpers ph
+      JOIN helpers h ON ph.helper_id = h.id
+      WHERE ph.user_id = ?
+    `, [userId]);
+    
+    let totalIncome = {};
+    
+    // Для каждого помощника получаем доход на его текущем уровне
+    for (const helper of helpers) {
+      const levelData = await db.get(`
+        SELECT income_per_hour FROM helper_levels
+        WHERE helper_id = ? AND level = ?
+      `, [helper.id, helper.level]);
+      
+      if (levelData) {
+        const hourlyIncome = levelData.income_per_hour;
+        
+        // Проверяем, когда в последний раз игрок заходил в игру
+        const lastLoginTime = await db.get(`
+          SELECT last_login FROM player_progress WHERE user_id = ?
+        `, [userId]);
+        
+        let hours = 0;
+        
+        if (lastLoginTime && lastLoginTime.last_login) {
+          const lastLogin = new Date(lastLoginTime.last_login);
+          const now = new Date();
+          hours = (now.getTime() - lastLogin.getTime()) / (1000 * 60 * 60);
+          
+          // Ограничиваем максимальное время накопления 24 часами
+          hours = Math.min(hours, 24);
+        }
+        
+        // Рассчитываем накопленный доход
+        const income = hourlyIncome * hours;
+        
+        // Добавляем доход к общему для этого типа валюты
+        if (!totalIncome[helper.currency_type]) {
+          totalIncome[helper.currency_type] = 0;
+        }
+        
+        totalIncome[helper.currency_type] += income;
+      }
+    }
+    
+    // Обновляем время последнего входа игрока
+    await db.run(`
+      UPDATE player_progress SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?
+    `, [userId]);
+    
+    // Начисляем накопленный доход
+    for (const [currencyType, amount] of Object.entries(totalIncome)) {
+      if (amount > 0) {
+        // Округляем до двух знаков после запятой
+        const roundedAmount = Math.round(amount * 100) / 100;
+        
+        // Проверяем, есть ли у игрока эта валюта
+        const hasCurrency = await db.get(`
+          SELECT 1 FROM player_currencies WHERE user_id = ? AND currency_id = ?
+        `, [userId, currencyType]);
+        
+        if (hasCurrency) {
+          await db.run(`
+            UPDATE player_currencies 
+            SET amount = amount + ? 
+            WHERE user_id = ? AND currency_id = ?
+          `, [roundedAmount, userId, currencyType]);
+        } else {
+          await db.run(`
+            INSERT INTO player_currencies (user_id, currency_id, amount)
+            VALUES (?, ?, ?)
+          `, [userId, currencyType, roundedAmount]);
+        }
+      }
+    }
+    
+    return totalIncome;
+  } catch (error) {
+    console.error('Ошибка при расчете дохода от помощников:', error);
+    throw error;
+  }
+}
+
 // Вспомогательные функции
 
 // Получение или создание прогресса игрока
@@ -1190,7 +1566,20 @@ async function getOrCreatePlayerProgress(userId) {
 // Получение или создание валюты игрока
 async function getOrCreatePlayerCurrency(userId, currencyType) {
   // Нормализуем тип валюты к нижнему регистру
-  const normalizedType = currencyType.toLowerCase();
+  let normalizedType = currencyType.toLowerCase();
+  
+  // Обрабатываем различные форматы типов валют
+  if (normalizedType === 'garden_coins' || normalizedType === 'garden coins') {
+    normalizedType = 'main';
+  } else if (normalizedType === 'logs' || normalizedType === 'wood') {
+    normalizedType = 'forest';
+  } else if (normalizedType === 'vegetables') {
+    normalizedType = 'garden';
+  } else if (normalizedType === 'snowflakes') {
+    normalizedType = 'winter';
+  }
+  
+  console.log(`Нормализованный тип валюты: ${normalizedType} (исходный: ${currencyType})`);
   
   try {
     // Получаем ID валюты из таблицы currencies
@@ -1205,8 +1594,22 @@ async function getOrCreatePlayerCurrency(userId, currencyType) {
       currencyId = currency.id.toString();
     } else {
       // По умолчанию используем фиксированные ID
-      currencyId = normalizedType === 'main' ? '5' : '1';
+      if (normalizedType === 'main') {
+        currencyId = '5';
+      } else if (normalizedType === 'forest') {
+        currencyId = '1';
+      } else if (normalizedType === 'garden') {
+        currencyId = '2';
+      } else if (normalizedType === 'winter') {
+        currencyId = '3';
+      } else if (normalizedType === 'mountain') {
+        currencyId = '4';
+      } else {
+        currencyId = '1'; // По умолчанию forest
+      }
     }
+    
+    console.log(`Используем currency_id: ${currencyId} для типа ${normalizedType}`);
     
     // Проверяем, есть ли запись о валюте у игрока
     const playerCurrency = await db.get(`
@@ -1215,6 +1618,7 @@ async function getOrCreatePlayerCurrency(userId, currencyType) {
     `, [userId, currencyId]);
     
     if (playerCurrency) {
+      console.log(`Найдена валюта для пользователя: ${JSON.stringify(playerCurrency)}`);
       return playerCurrency;
     }
     
@@ -1527,5 +1931,31 @@ async function cleanupPlayerCurrencies() {
   }
 }
 
-// Запускаем сервер
-startServer();
+// Инициализируем базу данных при запуске сервера
+initDatabase().then(async () => {
+  console.log('База данных инициализирована');
+  
+  // Добавляем столбец last_login в player_progress, если его еще нет
+  try {
+    const tableInfo = await db.all("PRAGMA table_info(player_progress)");
+    
+    // Проверяем, есть ли столбец last_login
+    const hasLastLogin = tableInfo.some(column => column.name === 'last_login');
+    
+    if (!hasLastLogin) {
+      await db.run('ALTER TABLE player_progress ADD COLUMN last_login TEXT DEFAULT CURRENT_TIMESTAMP');
+      console.log('Столбец last_login успешно добавлен в таблицу player_progress');
+      
+      // Инициализируем значения last_login текущим временем для существующих записей
+      await db.run('UPDATE player_progress SET last_login = CURRENT_TIMESTAMP');
+      console.log('Значения last_login успешно инициализированы');
+    }
+  } catch (error) {
+    console.error('Ошибка при обновлении структуры таблицы player_progress:', error);
+  }
+  
+  // Запускаем сервер после инициализации базы данных
+  startServer();
+}).catch(err => {
+  console.error('Ошибка при инициализации базы данных:', err);
+});

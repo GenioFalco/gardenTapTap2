@@ -1,6 +1,6 @@
 import { 
   Location, Character, Tool, Level, Reward, PlayerProgress, 
-  CurrencyType, Currency, CharacterAppearance, Helper 
+  CurrencyType, Currency, CharacterAppearance, Helper, HelperLevel 
   // RewardType, PlayerCurrency - не используются
 } from '../types';
 import { config } from '../config';
@@ -39,7 +39,18 @@ const fetchApi = async <T>(
     const response = await fetch(url, { ...options, headers });
     
     if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
+      // Пытаемся получить детальную информацию об ошибке
+      let errorDetails = '';
+      try {
+        const errorData = await response.json();
+        if (errorData && errorData.error) {
+          errorDetails = `: ${errorData.error}`;
+        }
+      } catch (e) {
+        // Если не удалось распарсить JSON, просто используем статус и текст ошибки
+      }
+      
+      throw new Error(`API error: ${response.status} ${response.statusText}${errorDetails}`);
     }
     
     const data = await response.json();
@@ -288,33 +299,63 @@ export const getLocationsByUnlockLevel = async (level: number): Promise<Location
   return await fetchApi<Location[]>(`/locations/unlock-level/${level}`);
 };
 
-// Получить помощников для локации
+// Получить всех помощников для локации
 export const getHelpersByLocationId = async (locationId: number): Promise<Helper[]> => {
-  return await fetchApi<Helper[]>(`/player/locations/${locationId}/helpers`);
+  return await fetchApi<Helper[]>(`/helpers/location/${locationId}`);
 };
 
-// Получить активных помощников с временем активации
+// Получить активных помощников
+// Этот метод больше не нужен, так как все купленные помощники активны
+// Оставляем для обратной совместимости
 export const getActiveHelpers = async (): Promise<any[]> => {
-  return await fetchApi<any[]>(`/player/helpers/active`);
+  return await fetchApi<any[]>('/helpers/active');
 };
 
 // Купить помощника
 export const buyHelper = async (helperId: number): Promise<{ success: boolean }> => {
-  return await fetchApi<{ success: boolean }>(`/player/helpers/${helperId}/buy`, {
-    method: 'POST'
+  return await fetchApi<{ success: boolean }>('/helpers/buy', {
+    method: 'POST',
+    body: JSON.stringify({ helperId })
   });
 };
 
-// Активировать/деактивировать помощника
+// Прокачать помощника на следующий уровень
+export const upgradeHelper = async (helperId: number): Promise<{ success: boolean, level: number }> => {
+  try {
+    console.log(`Отправка запроса на улучшение помощника ID: ${helperId}`);
+    return await fetchApi<{ success: boolean, level: number }>('/helpers/upgrade', {
+      method: 'POST',
+      body: JSON.stringify({ helperId })
+    });
+  } catch (error) {
+    console.error(`Ошибка при улучшении помощника ID: ${helperId}`, error);
+    throw error; // Прокидываем ошибку дальше для обработки в компоненте
+  }
+};
+
+// Получить уровни всех помощников
+export const getHelpersWithLevels = async (): Promise<HelperLevel[]> => {
+  return await fetchApi<HelperLevel[]>('/helpers/levels');
+};
+
+// Получить уровень конкретного помощника
+export const getHelperLevel = async (helperId: number): Promise<HelperLevel> => {
+  return await fetchApi<HelperLevel>(`/helpers/${helperId}/level`);
+};
+
+// Этот метод больше не нужен, так как помощники всегда активны после покупки
+// Оставляем для обратной совместимости
 export const toggleHelper = async (helperId: number): Promise<{ success: boolean, active: boolean }> => {
-  return await fetchApi<{ success: boolean, active: boolean }>(`/player/helpers/${helperId}/toggle`, {
-    method: 'POST'
+  return await fetchApi<{ success: boolean, active: boolean }>('/helpers/toggle', {
+    method: 'POST',
+    body: JSON.stringify({ helperId })
   });
 };
 
-// Собрать награду от помощников
+// Этот метод больше не нужен, так как ресурсы собираются автоматически
+// Оставляем для обратной совместимости
 export const collectHelpersReward = async (): Promise<{ collected: number, locationId: number | null, currencyType: string | null }> => {
-  return await fetchApi<{ collected: number, locationId: number | null, currencyType: string | null }>(`/player/helpers/collect`, {
+  return await fetchApi<{ collected: number, locationId: number | null, currencyType: string | null }>('/helpers/collect', {
     method: 'POST'
   });
 }; 

@@ -135,13 +135,25 @@ export interface CharacterAppearance {
 export interface Helper {
   id: number;
   name: string;
-  description: string;
   locationId: number;
   unlockLevel: number;
   unlockCost: number;
   currencyType: CurrencyType;
-  incomePerHour: number;
   imagePath: string;
   isUnlocked?: boolean;  // Куплен ли помощник
-  isActive?: boolean;    // Активен ли помощник в данный момент
+  max_level?: number;    // Максимальный уровень помощника
+  level?: number;        // Текущий уровень помощника
+  
+  // Поля для обратной совместимости
+  description?: string;  // Убрано в новой версии
+  incomePerHour?: number; // Заменено на значение из таблицы helper_levels
+}
+
+// Интерфейс уровня помощника
+export interface HelperLevel {
+  helper_id: number;
+  level: number;
+  income_per_hour: number;
+  upgrade_cost: number;
+  currency_type: string;
 } 
