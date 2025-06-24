@@ -1959,3 +1959,239 @@ initDatabase().then(async () => {
 }).catch(err => {
   console.error('Ошибка при инициализации базы данных:', err);
 });
+
+// API для хранилища ресурсов
+// Получить информацию о хранилище для определенной локации и валюты
+app.get('/api/player/storage/:locationId/:currencyId', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { locationId } = req.params;
+    let { currencyId } = req.params;
+    
+    // Проверяем, существует ли запись о хранилище для этого пользователя
+    let storageInfo = await db.get(`
+      SELECT storage_level, capacity 
+      FROM player_storage_limits 
+      WHERE user_id = ? AND location_id = ? AND currency_id = ?
+    `, [userId, locationId, currencyId]);
+    
+    // Если записи нет, создаем её с начальными значениями
+    if (!storageInfo) {
+      // Получаем начальную емкость из таблицы уровней хранилища
+      const initialLevel = await db.get(`
+        SELECT capacity FROM storage_upgrade_levels 
+        WHERE location_id = ? AND level = 1
+      `, [locationId]);
+      
+      const initialCapacity = initialLevel ? initialLevel.capacity : 500;
+      
+      // Создаем запись о хранилище
+      await db.run(`
+        INSERT INTO player_storage_limits (user_id, location_id, currency_id, storage_level, capacity)
+        VALUES (?, ?, ?, 1, ?)
+      `, [userId, locationId, currencyId, initialCapacity]);
+      
+      storageInfo = { storage_level: 1, capacity: initialCapacity };
+    }
+    
+    // Получаем текущее количество ресурсов
+    const currencyAmount = await db.get(`
+      SELECT amount FROM player_currencies 
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, currencyId]);
+    
+    const amount = currencyAmount ? currencyAmount.amount : 0;
+    const percentageFilled = (amount / storageInfo.capacity) * 100;
+    
+    res.json({
+      storage_level: storageInfo.storage_level,
+      capacity: storageInfo.capacity,
+      current_amount: amount,
+      percentage_filled: percentageFilled
+    });
+  } catch (error) {
+    console.error('Ошибка при получении информации о хранилище:', error);
+    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  }
+});
+
+// Получить информацию об улучшении хранилища
+app.get('/api/player/storage/:locationId/:currencyId/upgrade-info', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { locationId } = req.params;
+    let { currencyId } = req.params;
+    
+    // Получаем текущий уровень хранилища
+    const currentStorage = await db.get(`
+      SELECT storage_level, capacity 
+      FROM player_storage_limits 
+      WHERE user_id = ? AND location_id = ? AND currency_id = ?
+    `, [userId, locationId, currencyId]);
+    
+    // Если записи нет, создаем её с начальными значениями
+    let currentLevel = 1;
+    let currentCapacity = 500;
+    
+    if (currentStorage) {
+      currentLevel = currentStorage.storage_level;
+      currentCapacity = currentStorage.capacity;
+    } else {
+      // Получаем начальную емкость из таблицы уровней хранилища
+      const initialLevel = await db.get(`
+        SELECT capacity FROM storage_upgrade_levels 
+        WHERE location_id = ? AND level = 1
+      `, [locationId]);
+      
+      if (initialLevel) {
+        currentCapacity = initialLevel.capacity;
+      }
+      
+      // Создаем запись о хранилище
+      await db.run(`
+        INSERT INTO player_storage_limits (user_id, location_id, currency_id, storage_level, capacity)
+        VALUES (?, ?, ?, ?, ?)
+      `, [userId, locationId, currencyId, currentLevel, currentCapacity]);
+    }
+    
+    // Получаем информацию о следующем уровне
+    const nextLevelInfo = await db.get(`
+      SELECT level, capacity, upgrade_cost, currency_type 
+      FROM storage_upgrade_levels 
+      WHERE location_id = ? AND level = ?
+    `, [locationId, currentLevel + 1]);
+    
+    // Если следующего уровня нет, возвращаем информацию о максимальном уровне
+    if (!nextLevelInfo) {
+      return res.json({
+        currentLevel,
+        nextLevel: currentLevel,
+        currentCapacity,
+        nextCapacity: currentCapacity,
+        upgradeCost: 0,
+        currencyType: 'main',
+        canUpgrade: false
+      });
+    }
+    
+    // Проверяем, достаточно ли у игрока ресурсов для улучшения
+    const playerCurrency = await db.get(`
+      SELECT amount FROM player_currencies 
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, nextLevelInfo.currency_type]);
+    
+    const playerAmount = playerCurrency ? playerCurrency.amount : 0;
+    const canUpgrade = playerAmount >= nextLevelInfo.upgrade_cost;
+    
+    res.json({
+      currentLevel,
+      nextLevel: nextLevelInfo.level,
+      currentCapacity,
+      nextCapacity: nextLevelInfo.capacity,
+      upgradeCost: nextLevelInfo.upgrade_cost,
+      currencyType: nextLevelInfo.currency_type,
+      canUpgrade
+    });
+  } catch (error) {
+    console.error('Ошибка при получении информации об улучшении хранилища:', error);
+    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  }
+});
+
+// Улучшить хранилище
+app.post('/api/player/storage/upgrade', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { locationId, currencyId } = req.body;
+    
+    // Получаем текущий уровень хранилища
+    const currentStorage = await db.get(`
+      SELECT storage_level 
+      FROM player_storage_limits 
+      WHERE user_id = ? AND location_id = ? AND currency_id = ?
+    `, [userId, locationId, currencyId]);
+    
+    if (!currentStorage) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Хранилище не найдено' 
+      });
+    }
+    
+    const currentLevel = currentStorage.storage_level;
+    
+    // Получаем информацию о следующем уровне
+    const nextLevelInfo = await db.get(`
+      SELECT level, capacity, upgrade_cost, currency_type 
+      FROM storage_upgrade_levels 
+      WHERE location_id = ? AND level = ?
+    `, [locationId, currentLevel + 1]);
+    
+    // Если следующего уровня нет, возвращаем ошибку
+    if (!nextLevelInfo) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Достигнут максимальный уровень хранилища' 
+      });
+    }
+    
+    // Проверяем, достаточно ли у игрока ресурсов для улучшения
+    const playerCurrency = await db.get(`
+      SELECT amount FROM player_currencies 
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, nextLevelInfo.currency_type]);
+    
+    if (!playerCurrency || playerCurrency.amount < nextLevelInfo.upgrade_cost) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Недостаточно ресурсов для улучшения' 
+      });
+    }
+    
+    // Списываем ресурсы
+    await db.run(`
+      UPDATE player_currencies 
+      SET amount = amount - ? 
+      WHERE user_id = ? AND currency_id = ?
+    `, [nextLevelInfo.upgrade_cost, userId, nextLevelInfo.currency_type]);
+    
+    // Улучшаем хранилище
+    await db.run(`
+      UPDATE player_storage_limits 
+      SET storage_level = ?, capacity = ? 
+      WHERE user_id = ? AND location_id = ? AND currency_id = ?
+    `, [nextLevelInfo.level, nextLevelInfo.capacity, userId, locationId, currencyId]);
+    
+    res.json({
+      success: true,
+      newLevel: nextLevelInfo.level,
+      newCapacity: nextLevelInfo.capacity
+    });
+  } catch (error) {
+    console.error('Ошибка при улучшении хранилища:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Внутренняя ошибка сервера' 
+    });
+  }
+});
+
+// Получить все уровни хранилища для локации
+app.get('/api/storage-levels/:locationId', async (req, res) => {
+  try {
+    const { locationId } = req.params;
+    
+    // Получаем все уровни хранилища для локации
+    const levels = await db.all(`
+      SELECT level, capacity, upgrade_cost, currency_type 
+      FROM storage_upgrade_levels 
+      WHERE location_id = ? 
+      ORDER BY level
+    `, [locationId]);
+    
+    res.json(levels);
+  } catch (error) {
+    console.error('Ошибка при получении уровней хранилища:', error);
+    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  }
+});

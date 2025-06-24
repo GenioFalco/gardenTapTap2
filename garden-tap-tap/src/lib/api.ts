@@ -358,4 +358,73 @@ export const collectHelpersReward = async (): Promise<{ collected: number, locat
   return await fetchApi<{ collected: number, locationId: number | null, currencyType: string | null }>('/helpers/collect', {
     method: 'POST'
   });
+};
+
+// Получить информацию о хранилище
+export const getStorageInfo = async (locationId: number, currencyId: string): Promise<{
+  storage_level: number;
+  capacity: number;
+  current_amount: number;
+  percentage_filled: number;
+}> => {
+  return await fetchApi<{
+    storage_level: number;
+    capacity: number;
+    current_amount: number;
+    percentage_filled: number;
+  }>(`/player/storage/${locationId}/${currencyId}`);
+};
+
+// Получить информацию об улучшении хранилища
+export const getStorageUpgradeInfo = async (locationId: number, currencyId: string): Promise<{
+  currentLevel: number;
+  nextLevel: number;
+  currentCapacity: number;
+  nextCapacity: number;
+  upgradeCost: number;
+  currencyType: string;
+  canUpgrade: boolean;
+}> => {
+  return await fetchApi<{
+    currentLevel: number;
+    nextLevel: number;
+    currentCapacity: number;
+    nextCapacity: number;
+    upgradeCost: number;
+    currencyType: string;
+    canUpgrade: boolean;
+  }>(`/player/storage/${locationId}/${currencyId}/upgrade-info`);
+};
+
+// Улучшить хранилище
+export const upgradeStorage = async (locationId: number, currencyId: string): Promise<{
+  success: boolean;
+  error?: string;
+  newLevel?: number;
+  newCapacity?: number;
+}> => {
+  return await fetchApi<{
+    success: boolean;
+    error?: string;
+    newLevel?: number;
+    newCapacity?: number;
+  }>('/player/storage/upgrade', {
+    method: 'POST',
+    body: JSON.stringify({ locationId, currencyId })
+  });
+};
+
+// Получить уровни хранилища для локации
+export const getStorageLevels = async (locationId: number): Promise<{
+  level: number;
+  capacity: number;
+  upgrade_cost: number;
+  currency_type: string;
+}[]> => {
+  return await fetchApi<{
+    level: number;
+    capacity: number;
+    upgrade_cost: number;
+    currency_type: string;
+  }[]>(`/storage-levels/${locationId}`);
 }; 

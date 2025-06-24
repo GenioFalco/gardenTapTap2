@@ -5,6 +5,8 @@ import LocationSelector from './components/LocationSelector';
 import TopPanel from './components/TopPanel';
 import LevelUpModal from './components/LevelUpModal';
 import LoadingScreen from './components/LoadingScreen';
+import StorageButton from './components/StorageButton';
+import StorageModal from './components/StorageModal';
 import * as api from './lib/api';
 import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
@@ -45,6 +47,9 @@ function App() {
   const [userAvatar, setUserAvatar] = useState<string>('');
   const [gardenCoins, setGardenCoins] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<string>("tap");
+  
+  // Состояние для модального окна склада
+  const [showStorageModal, setShowStorageModal] = useState<boolean>(false);
   
   // Состояния для модального окна повышения уровня
   const [showLevelUpModal, setShowLevelUpModal] = useState<boolean>(false);
@@ -839,32 +844,27 @@ function App() {
   // Активация инструмента
   const handleActivateTool = async (toolId: number) => {
     try {
-      if (!currentLocation) return false;
+      if (!currentLocation) return;
       
-      // Безопасно получаем ID персонажа из текущей локации
-      let characterIdForEquip = 1; // По умолчанию 1
-      
-      if (typeof currentLocation.characterId === 'number') {
-        characterIdForEquip = currentLocation.characterId;
-      } else if (typeof currentLocation.character_id === 'number') {
-        characterIdForEquip = currentLocation.character_id;
-      } else {
-        console.warn('characterId не определен для текущей локации:', currentLocation);
-        return false;
+      const characterId = currentLocation.characterId || currentLocation.character_id;
+      if (!characterId) {
+        console.error('characterId не определен для текущей локации');
+        return;
       }
       
-      // Вызываем API с гарантированно числовым ID
-      await api.equipTool(characterIdForEquip, toolId);
+      await api.equipTool(characterId, toolId);
       
-      // Обновляем прогресс после активации
-      const progress = await api.getPlayerProgress();
-      setPlayerProgress(progress);
-      
-      return true;
+      // Обновляем список инструментов, чтобы отметить активный
+      const updatedTools = await api.getUnlockedToolsByCharacterId(characterId);
+      setTools(updatedTools);
     } catch (error) {
       console.error('Ошибка при активации инструмента:', error);
-      return false;
     }
+  };
+  
+  // Функция для переключения отображения модального окна склада
+  const toggleStorageModal = () => {
+    setShowStorageModal(!showStorageModal);
   };
   
   if (!initialized || !playerProgress || !currentLocation) {
@@ -1178,6 +1178,16 @@ function App() {
         onTap={handleTap}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
+      />
+      
+      {/* Кнопка склада */}
+      <StorageButton onClick={toggleStorageModal} activeTab={activeTab} />
+      
+      {/* Модальное окно склада */}
+      <StorageModal
+        show={showStorageModal}
+        onClose={toggleStorageModal}
+        playerLevel={playerProgress.level}
       />
       
       {/* Модальное окно повышения уровня */}
