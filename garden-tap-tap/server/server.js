@@ -745,8 +745,7 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     
     // Получаем количество ресурсов
     const currency = await db.get(`
-      SELECT amount FROM player_currencies
-      WHERE user_id = ? AND currency_type = ?
+      SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
     `, [userId, tool.currency_type]);
     
     // Проверяем, достаточно ли ресурсов
@@ -928,7 +927,7 @@ app.post('/api/player/helpers/:helperId/buy', async (req, res) => {
     
     // Проверяем наличие ресурсов
     const playerCurrency = await db.get(`
-      SELECT amount FROM player_currencies WHERE user_id = ? AND currency_type = ?
+      SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
     `, [userId, helper.currency_type]);
     
     if (!playerCurrency || playerCurrency.amount < helper.unlock_cost) {
@@ -937,9 +936,7 @@ app.post('/api/player/helpers/:helperId/buy', async (req, res) => {
     
     // Списываем ресурсы
     await db.run(`
-      UPDATE player_currencies
-      SET amount = amount - ?
-      WHERE user_id = ? AND currency_type = ?
+      UPDATE player_currencies SET amount = amount - ? WHERE user_id = ? AND currency_id = ?
     `, [helper.unlock_cost, userId, helper.currency_type]);
     
     // Добавляем помощника в таблицу купленных
@@ -1087,15 +1084,12 @@ app.post('/api/player/helpers/collect', async (req, res) => {
       if (existingCurrency) {
         // Обновляем существующую валюту
         await db.run(`
-          UPDATE player_currencies
-          SET amount = amount + ?
-          WHERE user_id = ? AND currency_type = ?
+          UPDATE player_currencies SET amount = amount + ? WHERE user_id = ? AND currency_id = ?
         `, [totalCollected, userId, currencyType]);
       } else {
         // Создаем новую запись о валюте
         await db.run(`
-          INSERT INTO player_currencies (user_id, currency_type, amount)
-          VALUES (?, ?, ?)
+          INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)
         `, [userId, currencyType, totalCollected]);
       }
     }
@@ -1905,8 +1899,7 @@ async function cleanupPlayerCurrencies() {
     // 3. Вставляем обратно уникальные записи
     for (const currency of currencyMap.values()) {
       await db.run(`
-        INSERT INTO player_currencies (user_id, currency_type, amount)
-        VALUES (?, ?, ?)
+        INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)
       `, [currency.user_id, currency.currency_type, currency.amount]);
     }
     

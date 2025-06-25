@@ -47,13 +47,13 @@ const getOrCreatePlayerProgress = async (userId) => {
       
       // Добавляем начальные валюты
       await runQuery(
-        'INSERT INTO player_currencies (user_id, currency_type, amount) VALUES (?, ?, ?)',
-        [userId, CurrencyType.MAIN, 0]
+        'INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)',
+        [userId, 'main', 0]
       );
       
       await runQuery(
-        'INSERT INTO player_currencies (user_id, currency_type, amount) VALUES (?, ?, ?)',
-        [userId, CurrencyType.FOREST, 0]
+        'INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)',
+        [userId, 'forest', 0]
       );
       
       // Разблокируем первую локацию
@@ -207,7 +207,7 @@ const api = {
       
       // Получаем валюты игрока
       const currencies = await getAll(`
-        SELECT currency_type as currencyType, amount
+        SELECT currency_id as currencyId, amount
         FROM player_currencies
         WHERE user_id = ?
       `, [userId]);
@@ -273,16 +273,17 @@ const api = {
   // Добавить ресурсы игроку
   addResources: async (userId, currencyType, amount) => {
     try {
+      const currencyId = currencyType.toLowerCase();
       await runQuery(`
-        INSERT OR IGNORE INTO player_currencies (user_id, currency_type, amount)
+        INSERT OR IGNORE INTO player_currencies (user_id, currency_id, amount)
         VALUES (?, ?, 0)
-      `, [userId, currencyType]);
+      `, [userId, currencyId]);
       
       await runQuery(`
         UPDATE player_currencies
         SET amount = amount + ?
-        WHERE user_id = ? AND currency_type = ?
-      `, [amount, userId, currencyType]);
+        WHERE user_id = ? AND currency_id = ?
+      `, [amount, userId, currencyId]);
     } catch (error) {
       console.error('Ошибка при добавлении ресурсов игроку:', error);
       throw error;
@@ -292,11 +293,12 @@ const api = {
   // Получить количество ресурсов игрока
   getResourceAmount: async (userId, currencyType) => {
     try {
+      const currencyId = currencyType.toLowerCase();
       const result = await getOne(`
         SELECT amount
         FROM player_currencies
-        WHERE user_id = ? AND currency_type = ?
-      `, [userId, currencyType]);
+        WHERE user_id = ? AND currency_id = ?
+      `, [userId, currencyId]);
       
       return result ? result.amount : 0;
     } catch (error) {
@@ -308,6 +310,7 @@ const api = {
   // Потратить ресурсы
   spendResources: async (userId, currencyType, amount) => {
     try {
+      const currencyId = currencyType.toLowerCase();
       // Проверяем, достаточно ли ресурсов
       const currentAmount = await api.getResourceAmount(userId, currencyType);
       if (currentAmount < amount) {
@@ -318,8 +321,8 @@ const api = {
       await runQuery(`
         UPDATE player_currencies
         SET amount = amount - ?
-        WHERE user_id = ? AND currency_type = ?
-      `, [amount, userId, currencyType]);
+        WHERE user_id = ? AND currency_id = ?
+      `, [amount, userId, currencyId]);
       
       return true;
     } catch (error) {
