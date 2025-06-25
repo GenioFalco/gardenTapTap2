@@ -2129,6 +2129,8 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
     const userId = getUserId(req);
     const { locationId, currencyId } = req.body;
     
+    console.log('Запрос на улучшение хранилища:', { userId, locationId, currencyId });
+    
     // Получаем текущий уровень хранилища
     const currentStorage = await db.get(`
       SELECT storage_level 
@@ -2137,6 +2139,7 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
     `, [userId, locationId, currencyId]);
     
     if (!currentStorage) {
+      console.log('Хранилище не найдено:', { userId, locationId, currencyId });
       return res.status(404).json({ 
         success: false, 
         error: 'Хранилище не найдено' 
@@ -2144,6 +2147,7 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
     }
     
     const currentLevel = currentStorage.storage_level;
+    console.log('Текущий уровень хранилища:', currentLevel);
     
     // Получаем информацию о следующем уровне
     const nextLevelInfo = await db.get(`
@@ -2154,22 +2158,46 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
     
     // Если следующего уровня нет, возвращаем ошибку
     if (!nextLevelInfo) {
+      console.log('Достигнут максимальный уровень хранилища:', { locationId, currentLevel });
       return res.status(400).json({ 
         success: false, 
         error: 'Достигнут максимальный уровень хранилища' 
       });
     }
     
+    console.log('Информация о следующем уровне:', nextLevelInfo);
+    
+    // Получаем ID валюты для оплаты из таблицы валют по типу
+    const paymentCurrency = await db.get(`
+      SELECT id FROM currencies 
+      WHERE currency_type = ?
+    `, [nextLevelInfo.currency_type]);
+    
+    const paymentCurrencyId = paymentCurrency ? paymentCurrency.id : nextLevelInfo.currency_type;
+    
+    console.log('Валюта для оплаты:', { 
+      type: nextLevelInfo.currency_type, 
+      id: paymentCurrencyId 
+    });
+    
     // Проверяем, достаточно ли у игрока ресурсов для улучшения
     const playerCurrency = await db.get(`
       SELECT amount FROM player_currencies 
       WHERE user_id = ? AND currency_id = ?
-    `, [userId, nextLevelInfo.currency_type]);
+    `, [userId, paymentCurrencyId]);
     
-    if (!playerCurrency || playerCurrency.amount < nextLevelInfo.upgrade_cost) {
+    const playerAmount = playerCurrency ? playerCurrency.amount : 0;
+    console.log('Проверка ресурсов:', { 
+      currency: paymentCurrencyId, 
+      playerAmount, 
+      required: nextLevelInfo.upgrade_cost,
+      sufficient: playerAmount >= nextLevelInfo.upgrade_cost 
+    });
+    
+    if (!playerCurrency || playerAmount < nextLevelInfo.upgrade_cost) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Недостаточно ресурсов для улучшения' 
+        error: `Недостаточно ресурсов для улучшения (${Math.floor(playerAmount * 10) / 10}/${nextLevelInfo.upgrade_cost})` 
       });
     }
     
@@ -2178,7 +2206,12 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
       UPDATE player_currencies 
       SET amount = amount - ? 
       WHERE user_id = ? AND currency_id = ?
-    `, [nextLevelInfo.upgrade_cost, userId, nextLevelInfo.currency_type]);
+    `, [nextLevelInfo.upgrade_cost, userId, paymentCurrencyId]);
+    
+    console.log('Списано ресурсов:', {
+      currency: paymentCurrencyId,
+      amount: nextLevelInfo.upgrade_cost
+    });
     
     // Улучшаем хранилище
     await db.run(`
@@ -2186,6 +2219,15 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
       SET storage_level = ?, capacity = ? 
       WHERE user_id = ? AND location_id = ? AND currency_id = ?
     `, [nextLevelInfo.level, nextLevelInfo.capacity, userId, locationId, currencyId]);
+    
+    console.log('Хранилище успешно улучшено:', { 
+      userId, 
+      locationId, 
+      currencyId, 
+      oldLevel: currentLevel,
+      newLevel: nextLevelInfo.level, 
+      newCapacity: nextLevelInfo.capacity 
+    });
     
     res.json({
       success: true,

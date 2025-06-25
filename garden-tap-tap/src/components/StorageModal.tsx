@@ -46,12 +46,32 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
   const [upgradeInfo, setUpgradeInfo] = useState<Record<string, UpgradeInfo>>({});
   const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<StorageCurrency | null>(null);
+  const [paymentCurrencyAmount, setPaymentCurrencyAmount] = useState(0);
+  const [paymentCurrencyIcon, setPaymentCurrencyIcon] = useState('');
+  const [paymentCurrencyName, setPaymentCurrencyName] = useState('');
 
   useEffect(() => {
     if (show) {
       loadStorageData();
+      
+      // Настраиваем автоматическое обновление данных каждые 10 секунд
+      const intervalId = setInterval(() => {
+        loadStorageData();
+        
+        // Если открыто окно подтверждения улучшения, обновляем баланс монет
+        if (showUpgradeConfirm) {
+          api.getResourceAmount('main').then(amount => {
+            setPaymentCurrencyAmount(amount);
+          }).catch(err => {
+            console.error('Ошибка при обновлении баланса монет:', err);
+          });
+        }
+      }, 10000);
+      
+      // Очищаем интервал при закрытии модального окна
+      return () => clearInterval(intervalId);
     }
-  }, [show]);
+  }, [show, showUpgradeConfirm]);
 
   // Функция для получения информации о хранилище
   const loadStorageData = async () => {
@@ -182,9 +202,25 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
   };
 
   // Открыть диалог подтверждения улучшения
-  const showUpgradeConfirmation = (currency: StorageCurrency) => {
+  const showUpgradeConfirmation = async (currency: StorageCurrency) => {
     setSelectedCurrency(currency);
     setShowUpgradeConfirm(true);
+    setError(null);
+    
+    // Получаем текущее количество ОСНОВНОЙ валюты (монет)
+    try {
+      // Для улучшения всегда используется основная валюта (монеты) с типом 'main'
+      const mainCurrency = await api.getCurrencyByType('main');
+      if (mainCurrency && mainCurrency.id) {
+        const amount = await api.getResourceAmount('main');
+        setPaymentCurrencyAmount(amount);
+        setPaymentCurrencyIcon(mainCurrency.image_path || '/assets/currencies/garden_coin.png');
+        setPaymentCurrencyName('Монеты');
+        console.log('Текущее количество монет:', amount, 'Требуется:', upgradeInfo[currency.id]?.upgradeCost);
+      }
+    } catch (err) {
+      console.error('Ошибка при получении количества монет:', err);
+    }
   };
 
   // Закрыть диалог подтверждения улучшения
@@ -193,8 +229,16 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
     setSelectedCurrency(null);
   };
 
+  // Обработчик улучшения хранилища
   const handleUpgradeStorage = async (currencyId: string, locationId: number) => {
     try {
+      // Проверяем, достаточно ли монет
+      const info = upgradeInfo[currencyId];
+      if (info && paymentCurrencyAmount < info.upgradeCost) {
+        setError(`Недостаточно монет (${paymentCurrencyAmount.toFixed(1)}/${info.upgradeCost})`);
+        return;
+      }
+      
       setProcessingCurrencyId(currencyId);
       setError(null);
       
@@ -204,14 +248,46 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
         // Закрываем диалог подтверждения
         setShowUpgradeConfirm(false);
         setSelectedCurrency(null);
+        
         // Обновляем данные после успешного улучшения
         await loadStorageData();
+        
+        // Обновляем баланс монет в реальном времени
+        try {
+          const amount = await api.getResourceAmount('main');
+          setPaymentCurrencyAmount(amount);
+        } catch (e) {
+          console.error('Ошибка при обновлении баланса монет:', e);
+        }
       } else {
         setError(result.error || 'Не удалось улучшить хранилище');
+        
+        // Если ошибка связана с недостатком ресурсов, обновляем количество монет
+        if (result.error && result.error.includes('Недостаточно ресурсов')) {
+          // Обновляем количество монет
+          const mainCurrency = await api.getCurrencyByType('main');
+          if (mainCurrency && mainCurrency.id) {
+            const amount = await api.getResourceAmount('main');
+            setPaymentCurrencyAmount(amount);
+          }
+        }
       }
     } catch (err: any) {
       console.error('Ошибка при улучшении хранилища:', err);
       setError(err.message || 'Ошибка при улучшении хранилища');
+      
+      // Если ошибка связана с недостатком ресурсов, обновляем количество монет
+      if (err.message && err.message.includes('Недостаточно ресурсов')) {
+        try {
+          const mainCurrency = await api.getCurrencyByType('main');
+          if (mainCurrency && mainCurrency.id) {
+            const amount = await api.getResourceAmount('main');
+            setPaymentCurrencyAmount(amount);
+          }
+        } catch (e) {
+          console.error('Ошибка при обновлении количества монет:', e);
+        }
+      }
     } finally {
       setProcessingCurrencyId(null);
     }
@@ -233,7 +309,7 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
       <div className="bg-gray-800 rounded-lg w-full max-w-md relative">
         {/* Крестик для закрытия */}
         <button 
-          onClick={onClose} 
+          onClick={onClose}
           className="absolute top-3 right-3 text-white text-xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-700"
         >
           ✕
@@ -304,7 +380,7 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
                     <div className="flex items-center">
                       <div className="flex-1 mr-3">
                         <div className="text-white text-xs flex justify-between mb-1">
-                          <span>{Math.floor(currency.amount)} / {currency.capacity}</span>
+                          <span>{Math.floor(currency.amount * 10) / 10} / {currency.capacity}</span>
                           <span className={currency.percentageFilled >= 100 ? 'text-red-400 font-bold' : ''}>
                             {Math.round(currency.percentageFilled)}%
                           </span>
@@ -330,7 +406,7 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
                           className={`flex items-center justify-center p-2 rounded-md w-10 h-10 ${
                             processingCurrencyId === currency.id
                               ? 'bg-gray-600 cursor-wait'
-                              : 'bg-blue-600 hover:bg-blue-700'
+                              : 'bg-green-500 hover:bg-green-600'
                           } text-white`}
                         >
                           {processingCurrencyId === currency.id ? (
@@ -355,12 +431,6 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
         {/* Нижний колонтитул */}
         <div className="border-t border-gray-700 p-3 flex justify-end">
           <button 
-            onClick={loadStorageData}
-            className="mr-3 py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md flex items-center"
-          >
-            <span className="mr-1">🔄</span> Обновить
-          </button>
-          <button 
             onClick={onClose} 
             className="py-1.5 px-3 bg-gray-600 hover:bg-gray-700 text-white rounded-md"
           >
@@ -368,49 +438,70 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
           </button>
         </div>
       </div>
-
+      
       {/* Модальное окно подтверждения улучшения */}
       {showUpgradeConfirm && selectedCurrency && (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]">
-          <div className="bg-gray-800 rounded-lg max-w-xs w-full p-4 border border-gray-700 shadow-xl">
-            <h3 className="text-white text-lg font-bold mb-3 text-center">Улучшение хранилища</h3>
+          <div className="bg-gray-800 rounded-lg max-w-[220px] w-full p-3 border border-gray-700 shadow-xl relative">
+            {/* Крестик для закрытия */}
+            <button 
+              onClick={closeUpgradeConfirmation}
+              className="absolute top-2 right-2 text-gray-400 hover:text-white text-lg w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-700"
+            >
+              ✕
+            </button>
             
-            <div className="text-center mb-4">
+            <h3 className="text-white text-base font-bold mb-2 text-center">Улучшение</h3>
+            
+            <div className="text-center mb-3">
               <div className="flex items-center justify-center text-white mb-2">
-                <span className="text-xl font-bold">{upgradeInfo[selectedCurrency.id]?.currentLevel}</span>
+                <span className="text-lg font-bold">{upgradeInfo[selectedCurrency.id]?.currentLevel}</span>
                 <span className="mx-2 text-gray-400">→</span>
-                <span className="text-xl font-bold text-green-500">{upgradeInfo[selectedCurrency.id]?.nextLevel}</span>
+                <span className="text-lg font-bold text-green-500">{upgradeInfo[selectedCurrency.id]?.nextLevel}</span>
               </div>
               
-              <div className="text-gray-300 text-sm mb-2">
-                Новая вместимость: <span className="text-white font-bold">{upgradeInfo[selectedCurrency.id]?.nextCapacity}</span>
+              <div className="text-gray-300 text-xs mb-2">
+                Вместимость: <span className="text-white font-bold">{upgradeInfo[selectedCurrency.id]?.nextCapacity}</span>
               </div>
               
-              <div className="flex items-center justify-center text-sm">
+              <div className="flex items-center justify-center text-xs mb-1">
                 <span className="text-gray-300">Стоимость:</span>
-                <span className="text-white font-bold ml-1 mr-1">{upgradeInfo[selectedCurrency.id]?.upgradeCost}</span>
+                <span className={`font-bold ml-1 mr-1 ${
+                  paymentCurrencyAmount < upgradeInfo[selectedCurrency.id]?.upgradeCost 
+                    ? 'text-red-400' 
+                    : 'text-white'
+                }`}>
+                  {paymentCurrencyAmount.toFixed(1)} / {upgradeInfo[selectedCurrency.id]?.upgradeCost}
+                </span>
                 <img 
-                  src="/assets/currencies/coin.png" 
-                  alt="Монеты" 
+                  src={paymentCurrencyIcon} 
+                  alt={paymentCurrencyName} 
                   className="w-4 h-4" 
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "/assets/currencies/coin.png";
+                  }}
                 />
               </div>
+              
+              {/* Отображение ошибки */}
+              {error && (
+                <div className="text-red-400 text-xs mt-2">
+                  {error.includes('Недостаточно ресурсов') ? 
+                    'Недостаточно монет' : 
+                    error
+                  }
+                </div>
+              )}
             </div>
             
-            <div className="flex justify-between">
-              <button
-                onClick={closeUpgradeConfirmation}
-                className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-md"
-              >
-                Отмена
-              </button>
+            <div className="flex justify-center">
               <button
                 onClick={() => handleUpgradeStorage(selectedCurrency.id, selectedCurrency.locationId)}
-                disabled={!upgradeInfo[selectedCurrency.id]?.canUpgrade || processingCurrencyId === selectedCurrency.id}
-                className={`py-2 px-4 rounded-md ${
-                  upgradeInfo[selectedCurrency.id]?.canUpgrade && processingCurrencyId !== selectedCurrency.id
-                    ? 'bg-green-600 hover:bg-green-700 text-white' 
-                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                disabled={processingCurrencyId === selectedCurrency.id || paymentCurrencyAmount < upgradeInfo[selectedCurrency.id]?.upgradeCost}
+                className={`py-1.5 px-4 rounded-md text-sm ${
+                  processingCurrencyId === selectedCurrency.id || paymentCurrencyAmount < upgradeInfo[selectedCurrency.id]?.upgradeCost
+                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-600 text-white'
                 }`}
               >
                 {processingCurrencyId === selectedCurrency.id ? 'Улучшение...' : 'Прокачать'}
