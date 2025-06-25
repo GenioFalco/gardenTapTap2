@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../lib/api';
+import { AppEvent, emit } from '../lib/events';
 
 interface StorageModalProps {
   show: boolean;
@@ -256,6 +257,9 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
         try {
           const amount = await api.getResourceAmount('main');
           setPaymentCurrencyAmount(amount);
+          
+          // Вызываем событие обновления валюты
+          emit(AppEvent.CURRENCY_UPDATED);
         } catch (e) {
           console.error('Ошибка при обновлении баланса монет:', e);
         }
@@ -269,6 +273,9 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
           if (mainCurrency && mainCurrency.id) {
             const amount = await api.getResourceAmount('main');
             setPaymentCurrencyAmount(amount);
+            
+            // Вызываем событие обновления валюты
+            emit(AppEvent.CURRENCY_UPDATED);
           }
         }
       }
@@ -283,6 +290,9 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
           if (mainCurrency && mainCurrency.id) {
             const amount = await api.getResourceAmount('main');
             setPaymentCurrencyAmount(amount);
+            
+            // Вызываем событие обновления валюты
+            emit(AppEvent.CURRENCY_UPDATED);
           }
         } catch (e) {
           console.error('Ошибка при обновлении количества монет:', e);

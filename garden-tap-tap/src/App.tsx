@@ -10,6 +10,7 @@ import StorageModal from './components/StorageModal';
 import * as api from './lib/api';
 import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
+import { AppEvent, subscribe, unsubscribe } from './lib/events';
 
 // Определение типа для совместимости с LevelUpModal
 interface ModalReward {
@@ -422,6 +423,29 @@ function App() {
     
     return () => clearTimeout(initialRefillTimer);
   }, [playerProgress, updateEnergy]);
+  
+  // Эффект для подписки на событие обновления валюты
+  useEffect(() => {
+    // Функция обновления баланса монет
+    const handleCurrencyUpdated = async () => {
+      try {
+        // Обновляем сад-коины
+        const coins = await api.getResourceAmount('main');
+        setGardenCoins(coins);
+        console.log('Баланс монет обновлен:', coins);
+      } catch (error) {
+        console.error('Ошибка при обновлении баланса монет:', error);
+      }
+    };
+    
+    // Подписываемся на событие обновления валюты
+    subscribe(AppEvent.CURRENCY_UPDATED, handleCurrencyUpdated);
+    
+    // Отписываемся при размонтировании
+    return () => {
+      unsubscribe(AppEvent.CURRENCY_UPDATED, handleCurrencyUpdated);
+    };
+  }, []);
   
   // Функция закрытия модального окна с возможностью поделиться достижением
   const handleCloseLevelUpModal = () => {

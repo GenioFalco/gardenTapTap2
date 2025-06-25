@@ -1935,7 +1935,7 @@ async function cleanupPlayerCurrencies() {
 initDatabase().then(async () => {
   console.log('База данных инициализирована');
   
-  // Добавляем столбец last_login в player_progress, если его еще нет
+  // Проверяем наличие столбца last_login в player_progress
   try {
     const tableInfo = await db.all("PRAGMA table_info(player_progress)");
     
@@ -1943,15 +1943,13 @@ initDatabase().then(async () => {
     const hasLastLogin = tableInfo.some(column => column.name === 'last_login');
     
     if (!hasLastLogin) {
-      await db.run('ALTER TABLE player_progress ADD COLUMN last_login TEXT DEFAULT CURRENT_TIMESTAMP');
-      console.log('Столбец last_login успешно добавлен в таблицу player_progress');
-      
-      // Инициализируем значения last_login текущим временем для существующих записей
-      await db.run('UPDATE player_progress SET last_login = CURRENT_TIMESTAMP');
-      console.log('Значения last_login успешно инициализированы');
+      console.log('Столбец last_login отсутствует в таблице player_progress');
+      console.log('Пожалуйста, запустите скрипт server/add_last_login_column.js для обновления структуры базы данных');
+    } else {
+      console.log('Столбец last_login найден в таблице player_progress');
     }
   } catch (error) {
-    console.error('Ошибка при обновлении структуры таблицы player_progress:', error);
+    console.error('Ошибка при проверке структуры таблицы player_progress:', error);
   }
   
   // Запускаем сервер после инициализации базы данных

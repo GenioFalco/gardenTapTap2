@@ -132,6 +132,7 @@ const createTables = () => {
                   energy INTEGER NOT NULL DEFAULT 100,
                   max_energy INTEGER NOT NULL DEFAULT 100,
                   last_energy_refill_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  last_login TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   PRIMARY KEY (user_id)
                 )
               `, (err) => {
