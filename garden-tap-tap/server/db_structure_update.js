@@ -34,22 +34,25 @@ const db = new sqlite3.Database(dbPath, (err) => {
           cleanupCurrenciesTable(() => {
             // 5. Создание таблицы character_appearances
             createCharacterAppearancesTable(() => {
-              // Коммитим изменения
-              db.run('COMMIT', (err) => {
-                if (err) {
-                  console.error('Ошибка при завершении транзакции:', err.message);
-                  db.run('ROLLBACK');
-                } else {
-                  console.log('Миграция успешно выполнена!');
-                }
-                
-                // Закрываем соединение с базой данных
-                db.close((err) => {
+              // 6. Обновление таблицы player_progress для добавления столбца last_login
+              updatePlayerProgressTable(() => {
+                // Коммитим изменения
+                db.run('COMMIT', (err) => {
                   if (err) {
-                    console.error('Ошибка при закрытии базы данных:', err.message);
+                    console.error('Ошибка при завершении транзакции:', err.message);
+                    db.run('ROLLBACK');
                   } else {
-                    console.log('Соединение с базой данных закрыто.');
+                    console.log('Миграция успешно выполнена!');
                   }
+                  
+                  // Закрываем соединение с базой данных
+                  db.close((err) => {
+                    if (err) {
+                      console.error('Ошибка при закрытии базы данных:', err.message);
+                    } else {
+                      console.log('Соединение с базой данных закрыто.');
+                    }
+                  });
                 });
               });
             });
@@ -415,5 +418,55 @@ function createCharacterAppearancesTable(callback) {
       console.log(`Добавлено ${insertCount} записей в таблицу character_appearances.`);
       callback();
     });
+  });
+}
+
+// Функция для обновления таблицы player_progress
+function updatePlayerProgressTable(callback) {
+  console.log('Обновление таблицы player_progress...');
+  
+  // Проверяем, есть ли столбец last_login в таблице player_progress
+  db.all("PRAGMA table_info(player_progress)", (err, columns) => {
+    if (err) {
+      console.error('Ошибка при получении информации о таблице player_progress:', err.message);
+      db.run('ROLLBACK');
+      db.close();
+      process.exit(1);
+    }
+    
+    // Проверяем, есть ли столбец last_login
+    const hasLastLogin = columns.some(column => column.name === 'last_login');
+    
+    if (!hasLastLogin) {
+      console.log('Столбец last_login не найден, добавляем...');
+      
+      // Добавляем столбец last_login
+      db.run(`ALTER TABLE player_progress ADD COLUMN last_login TEXT DEFAULT CURRENT_TIMESTAMP`, (err) => {
+        if (err) {
+          console.error('Ошибка при добавлении столбца last_login:', err.message);
+          db.run('ROLLBACK');
+          db.close();
+          process.exit(1);
+        }
+        
+        console.log('Столбец last_login успешно добавлен в таблицу player_progress');
+        
+        // Инициализируем значения last_login текущим временем для существующих записей
+        db.run('UPDATE player_progress SET last_login = CURRENT_TIMESTAMP', (err) => {
+          if (err) {
+            console.error('Ошибка при инициализации значений last_login:', err.message);
+            db.run('ROLLBACK');
+            db.close();
+            process.exit(1);
+          }
+          
+          console.log('Значения last_login успешно инициализированы');
+          callback();
+        });
+      });
+    } else {
+      console.log('Столбец last_login уже существует в таблице player_progress');
+      callback();
+    }
   });
 } 

@@ -42,9 +42,10 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
   const [currencies, setCurrencies] = useState<StorageCurrency[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showUpgradeSection, setShowUpgradeSection] = useState(false);
   const [processingCurrencyId, setProcessingCurrencyId] = useState<string | null>(null);
   const [upgradeInfo, setUpgradeInfo] = useState<Record<string, UpgradeInfo>>({});
+  const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<StorageCurrency | null>(null);
 
   useEffect(() => {
     if (show) {
@@ -71,6 +72,11 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
       
       for (const location of unlockedLocations) {
         try {
+          // Пропускаем основную валюту (сад-коины)
+          if ((location.currencyType as string) === 'main' || (location.currency_type as string) === 'main') {
+            continue;
+          }
+          
           // Для леса (локация 1) используем валюту "forest"
           if (location.id === 1) {
             const currencyId = '1'; // ID для леса
@@ -84,6 +90,13 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
               
               // Находим валюту в списке всех валют
               const currency = allCurrencies.find(c => String(c.id) === currencyId);
+              
+              // Получаем информацию об улучшении склада
+              const upgradeInfo = await api.getStorageUpgradeInfo(location.id, currencyId);
+              setUpgradeInfo(prev => ({
+                ...prev,
+                [currencyId]: upgradeInfo
+              }));
               
               storageData.push({
                 id: currencyId,
@@ -103,6 +116,9 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
           // Для других локаций используем их валюты
           else if (location.currencyType || location.currency_type) {
             const currencyType = (location.currencyType || location.currency_type || '').toLowerCase();
+            
+            // Пропускаем основную валюту
+            if (currencyType === 'main') continue;
             
             // Карта соответствия типов валют и их ID
             const currencyMap: Record<string, string> = {
@@ -128,6 +144,13 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
               const currency = allCurrencies.find(c => 
                 String(c.id) === currencyId || c.currency_type === currencyType
               );
+              
+              // Получаем информацию об улучшении склада
+              const upgradeInfo = await api.getStorageUpgradeInfo(location.id, currencyId);
+              setUpgradeInfo(prev => ({
+                ...prev,
+                [currencyId]: upgradeInfo
+              }));
               
               storageData.push({
                 id: currencyId,
@@ -158,18 +181,16 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
     }
   };
 
-  const loadUpgradeInfo = async (currencyId: string, locationId: number) => {
-    try {
-      const info = await api.getStorageUpgradeInfo(locationId, currencyId);
-      if (info) {
-        setUpgradeInfo(prev => ({
-          ...prev,
-          [currencyId]: info
-        }));
-      }
-    } catch (err) {
-      console.error(`Ошибка при загрузке информации об улучшении для валюты ${currencyId}:`, err);
-    }
+  // Открыть диалог подтверждения улучшения
+  const showUpgradeConfirmation = (currency: StorageCurrency) => {
+    setSelectedCurrency(currency);
+    setShowUpgradeConfirm(true);
+  };
+
+  // Закрыть диалог подтверждения улучшения
+  const closeUpgradeConfirmation = () => {
+    setShowUpgradeConfirm(false);
+    setSelectedCurrency(null);
   };
 
   const handleUpgradeStorage = async (currencyId: string, locationId: number) => {
@@ -180,11 +201,11 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
       const result = await api.upgradeStorage(locationId, currencyId);
       
       if (result.success) {
+        // Закрываем диалог подтверждения
+        setShowUpgradeConfirm(false);
+        setSelectedCurrency(null);
         // Обновляем данные после успешного улучшения
         await loadStorageData();
-        
-        // Обновляем информацию об улучшении
-        await loadUpgradeInfo(currencyId, locationId);
       } else {
         setError(result.error || 'Не удалось улучшить хранилище');
       }
@@ -196,20 +217,16 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
     }
   };
 
-  const toggleUpgradeSection = async () => {
-    const newState = !showUpgradeSection;
-    setShowUpgradeSection(newState);
-    
-    // Если открываем раздел улучшений, загружаем информацию для всех валют
-    if (newState) {
-      for (const currency of currencies) {
-        await loadUpgradeInfo(currency.id, currency.locationId);
-      }
-    }
-  };
-
   // Если модальное окно не должно отображаться, возвращаем null
   if (!show) return null;
+
+  // Получить цвет прогресс-бара в зависимости от заполненности
+  const getProgressColor = (percentage: number): string => {
+    if (percentage >= 100) return 'bg-red-500'; // Переполнено - красный
+    if (percentage >= 90) return 'bg-yellow-500'; // Почти полное - желтый
+    if (percentage >= 75) return 'bg-yellow-300'; // Более 75% - светло-желтый
+    return 'bg-green-500'; // Меньше 75% - зеленый
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
@@ -217,13 +234,13 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
         {/* Крестик для закрытия */}
         <button 
           onClick={onClose} 
-          className="absolute top-2 right-2 text-white text-xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-700"
+          className="absolute top-3 right-3 text-white text-xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-700"
         >
           ✕
         </button>
         
         {/* Заголовок */}
-        <div className="p-4 border-b border-gray-700">
+        <div className="p-3 border-b border-gray-700">
           <h2 className="text-xl font-bold text-white">Склад</h2>
           <p className="text-gray-400 text-sm">Управление ресурсами и хранилищем</p>
         </div>
@@ -236,107 +253,172 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
         )}
         
         {/* Список валют */}
-        <div className="p-4 max-h-96 overflow-y-auto">
+        <div className="p-3 max-h-[70vh] overflow-y-auto">
           {loading ? (
-            <div className="text-center text-white py-4">Загрузка...</div>
+            <div className="text-center text-white py-10">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+              Загрузка...
+            </div>
           ) : currencies.length === 0 ? (
-            <div className="text-center text-white py-4">У вас пока нет ресурсов</div>
+            <div className="text-center text-white py-10">
+              <div className="text-5xl mb-4">📦</div>
+              <p>У вас пока нет доступных ресурсов для хранения</p>
+              <p className="text-sm text-gray-400 mt-2">Откройте новые локации, чтобы получить доступ к ресурсам</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {currencies.map(currency => (
-                <div 
-                  key={currency.id}
-                  className={`p-3 rounded-lg ${
-                    currency.percentageFilled >= 100 
-                      ? 'bg-red-900 bg-opacity-40' 
-                      : 'bg-gray-700'
-                  }`}
-                >
-                  <div className="flex items-center mb-1">
-                    <img 
-                      src={currency.imagePath} 
-                      alt={currency.name} 
-                      className="w-8 h-8 mr-2 rounded-full object-cover"
-                      onError={(e) => {
-                        const target = e.currentTarget as HTMLImageElement;
-                        target.src = '/assets/currencies/default.png';
-                      }}
-                    />
-                    <div className="flex-1">
-                      <div className="text-sm text-white">{currency.name}</div>
-                      <div className="text-xs text-gray-300">{currency.locationName}</div>
-                    </div>
-                    {currency.percentageFilled >= 100 && (
-                      <div className="text-yellow-500 text-xl ml-2" title="Хранилище заполнено">
-                        ⚠️
+              {currencies.map(currency => {
+                const info = upgradeInfo[currency.id];
+                const isMaxLevel = info ? info.currentLevel === info.nextLevel : false;
+                
+                return (
+                  <div 
+                    key={currency.id}
+                    className={`rounded-lg border ${
+                      currency.percentageFilled >= 100 
+                        ? 'border-red-500 bg-red-900 bg-opacity-20' 
+                        : 'border-gray-600 bg-gray-700'
+                    } overflow-hidden shadow-md p-3`}
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      {/* Уровень хранилища (слева) */}
+                      <div className="bg-gray-800 text-white px-2 py-1 rounded-md text-sm font-medium">
+                        Ур. {currency.storageLevel}
                       </div>
-                    )}
-                  </div>
-                  
-                  <div className="mt-2">
-                    <div className="flex justify-between text-xs text-white mb-1">
-                      <span>Уровень: {currency.storageLevel}</span>
-                      <span>{Math.floor(currency.amount)} / {currency.capacity}</span>
+                      
+                      {/* Название и иконка валюты (справа) */}
+                      <div className="flex items-center">
+                        <span className="text-white mr-2">{currency.name}</span>
+                        <img 
+                          src={currency.imagePath} 
+                          alt="Валюта" 
+                          className="w-6 h-6 object-contain" 
+                          onError={(e) => { 
+                            (e.target as HTMLImageElement).src = '/assets/currencies/default.png'; 
+                          }} 
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full ${
-                          currency.percentageFilled >= 100 
-                            ? 'bg-red-500' 
-                            : currency.percentageFilled > 80 
-                              ? 'bg-yellow-500' 
-                              : 'bg-green-500'
-                        }`}
-                        style={{ width: `${Math.min(100, currency.percentageFilled)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  {/* Секция улучшения (если открыта) */}
-                  {showUpgradeSection && (
-                    <div className="mt-2 pt-2 border-t border-gray-600">
-                      {upgradeInfo[currency.id] ? (
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-gray-300">
-                            <div>Следующий уровень: {upgradeInfo[currency.id].nextLevel}</div>
-                            <div>Новая вместимость: {upgradeInfo[currency.id].nextCapacity}</div>
-                            <div>Стоимость: {upgradeInfo[currency.id].upgradeCost} сад-коинов</div>
+                    
+                    {/* Прогресс-бар и кнопка улучшения */}
+                    <div className="flex items-center">
+                      <div className="flex-1 mr-3">
+                        <div className="text-white text-xs flex justify-between mb-1">
+                          <span>{Math.floor(currency.amount)} / {currency.capacity}</span>
+                          <span className={currency.percentageFilled >= 100 ? 'text-red-400 font-bold' : ''}>
+                            {Math.round(currency.percentageFilled)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${getProgressColor(currency.percentageFilled)}`}
+                            style={{ width: `${Math.min(currency.percentageFilled, 100)}%` }}
+                          ></div>
+                        </div>
+                        {currency.percentageFilled >= 100 && (
+                          <div className="text-red-400 text-xs mt-1">
+                            <span className="mr-1">⚠️</span> Переполнено
                           </div>
-                          <button
-                            onClick={() => handleUpgradeStorage(currency.id, currency.locationId)}
-                            disabled={!upgradeInfo[currency.id].canUpgrade || processingCurrencyId === currency.id}
-                            className={`px-3 py-1 text-xs rounded ${
-                              upgradeInfo[currency.id].canUpgrade && processingCurrencyId !== currency.id
-                                ? 'bg-green-600 hover:bg-green-700 text-white'
-                                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                            }`}
-                          >
-                            {processingCurrencyId === currency.id ? 'Улучшение...' : 'Улучшить'}
-                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Кнопка улучшения */}
+                      {info && !isMaxLevel ? (
+                        <button
+                          onClick={() => showUpgradeConfirmation(currency)}
+                          disabled={processingCurrencyId === currency.id}
+                          className={`flex items-center justify-center p-2 rounded-md w-10 h-10 ${
+                            processingCurrencyId === currency.id
+                              ? 'bg-gray-600 cursor-wait'
+                              : 'bg-blue-600 hover:bg-blue-700'
+                          } text-white`}
+                        >
+                          {processingCurrencyId === currency.id ? (
+                            <span className="animate-spin text-lg">⟳</span>
+                          ) : (
+                            <span className="text-xl">↑</span>
+                          )}
+                        </button>
+                      ) : info && isMaxLevel ? (
+                        <div className="bg-gray-600 text-gray-300 p-1 text-xs rounded-md">
+                          Макс.
                         </div>
-                      ) : (
-                        <div className="text-xs text-gray-400 text-center">
-                          Загрузка информации...
-                        </div>
-                      )}
+                      ) : null}
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
         
-        {/* Кнопка для отображения/скрытия секции улучшения */}
-        <div className="p-4 border-t border-gray-700">
-          <button
-            onClick={toggleUpgradeSection}
-            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+        {/* Нижний колонтитул */}
+        <div className="border-t border-gray-700 p-3 flex justify-end">
+          <button 
+            onClick={loadStorageData}
+            className="mr-3 py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md flex items-center"
           >
-            {showUpgradeSection ? 'Скрыть улучшения' : 'Показать улучшения'}
+            <span className="mr-1">🔄</span> Обновить
+          </button>
+          <button 
+            onClick={onClose} 
+            className="py-1.5 px-3 bg-gray-600 hover:bg-gray-700 text-white rounded-md"
+          >
+            Закрыть
           </button>
         </div>
       </div>
+
+      {/* Модальное окно подтверждения улучшения */}
+      {showUpgradeConfirm && selectedCurrency && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]">
+          <div className="bg-gray-800 rounded-lg max-w-xs w-full p-4 border border-gray-700 shadow-xl">
+            <h3 className="text-white text-lg font-bold mb-3 text-center">Улучшение хранилища</h3>
+            
+            <div className="text-center mb-4">
+              <div className="flex items-center justify-center text-white mb-2">
+                <span className="text-xl font-bold">{upgradeInfo[selectedCurrency.id]?.currentLevel}</span>
+                <span className="mx-2 text-gray-400">→</span>
+                <span className="text-xl font-bold text-green-500">{upgradeInfo[selectedCurrency.id]?.nextLevel}</span>
+              </div>
+              
+              <div className="text-gray-300 text-sm mb-2">
+                Новая вместимость: <span className="text-white font-bold">{upgradeInfo[selectedCurrency.id]?.nextCapacity}</span>
+              </div>
+              
+              <div className="flex items-center justify-center text-sm">
+                <span className="text-gray-300">Стоимость:</span>
+                <span className="text-white font-bold ml-1 mr-1">{upgradeInfo[selectedCurrency.id]?.upgradeCost}</span>
+                <img 
+                  src="/assets/currencies/coin.png" 
+                  alt="Монеты" 
+                  className="w-4 h-4" 
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-between">
+              <button
+                onClick={closeUpgradeConfirmation}
+                className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-md"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => handleUpgradeStorage(selectedCurrency.id, selectedCurrency.locationId)}
+                disabled={!upgradeInfo[selectedCurrency.id]?.canUpgrade || processingCurrencyId === selectedCurrency.id}
+                className={`py-2 px-4 rounded-md ${
+                  upgradeInfo[selectedCurrency.id]?.canUpgrade && processingCurrencyId !== selectedCurrency.id
+                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {processingCurrencyId === selectedCurrency.id ? 'Улучшение...' : 'Прокачать'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1960,6 +1960,31 @@ initDatabase().then(async () => {
   console.error('Ошибка при инициализации базы данных:', err);
 });
 
+// Функция для получения идентификатора пользователя из запроса
+function getUserId(req) {
+  // Проверяем, есть ли идентификатор в заголовке
+  if (req.headers && req.headers['x-user-id']) {
+    console.log(`Using user ID from header: ${req.headers['x-user-id']}`);
+    return req.headers['x-user-id'];
+  }
+  
+  // Если нет в заголовке, проверяем параметры запроса
+  if (req.query && req.query.userId) {
+    console.log(`Using user ID from query: ${req.query.userId}`);
+    return req.query.userId;
+  }
+  
+  // Если нет в параметрах, проверяем тело запроса
+  if (req.body && req.body.userId) {
+    console.log(`Using user ID from body: ${req.body.userId}`);
+    return req.body.userId;
+  }
+  
+  // Если ничего не нашли, используем тестовый ID
+  console.log('Using test user ID');
+  return 'test_user';
+}
+
 // API для хранилища ресурсов
 // Получить информацию о хранилище для определенной локации и валюты
 app.get('/api/player/storage/:locationId/:currencyId', async (req, res) => {
