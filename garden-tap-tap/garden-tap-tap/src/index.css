@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+@layer components {
+  .tap-button {
+    @apply w-32 h-32 md:w-40 md:h-40 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xl md:text-2xl shadow-lg active:shadow-md transition-all active:scale-95 select-none;
+  }
+  
+  .upgrade-button {
+    @apply w-full max-w-xs py-3 px-6 bg-secondary rounded-lg flex items-center justify-between text-white font-semibold shadow-md active:shadow-sm transition-all active:scale-95 select-none;
+  }
+  
+  .location-button {
+    @apply w-24 h-16 md:w-28 md:h-20 bg-accent rounded-lg flex flex-col items-center justify-center text-center text-sm p-2 shadow-md active:shadow-sm transition-all active:scale-95 select-none;
+  }
+  
+  /* Стили для верхней панели */
+  .top-panel {
+    @apply fixed top-0 left-0 right-0 bg-gray-800 bg-opacity-70 backdrop-blur-sm z-10 shadow-lg;
+  }
+  
+  .avatar {
+    @apply w-16 h-16 rounded-full overflow-hidden bg-gray-600 flex-shrink-0 border-2 border-blue-400 shadow-md;
+  }
+  
+  .progress-bar {
+    @apply w-full h-3 bg-gray-600 rounded-full overflow-hidden;
+  }
+  
+  .progress-fill {
+    @apply h-full transition-all duration-300;
+  }
+  
+  .divider {
+    @apply w-full h-px bg-white opacity-70;
+  }
+  
+  .currency-badge {
+    @apply flex items-center bg-gray-700 bg-opacity-50 rounded-full px-2 py-1;
+  }
+}
+
+@keyframes bounce-small {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bounce-small {
+  animation: bounce-small 0.5s ease-in-out;
+}
