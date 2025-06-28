@@ -310,13 +310,18 @@ const api = {
         return 0;
       }
       
+      console.log(`Получение количества ресурсов с ID ${actualCurrencyId} для пользователя ${userId}`);
+      
       const result = await getOne(`
         SELECT amount
         FROM player_currencies
         WHERE user_id = ? AND currency_id = ?
       `, [userId, actualCurrencyId]);
       
-      return result ? parseFloat(result.amount) : 0;
+      const amount = result ? parseFloat(result.amount) : 0;
+      console.log(`Количество ресурсов с ID ${actualCurrencyId}: ${amount}`);
+      
+      return amount;
     } catch (error) {
       console.error('Ошибка при получении ресурсов игрока:', error);
       return 0;
@@ -334,9 +339,14 @@ const api = {
         return false;
       }
       
+      console.log(`Попытка потратить ${amount} ресурсов с ID ${actualCurrencyId} для пользователя ${userId}`);
+      
       // Проверяем, достаточно ли ресурсов
       const currentAmount = await api.getResourceAmount(userId, actualCurrencyId);
+      console.log(`Текущее количество ресурсов: ${currentAmount}, требуется: ${amount}`);
+      
       if (currentAmount < amount) {
+        console.log(`Недостаточно ресурсов: ${currentAmount} < ${amount}`);
         return false;
       }
       
@@ -346,6 +356,10 @@ const api = {
         SET amount = amount - ?
         WHERE user_id = ? AND currency_id = ?
       `, [parseFloat(amount), userId, actualCurrencyId]);
+      
+      // Проверяем, что ресурсы действительно списались
+      const newAmount = await api.getResourceAmount(userId, actualCurrencyId);
+      console.log(`Новое количество ресурсов после списания: ${newAmount}`);
       
       return true;
     } catch (error) {
@@ -546,19 +560,43 @@ const api = {
     try {
       // Получаем инструмент
       const tool = await getOne(`
-        SELECT unlock_cost as unlockCost, currency_id as currencyId
+        SELECT 
+          id, 
+          name,
+          unlock_cost as unlockCost, 
+          currency_id as currencyId,
+          character_id as characterId
         FROM tools
         WHERE id = ?
       `, [toolId]);
       
+      if (!tool) {
+        console.error(`Инструмент с ID ${toolId} не найден`);
+        return false;
+      }
+      
+      console.log(`Попытка улучшения инструмента: ${JSON.stringify(tool)}`);
+      
       // Проверяем, достаточно ли ресурсов
-      if (!tool || !(await api.spendResources(userId, tool.currencyId, tool.unlockCost))) {
+      const currentAmount = await api.getResourceAmount(userId, tool.currencyId);
+      console.log(`Текущее количество ресурсов: ${currentAmount}, требуется: ${tool.unlockCost}`);
+      
+      if (currentAmount < tool.unlockCost) {
+        console.log(`Недостаточно ресурсов для улучшения инструмента: ${currentAmount} < ${tool.unlockCost}`);
+        return false;
+      }
+      
+      // Списываем ресурсы
+      const spendResult = await api.spendResources(userId, tool.currencyId, tool.unlockCost);
+      if (!spendResult) {
+        console.error('Не удалось списать ресурсы');
         return false;
       }
       
       // Разблокируем инструмент
       await api.unlockTool(userId, toolId);
       
+      console.log(`Инструмент ${toolId} успешно улучшен для пользователя ${userId}`);
       return true;
     } catch (error) {
       console.error('Ошибка при улучшении инструмента:', error);

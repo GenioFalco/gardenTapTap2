@@ -306,70 +306,95 @@ export const updatePlayerEnergy = async (energy: number): Promise<void> => {
 };
 
 // Добавить ресурсы игроку
-export const addResources = async (currencyType: CurrencyType, amount: number): Promise<void> => {
-  // Если тип валюты не определен, используем тип по умолчанию
-  if (!currencyType) {
-    console.warn('addResources вызван с неопределенным типом валюты, используем FOREST');
-    currencyType = CurrencyType.FOREST;
-  }
+export const addResources = async (currencyIdentifier: CurrencyType | string | number, amount: number): Promise<void> => {
+  try {
+    // Если идентификатор валюты не определен, используем тип по умолчанию
+    if (!currencyIdentifier) {
+      console.warn('addResources вызван с неопределенным идентификатором валюты, используем FOREST');
+      currencyIdentifier = CurrencyType.FOREST;
+    }
 
-  const currency = await db.playerCurrencies
-    .where('currencyType')
-    .equals(currencyType)
-    .first();
-  
-  if (currency) {
-    await db.playerCurrencies.update(currencyType, {
-      amount: currency.amount + amount
-    });
-  } else {
-    // Преобразуем тип валюты в идентификатор
-    const currencyId = currencyType.toLowerCase();
+    const currency = await db.playerCurrencies
+      .where('currencyType')
+      .equals(currencyIdentifier)
+      .first();
     
-    await db.playerCurrencies.add({
-      currencyType,
-      amount,
-      currencyId
-    });
+    if (currency) {
+      // Обновляем существующую запись
+      currency.amount += amount;
+      await db.playerCurrencies.put(currency);
+    } else {
+      // Создаем новую запись
+      // Преобразуем идентификатор валюты в строку для currencyId
+      const currencyId = String(currencyIdentifier).toLowerCase();
+      
+      // Если currencyIdentifier не является значением CurrencyType, используем FOREST
+      const currencyTypeValue = typeof currencyIdentifier === 'string' && 
+                              Object.values(CurrencyType).includes(currencyIdentifier as CurrencyType) 
+                              ? currencyIdentifier as CurrencyType 
+                              : CurrencyType.FOREST;
+      
+      await db.playerCurrencies.add({
+        currencyType: currencyTypeValue,
+        amount,
+        currencyId
+      });
+    }
+  } catch (error) {
+    console.error('Ошибка при добавлении ресурсов:', error);
   }
 };
 
 // Получить количество ресурсов игрока
-export const getResourceAmount = async (currencyType: CurrencyType): Promise<number> => {
-  // Если тип валюты не определен, используем тип по умолчанию
-  if (!currencyType) {
-    console.warn('getResourceAmount вызван с неопределенным типом валюты, используем FOREST');
-    currencyType = CurrencyType.FOREST;
-  }
+export const getResourceAmount = async (currencyIdentifier: CurrencyType | string | number): Promise<number> => {
+  try {
+    // Если тип валюты не определен, используем тип по умолчанию
+    if (!currencyIdentifier) {
+      console.warn('getResourceAmount вызван с неопределенным типом валюты, используем FOREST');
+      currencyIdentifier = CurrencyType.FOREST;
+    }
 
-  const currency = await db.playerCurrencies
-    .where('currencyType')
-    .equals(currencyType)
-    .first();
-  
-  return currency ? currency.amount : 0;
+    const currency = await db.playerCurrencies
+      .where('currencyType')
+      .equals(currencyIdentifier)
+      .first();
+    
+    return currency ? currency.amount : 0;
+  } catch (error) {
+    console.error('Ошибка при получении количества ресурсов:', error);
+    return 0;
+  }
 };
 
 // Потратить ресурсы
-export const spendResources = async (currencyType: CurrencyType, amount: number): Promise<boolean> => {
-  // Если тип валюты не определен, используем тип по умолчанию
-  if (!currencyType) {
-    console.warn('spendResources вызван с неопределенным типом валюты, используем FOREST');
-    currencyType = CurrencyType.FOREST;
-  }
-
-  // Проверяем, достаточно ли ресурсов
-  const currentAmount = await getResourceAmount(currencyType);
-  if (currentAmount < amount) {
+export const spendResources = async (currencyIdentifier: CurrencyType | string | number, amount: number): Promise<boolean> => {
+  try {
+    // Получаем текущее количество ресурсов
+    const currentAmount = await getResourceAmount(currencyIdentifier);
+    
+    // Проверяем, достаточно ли ресурсов
+    if (currentAmount < amount) {
+      return false;
+    }
+    
+    // Списываем ресурсы
+    await db.transaction('rw', db.playerCurrencies, async () => {
+      const currency = await db.playerCurrencies
+        .where('currencyType')
+        .equals(currencyIdentifier)
+        .first();
+      
+      if (currency) {
+        currency.amount -= amount;
+        await db.playerCurrencies.put(currency);
+      }
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Ошибка при списании ресурсов:', error);
     return false;
   }
-  
-  // Тратим ресурсы
-  await db.playerCurrencies.update(currencyType, {
-    amount: currentAmount - amount
-  });
-  
-  return true;
 };
 
 // Разблокировать инструмент
@@ -567,11 +592,11 @@ export const upgradeTool = async (toolId: number): Promise<boolean> => {
   }
   
   // Проверяем наличие необходимых полей
-  const currencyType = tool.currencyType || CurrencyType.FOREST;
+  const currencyIdentifier = tool.currencyId || tool.currencyType || CurrencyType.FOREST;
   const cost = tool.unlockCost || 0;
   
   // Проверяем, достаточно ли ресурсов
-  if (!(await spendResources(currencyType, cost))) {
+  if (!(await spendResources(currencyIdentifier, cost))) {
     return false;
   }
   

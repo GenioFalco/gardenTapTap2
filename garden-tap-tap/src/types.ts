@@ -41,7 +41,8 @@ export interface Tool {
   description: string;
   unlockLevel: number;
   unlockCost: number;
-  currencyType: CurrencyType;
+  currencyType?: CurrencyType;  // Старое поле
+  currencyId?: string | number; // Новое поле
   characterId: number;
   imagePath?: string;
   main_coins_power: number;      // Сколько садкоинов даёт за тап

@@ -45,13 +45,42 @@ const UpgradeModal = ({
     }
   };
   
+  // Функция для безопасного преобразования типа валюты в строку
+  const getCurrencyTypeString = (currencyType: any): string => {
+    if (currencyType === undefined || currencyType === null) return 'ресурсов';
+    
+    // Карта соответствия ID валют и их названий
+    const currencyMap: Record<string, string> = {
+      '1': 'forest',
+      '2': 'garden',
+      '3': 'winter',
+      '4': 'mountain',
+      '5': 'main',
+      '6': 'desert',
+      '7': 'lake'
+    };
+    
+    // Если это число или строковое представление числа, пробуем найти в карте
+    if (typeof currencyType === 'number' || !isNaN(Number(currencyType))) {
+      const currencyString = currencyMap[String(currencyType)];
+      return currencyString ? currencyString.toLowerCase() : 'ресурсов';
+    }
+    
+    // Если это строка, просто приводим к нижнему регистру
+    if (typeof currencyType === 'string') {
+      return currencyType.toLowerCase();
+    }
+    
+    return 'ресурсов';
+  };
+  
   if (!show) return null;
   
   // Обработчик покупки инструмента с проверкой ресурсов
   const handleBuyTool = async (tool: Tool) => {
     // Проверяем, достаточно ли ресурсов для покупки
     if (tool.unlockCost > locationCurrency) {
-      setErrorMessage(`Недостаточно ресурсов: необходимо ${tool.unlockCost} ${locationCurrencyType.toLowerCase()}`);
+      setErrorMessage(`Недостаточно ресурсов: необходимо ${tool.unlockCost} ${getCurrencyTypeString(locationCurrencyType)}`);
       setTimeout(() => setErrorMessage(null), 3000);
       return;
     }
@@ -182,7 +211,7 @@ const UpgradeModal = ({
                             }`}
                             onClick={() => handleBuyTool(tool)}
                           >
-                            <span className="font-bold">{locationCurrency.toFixed(2)}/{tool.unlockCost}</span> {tool.currencyType.toLowerCase()}
+                            <span className="font-bold">{locationCurrency.toFixed(2)}/{tool.unlockCost}</span> {getCurrencyTypeString(tool.currencyType)}
                           </button>
                         </div>
                       )}

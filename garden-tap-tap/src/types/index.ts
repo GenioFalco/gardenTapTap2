@@ -27,7 +27,8 @@ export interface Tool {
   power: number;
   unlockLevel: number;
   unlockCost: number;
-  currencyType: CurrencyType;
+  currencyType?: CurrencyType;  // Старое поле
+  currencyId?: string | number; // Новое поле
   imagePath: string;
 }
 

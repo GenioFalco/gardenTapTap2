@@ -206,18 +206,20 @@ app.get('/api/characters/:id/tools', async (req, res) => {
     // Получаем инструменты персонажа
     const characterTools = await db.all(`
       SELECT 
-        id, 
-        name, 
-        character_id, 
-        power,
-        unlock_level, 
-        unlock_cost, 
-        currency_id,
-        image_path,
-        main_coins_power,
-        location_coins_power
-      FROM tools 
-      WHERE character_id = ?
+        t.id, 
+        t.name, 
+        t.character_id, 
+        t.power,
+        t.unlock_level, 
+        t.unlock_cost, 
+        t.currency_id,
+        t.image_path,
+        t.main_coins_power,
+        t.location_coins_power,
+        c.code as currency_type
+      FROM tools t
+      LEFT JOIN currencies c ON t.currency_id = c.id
+      WHERE t.character_id = ?
     `, [characterId]);
     
     // Получаем разблокированные инструменты
@@ -238,12 +240,18 @@ app.get('/api/characters/:id/tools', async (req, res) => {
     
     const equippedToolId = equippedTool ? equippedTool.tool_id : null;
     
-    // Добавляем флаги к инструментам
-    const toolsWithInfo = characterTools.map(tool => {
-      const isUnlocked = unlockedToolIds.includes(tool.id);
-      const isEquipped = tool.id === equippedToolId;
-      const canEquip = isUnlocked || tool.unlock_level <= playerProgress.level;
+    // Преобразуем результаты для клиента
+    const formattedTools = characterTools.map(tool => {
+      // Добавляем флаг, указывающий, разблокирован ли инструмент
+      const is_unlocked = unlockedToolIds.includes(tool.id);
       
+      // Добавляем флаг, указывающий, экипирован ли инструмент
+      const is_equipped = tool.id === equippedToolId;
+      
+      // Добавляем флаг, указывающий, может ли игрок экипировать инструмент
+      const can_equip = is_unlocked && !is_equipped;
+      
+      // Преобразуем имена полей для клиента
       return {
         id: tool.id,
         name: tool.name,
@@ -252,18 +260,19 @@ app.get('/api/characters/:id/tools', async (req, res) => {
         unlockLevel: tool.unlock_level,
         unlockCost: tool.unlock_cost,
         currencyId: tool.currency_id,
+        currencyType: tool.currency_type, // Добавляем тип валюты для совместимости
         imagePath: tool.image_path,
-        mainCoinsPower: tool.main_coins_power,
-        locationCoinsPower: tool.location_coins_power,
-        is_unlocked: isUnlocked,
-        is_equipped: isEquipped,
-        can_equip: canEquip
+        main_coins_power: tool.main_coins_power,
+        location_coins_power: tool.location_coins_power,
+        is_unlocked,
+        is_equipped,
+        can_equip
       };
     });
     
-    res.json(toolsWithInfo);
+    res.json(formattedTools);
   } catch (error) {
-    console.error('Ошибка при получении инструментов:', error);
+    console.error('Ошибка при получении инструментов персонажа:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -286,10 +295,34 @@ app.get('/api/player/characters/:id/equipped-tool', async (req, res) => {
     
     // Получаем информацию об инструменте
     const tool = await db.get(`
-      SELECT * FROM tools WHERE id = ?
+      SELECT 
+        t.*, 
+        c.code as currency_type 
+      FROM tools t
+      LEFT JOIN currencies c ON t.currency_id = c.id
+      WHERE t.id = ?
     `, [equipped.tool_id]);
     
-    res.json(tool);
+    if (!tool) {
+      return res.status(404).json({ error: 'Инструмент не найден' });
+    }
+    
+    // Преобразуем имена полей для клиента
+    const formattedTool = {
+      id: tool.id,
+      name: tool.name,
+      characterId: tool.character_id,
+      power: tool.power,
+      unlockLevel: tool.unlock_level,
+      unlockCost: tool.unlock_cost,
+      currencyId: tool.currency_id,
+      currencyType: tool.currency_type, // Добавляем тип валюты для совместимости
+      imagePath: tool.image_path,
+      main_coins_power: tool.main_coins_power,
+      location_coins_power: tool.location_coins_power
+    };
+    
+    res.json(formattedTool);
   } catch (error) {
     console.error('Ошибка при получении экипированного инструмента:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -859,11 +892,18 @@ app.get('/api/tools/:toolId', async (req, res) => {
     // Получаем информацию об инструменте
     const tool = await db.get(`
       SELECT 
-        id, name, character_id as characterId, power,
-        unlock_level as unlockLevel, unlock_cost as unlockCost,
-        currency_id as currencyId, image_path as imagePath
-      FROM tools
-      WHERE id = ?
+        t.id, 
+        t.name, 
+        t.character_id as characterId, 
+        t.power,
+        t.unlock_level as unlockLevel, 
+        t.unlock_cost as unlockCost,
+        t.currency_id as currencyId, 
+        t.image_path as imagePath,
+        c.code as currencyType
+      FROM tools t
+      LEFT JOIN currencies c ON t.currency_id = c.id
+      WHERE t.id = ?
     `, [toolId]);
     
     if (!tool) {

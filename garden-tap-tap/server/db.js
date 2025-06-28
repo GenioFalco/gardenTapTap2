@@ -142,9 +142,9 @@ const createTables = () => {
                 dbInstance.run(`
                   CREATE TABLE IF NOT EXISTS player_currencies (
                     user_id TEXT NOT NULL,
-                    currency_type TEXT NOT NULL,
-                    amount INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY (user_id, currency_type)
+                    currency_id INTEGER NOT NULL,
+                    amount REAL NOT NULL DEFAULT 0,
+                    PRIMARY KEY (user_id, currency_id)
                   )
                 `, (err) => {
                   if (err) return reject(err);
@@ -342,5 +342,76 @@ module.exports = {
   db,
   initDatabase,
   CurrencyType,
-  RewardType
+  RewardType,
+  
+  // Получить ID валюты по её типу
+  getCurrencyIdByType: async (currencyType) => {
+    try {
+      // Если передан числовой ID, просто возвращаем его
+      if (typeof currencyType === 'number' || !isNaN(Number(currencyType))) {
+        return Number(currencyType);
+      }
+      
+      // Карта соответствия типов валют и их ID
+      const currencyMap = {
+        'main': 5,
+        'forest': 1,
+        'garden': 2,
+        'winter': 3,
+        'mountain': 4,
+        'desert': 6,
+        'lake': 7
+      };
+      
+      // Если это строка, преобразуем к нижнему регистру и ищем в карте
+      if (typeof currencyType === 'string') {
+        const normalizedType = currencyType.toLowerCase();
+        if (currencyMap[normalizedType]) {
+          return currencyMap[normalizedType];
+        }
+        
+        // Если не нашли в карте, пробуем найти в базе данных
+        const currency = await db.get(`
+          SELECT id FROM currencies 
+          WHERE LOWER(code) = LOWER(?)
+        `, [normalizedType]);
+        
+        if (currency) {
+          return currency.id;
+        }
+      }
+      
+      console.warn(`Неизвестный тип валюты: ${currencyType}, используем ID=5 (main)`);
+      return 5; // Возвращаем ID основной валюты по умолчанию
+    } catch (error) {
+      console.error('Ошибка при получении ID валюты:', error);
+      return 5; // Возвращаем ID основной валюты по умолчанию в случае ошибки
+    }
+  },
+  
+  // Получить или создать валюту игрока
+  getOrCreatePlayerCurrency: async (userId, currencyId) => {
+    try {
+      // Получаем валюту игрока
+      const currency = await db.get(`
+        SELECT * FROM player_currencies 
+        WHERE user_id = ? AND currency_id = ?
+      `, [userId, currencyId]);
+      
+      if (currency) {
+        return currency;
+      }
+      
+      // Если валюта не найдена, создаем её
+      await db.run(`
+        INSERT INTO player_currencies (user_id, currency_id, amount)
+        VALUES (?, ?, 0)
+      `, [userId, currencyId]);
+      
+      return { user_id: userId, currency_id: currencyId, amount: 0 };
+    } catch (error) {
+      console.error('Ошибка при получении/создании валюты игрока:', error);
+      throw error;
+    }
+  }
 }; 

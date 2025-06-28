@@ -108,7 +108,6 @@ function App() {
           console.log('Получены инструменты для локации:', locationTools);
           
           const toolsWithImages = locationTools.map((tool: Tool) => {
-            // Используем imagePath из API, если он есть, иначе генерируем путь на основе имени
             const imagePath = tool.imagePath || getToolImagePath(tool.name);
             
             // Обеспечиваем совместимость полей в разных форматах
@@ -120,7 +119,9 @@ function App() {
               locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
               // Убедимся, что обязательные поля всегда определены
               main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
-              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0,
+              // Обеспечиваем совместимость между currencyType и currencyId
+              currencyType: tool.currencyType || (tool.currencyId ? String(tool.currencyId) : 'FOREST')
             };
           });
           
@@ -200,7 +201,9 @@ function App() {
               locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
               // Убедимся, что обязательные поля всегда определены
               main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
-              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+              location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0,
+              // Обеспечиваем совместимость между currencyType и currencyId
+              currencyType: tool.currencyType || (tool.currencyId ? String(tool.currencyId) : 'FOREST')
             };
           });
           
@@ -830,7 +833,8 @@ function App() {
             mainCoinsPower: tool.mainCoinsPower || tool.main_coins_power || 0,
             locationCoinsPower: tool.locationCoinsPower || tool.location_coins_power || 0,
             main_coins_power: tool.main_coins_power || tool.mainCoinsPower || 0,
-            location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0
+            location_coins_power: tool.location_coins_power || tool.locationCoinsPower || 0,
+            currencyType: tool.currencyType || (tool.currencyId ? String(tool.currencyId) : 'FOREST')
           };
         });
         
