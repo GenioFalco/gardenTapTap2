@@ -19,8 +19,8 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Получаем валюту по ID (currency_type)
-    const currency = await db.get('SELECT * FROM currencies WHERE LOWER(currency_type) = LOWER(?)', [id]);
+    // Получаем валюту по коду
+    const currency = await db.get('SELECT * FROM currencies WHERE LOWER(code) = LOWER(?)', [id]);
     
     if (!currency) {
       return res.status(404).json({ error: 'Валюта не найдена' });
@@ -43,7 +43,7 @@ router.post('/', async (req, res) => {
     }
     
     const result = await db.run(
-      'INSERT INTO currencies (name, currency_type, image_path) VALUES (?, ?, ?)',
+      'INSERT INTO currencies (name, code, image_path) VALUES (?, ?, ?)',
       [name, currency_type.toLowerCase(), image_path]
     );
     

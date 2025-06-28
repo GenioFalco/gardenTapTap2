@@ -879,8 +879,26 @@ function App() {
       await api.equipTool(characterId, toolId);
       
       // Обновляем список инструментов, чтобы отметить активный
-      const updatedTools = await api.getUnlockedToolsByCharacterId(characterId);
+      const updatedTools = await api.getToolsByCharacterId(characterId);
       setTools(updatedTools);
+      
+      // Обновляем equippedTools в состоянии прогресса
+      setPlayerProgress(prevProgress => {
+        if (!prevProgress) return prevProgress;
+        
+        // Создаем копию объекта equippedTools
+        const updatedEquippedTools = { ...prevProgress.equippedTools };
+        // Обновляем инструмент для текущего персонажа
+        updatedEquippedTools[characterId] = toolId;
+        
+        console.log(`Обновлен экипированный инструмент: персонаж ${characterId}, инструмент ${toolId}`);
+        
+        // Возвращаем обновленный объект прогресса
+        return {
+          ...prevProgress,
+          equippedTools: updatedEquippedTools
+        };
+      });
     } catch (error) {
       console.error('Ошибка при активации инструмента:', error);
     }

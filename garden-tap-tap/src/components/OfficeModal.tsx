@@ -184,9 +184,9 @@ const HelperIncomeCollector: React.FC<{
         const anyStorageFull = result.collected.some((item: any) => item.storage_full);
         
         if (anyStorageFull) {
-          setSuccessMessage(`Собрано ${totalCollected.toFixed(0)} монет. Склад заполнен!`);
+          setSuccessMessage(`Собрано ${totalCollected.toFixed(2)} монет. Склад заполнен!`);
         } else {
-          setSuccessMessage(`Собрано ${totalCollected.toFixed(0)} монет`);
+          setSuccessMessage(`Собрано ${totalCollected.toFixed(2)} монет`);
         }
         
         // Скрываем сообщение через 3 секунды
@@ -206,8 +206,20 @@ const HelperIncomeCollector: React.FC<{
   // Вычисляем общую сумму накопленной прибыли
   const totalPendingAmount = pendingIncome.reduce((sum, income) => sum + income.pending_amount, 0);
   
+  // Форматируем число с двумя знаками после запятой
+  const formatAmount = (amount: number) => amount.toFixed(2);
+  
   // Проверяем, есть ли что собирать
   const hasIncome = totalPendingAmount > 0;
+
+  // Определяем названия валют
+  const getCurrencyName = (currencyId: string) => {
+    switch (currencyId) {
+      case '1': return 'Брёвна';
+      case '5': return 'Монеты';
+      default: return `Валюта ${currencyId}`;
+    }
+  };
 
   return (
     <div className="bg-gray-800 p-3 rounded-lg mb-4">
@@ -230,13 +242,13 @@ const HelperIncomeCollector: React.FC<{
       )}
       
       <div className="text-center text-yellow-400 text-lg font-bold mb-2">
-        {hasIncome ? `${totalPendingAmount.toFixed(0)} монет` : 'Нет прибыли'}
+        {hasIncome ? `${formatAmount(totalPendingAmount)} монет` : 'Нет прибыли'}
       </div>
       
       {pendingIncome.map(income => (
         <div key={income.currency_id} className="flex justify-between text-xs text-gray-300 mb-1">
-          <span>Валюта {income.currency_id}:</span>
-          <span>{income.pending_amount.toFixed(0)}</span>
+          <span>{getCurrencyName(income.currency_id)}:</span>
+          <span>{formatAmount(income.pending_amount)}</span>
         </div>
       ))}
       
