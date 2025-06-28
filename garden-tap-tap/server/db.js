@@ -4,8 +4,8 @@ const fs = require('fs');
 
 // Константы для типов валют и наград
 const CurrencyType = {
-  MAIN: 'main',
-  FOREST: 'forest'
+  MAIN: 1, // ID валюты "Монеты"
+  FOREST: 2 // ID валюты "Брёвна"
 };
 
 const RewardType = {

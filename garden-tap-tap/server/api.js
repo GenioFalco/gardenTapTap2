@@ -1,4 +1,4 @@
-const { db, CurrencyType, RewardType } = require('./db');
+const { db, CurrencyType, RewardType, getCurrencyIdByType, getOrCreatePlayerCurrency } = require('./db');
 
 // Промисифицируем запросы к базе данных
 const runQuery = (query, params = []) => {
@@ -48,12 +48,12 @@ const getOrCreatePlayerProgress = async (userId) => {
       // Добавляем начальные валюты
       await runQuery(
         'INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)',
-        [userId, 'main', 0]
+        [userId, CurrencyType.MAIN, 0]
       );
       
       await runQuery(
         'INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)',
-        [userId, 'forest', 0]
+        [userId, CurrencyType.FOREST, 0]
       );
       
       // Разблокируем первую локацию
@@ -94,9 +94,9 @@ const api = {
   getLocations: async () => {
     return await getAll(`
       SELECT 
-        id, name, background, resource_name as resourceName,
+        id, name, background,
         character_id as characterId, unlock_level as unlockLevel,
-        unlock_cost as unlockCost, currency_type as currencyType
+        unlock_cost as unlockCost, currency_id as currencyId
       FROM locations
     `);
   },
@@ -105,9 +105,9 @@ const api = {
   getUnlockedLocations: async (userId) => {
     return await getAll(`
       SELECT 
-        l.id, l.name, l.background, l.resource_name as resourceName,
+        l.id, l.name, l.background,
         l.character_id as characterId, l.unlock_level as unlockLevel,
-        l.unlock_cost as unlockCost, l.currency_type as currencyType
+        l.unlock_cost as unlockCost, l.currency_id as currencyId
       FROM locations l
       JOIN player_locations pl ON l.id = pl.location_id
       WHERE pl.user_id = ?
@@ -131,7 +131,8 @@ const api = {
       SELECT 
         id, name, character_id as characterId, power,
         unlock_level as unlockLevel, unlock_cost as unlockCost,
-        currency_type as currencyType, image_path as imagePath
+        currency_id as currencyId, image_path as imagePath,
+        main_coins_power as mainCoinsPower, location_coins_power as locationCoinsPower
       FROM tools
       WHERE character_id = ?
     `, [characterId]);
@@ -143,7 +144,8 @@ const api = {
       SELECT 
         t.id, t.name, t.character_id as characterId, t.power,
         t.unlock_level as unlockLevel, t.unlock_cost as unlockCost,
-        t.currency_type as currencyType, t.image_path as imagePath
+        t.currency_id as currencyId, t.image_path as imagePath,
+        t.main_coins_power as mainCoinsPower, t.location_coins_power as locationCoinsPower
       FROM tools t
       JOIN player_tools pt ON t.id = pt.tool_id
       WHERE pt.user_id = ? AND t.character_id = ?
@@ -156,7 +158,8 @@ const api = {
       SELECT 
         t.id, t.name, t.character_id as characterId, t.power,
         t.unlock_level as unlockLevel, t.unlock_cost as unlockCost,
-        t.currency_type as currencyType, t.image_path as imagePath
+        t.currency_id as currencyId, t.image_path as imagePath,
+        t.main_coins_power as mainCoinsPower, t.location_coins_power as locationCoinsPower
       FROM tools t
       JOIN player_equipped_tools pet ON t.id = pet.tool_id
       WHERE pet.user_id = ? AND pet.character_id = ?
@@ -271,19 +274,25 @@ const api = {
   },
   
   // Добавить ресурсы игроку
-  addResources: async (userId, currencyType, amount) => {
+  addResources: async (userId, currencyId, amount) => {
     try {
-      const currencyId = currencyType.toLowerCase();
-      await runQuery(`
-        INSERT OR IGNORE INTO player_currencies (user_id, currency_id, amount)
-        VALUES (?, ?, 0)
-      `, [userId, currencyId]);
+      // Преобразуем тип валюты в ID, если нужно
+      const actualCurrencyId = typeof currencyId === 'number' ? currencyId : await getCurrencyIdByType(currencyId);
       
+      if (!actualCurrencyId) {
+        console.error('Неизвестный тип валюты:', currencyId);
+        return;
+      }
+      
+      // Получаем или создаем запись о валюте
+      await getOrCreatePlayerCurrency(userId, actualCurrencyId);
+      
+      // Обновляем количество ресурсов
       await runQuery(`
         UPDATE player_currencies
         SET amount = amount + ?
         WHERE user_id = ? AND currency_id = ?
-      `, [amount, userId, currencyId]);
+      `, [parseFloat(amount), userId, actualCurrencyId]);
     } catch (error) {
       console.error('Ошибка при добавлении ресурсов игроку:', error);
       throw error;
@@ -291,16 +300,23 @@ const api = {
   },
   
   // Получить количество ресурсов игрока
-  getResourceAmount: async (userId, currencyType) => {
+  getResourceAmount: async (userId, currencyId) => {
     try {
-      const currencyId = currencyType.toLowerCase();
+      // Преобразуем тип валюты в ID, если нужно
+      const actualCurrencyId = typeof currencyId === 'number' ? currencyId : await getCurrencyIdByType(currencyId);
+      
+      if (!actualCurrencyId) {
+        console.error('Неизвестный тип валюты:', currencyId);
+        return 0;
+      }
+      
       const result = await getOne(`
         SELECT amount
         FROM player_currencies
         WHERE user_id = ? AND currency_id = ?
-      `, [userId, currencyId]);
+      `, [userId, actualCurrencyId]);
       
-      return result ? result.amount : 0;
+      return result ? parseFloat(result.amount) : 0;
     } catch (error) {
       console.error('Ошибка при получении ресурсов игрока:', error);
       return 0;
@@ -308,11 +324,18 @@ const api = {
   },
   
   // Потратить ресурсы
-  spendResources: async (userId, currencyType, amount) => {
+  spendResources: async (userId, currencyId, amount) => {
     try {
-      const currencyId = currencyType.toLowerCase();
+      // Преобразуем тип валюты в ID, если нужно
+      const actualCurrencyId = typeof currencyId === 'number' ? currencyId : await getCurrencyIdByType(currencyId);
+      
+      if (!actualCurrencyId) {
+        console.error('Неизвестный тип валюты:', currencyId);
+        return false;
+      }
+      
       // Проверяем, достаточно ли ресурсов
-      const currentAmount = await api.getResourceAmount(userId, currencyType);
+      const currentAmount = await api.getResourceAmount(userId, actualCurrencyId);
       if (currentAmount < amount) {
         return false;
       }
@@ -322,7 +345,7 @@ const api = {
         UPDATE player_currencies
         SET amount = amount - ?
         WHERE user_id = ? AND currency_id = ?
-      `, [amount, userId, currencyId]);
+      `, [parseFloat(amount), userId, actualCurrencyId]);
       
       return true;
     } catch (error) {
@@ -480,7 +503,7 @@ const api = {
       
       // Получаем локацию
       const location = await getOne(`
-        SELECT character_id as characterId, currency_type as currencyType
+        SELECT character_id as characterId, currency_id as currencyId
         FROM locations
         WHERE id = ?
       `, [locationId]);
@@ -489,13 +512,13 @@ const api = {
       const tool = await api.getEquippedTool(userId, location.characterId);
       
       // Рассчитываем полученные ресурсы (сила инструмента)
-      const resourcesGained = tool.power;
+      const resourcesGained = parseFloat(tool.power);
       
       // Рассчитываем полученный опыт (пока равен ресурсам)
       const experienceGained = resourcesGained;
       
       // Добавляем ресурсы
-      await api.addResources(userId, location.currencyType, resourcesGained);
+      await api.addResources(userId, location.currencyId, resourcesGained);
       
       // Добавляем опыт и проверяем повышение уровня
       const levelResult = await api.addExperience(userId, experienceGained);
@@ -523,13 +546,13 @@ const api = {
     try {
       // Получаем инструмент
       const tool = await getOne(`
-        SELECT unlock_cost as unlockCost, currency_type as currencyType
+        SELECT unlock_cost as unlockCost, currency_id as currencyId
         FROM tools
         WHERE id = ?
       `, [toolId]);
       
       // Проверяем, достаточно ли ресурсов
-      if (!tool || !(await api.spendResources(userId, tool.currencyType, tool.unlockCost))) {
+      if (!tool || !(await api.spendResources(userId, tool.currencyId, tool.unlockCost))) {
         return false;
       }
       

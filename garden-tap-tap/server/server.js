@@ -543,9 +543,9 @@ app.get('/api/player/resources/:currencyType', async (req, res) => {
     const normalizedType = currencyType.toUpperCase();
     
     if (normalizedType === 'FOREST' || currencyType.toLowerCase() === 'forest') {
-      currencyId = 1;
+      currencyId = 2;
     } else if (normalizedType === 'MAIN' || currencyType.toLowerCase() === 'main') {
-      currencyId = 5;
+      currencyId = 1;
     } else if (!isNaN(parseInt(currencyType))) {
       // Если передан числовой ID, используем его
       currencyId = parseInt(currencyType);
@@ -701,7 +701,7 @@ app.post('/api/player/tap', async (req, res) => {
     console.log(`Сила для основной валюты: ${mainCoinsPower}`);
     
     // Получаем ID валюты локации
-    const locationCurrencyId = location.currency_id || '1';
+    const locationCurrencyId = location.currency_id || '2';
     
     // Обновляем валюту локации - получаем или создаем запись и затем обновляем
     const locationCurrency = await getOrCreatePlayerCurrency(userId, locationCurrencyId);
@@ -714,7 +714,7 @@ app.post('/api/player/tap', async (req, res) => {
     console.log(`Добавлено ${locationCoinsPower} валюты ${locationCurrencyId} (ID: ${locationCurrency.currency_id})`);
     
     // Обновляем основную валюту (сад-коины)
-    const mainCurrency = await getOrCreatePlayerCurrency(userId, '5');
+    const mainCurrency = await getOrCreatePlayerCurrency(userId, '1');
     await db.run(`
       UPDATE player_currencies
       SET amount = amount + ?
