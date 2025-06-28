@@ -427,4 +427,18 @@ export const getStorageLevels = async (locationId: number): Promise<{
     upgrade_cost: number;
     currency_type: string;
   }[]>(`/storage-levels/${locationId}`);
+};
+
+// Получить информацию о накопленной прибыли помощников
+export const getHelpersPendingIncome = async (): Promise<any[]> => {
+  const response = await fetchApi<any[]>('/player/helpers/pending-income');
+  return response;
+};
+
+// Собрать накопленную прибыль помощников
+export const collectHelpersPendingIncome = async (): Promise<any> => {
+  const response = await fetchApi<any>('/player/helpers/collect-income', {
+    method: 'POST'
+  });
+  return response;
 }; 

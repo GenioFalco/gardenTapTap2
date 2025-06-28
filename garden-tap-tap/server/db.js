@@ -159,32 +159,19 @@ const createTables = () => {
                     )
                   `, (err) => {
                     if (err) return reject(err);
-
-                    // Таблица разблокированных инструментов
+                    
+                    // Таблица накопленной прибыли от помощников
                     dbInstance.run(`
-                      CREATE TABLE IF NOT EXISTS player_tools (
+                      CREATE TABLE IF NOT EXISTS player_pending_income (
                         user_id TEXT NOT NULL,
-                        tool_id INTEGER NOT NULL,
-                        PRIMARY KEY (user_id, tool_id),
-                        FOREIGN KEY (tool_id) REFERENCES tools (id)
+                        currency_id INTEGER NOT NULL,
+                        amount REAL NOT NULL DEFAULT 0,
+                        PRIMARY KEY (user_id, currency_id)
                       )
                     `, (err) => {
                       if (err) return reject(err);
-
-                      // Таблица снаряженных инструментов
-                      dbInstance.run(`
-                        CREATE TABLE IF NOT EXISTS player_equipped_tools (
-                          user_id TEXT NOT NULL,
-                          character_id INTEGER NOT NULL,
-                          tool_id INTEGER NOT NULL,
-                          PRIMARY KEY (user_id, character_id),
-                          FOREIGN KEY (character_id) REFERENCES characters (id),
-                          FOREIGN KEY (tool_id) REFERENCES tools (id)
-                        )
-                      `, (err) => {
-                        if (err) return reject(err);
-                        resolve();
-                      });
+                      
+                      resolve(dbInstance);
                     });
                   });
                 });

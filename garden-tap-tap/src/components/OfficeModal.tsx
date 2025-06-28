@@ -133,6 +133,128 @@ const HelperCard: React.FC<{
   );
 };
 
+// Компонент для отображения и сбора накопленной прибыли помощников
+const HelperIncomeCollector: React.FC<{
+  onCollect: () => void;
+}> = ({ onCollect }) => {
+  const [pendingIncome, setPendingIncome] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [collecting, setCollecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadPendingIncome();
+    // Обновляем информацию о прибыли каждые 30 секунд
+    const intervalId = setInterval(loadPendingIncome, 30000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const loadPendingIncome = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await api.getHelpersPendingIncome();
+      setPendingIncome(data);
+    } catch (error) {
+      console.error('Ошибка при загрузке информации о прибыли:', error);
+      setError('Не удалось загрузить информацию о прибыли');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCollect = async () => {
+    try {
+      setCollecting(true);
+      setError(null);
+      setSuccessMessage(null);
+      
+      const result = await api.collectHelpersPendingIncome();
+      
+      // Обновляем информацию о прибыли
+      await loadPendingIncome();
+      
+      // Вызываем callback для обновления основного интерфейса
+      onCollect();
+      
+      // Показываем сообщение об успехе
+      if (result.collected && result.collected.length > 0) {
+        const totalCollected = result.collected.reduce((sum: number, item: any) => sum + item.collected, 0);
+        const anyStorageFull = result.collected.some((item: any) => item.storage_full);
+        
+        if (anyStorageFull) {
+          setSuccessMessage(`Собрано ${totalCollected.toFixed(0)} монет. Склад заполнен!`);
+        } else {
+          setSuccessMessage(`Собрано ${totalCollected.toFixed(0)} монет`);
+        }
+        
+        // Скрываем сообщение через 3 секунды
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } else {
+        setSuccessMessage('Нечего собирать');
+        setTimeout(() => setSuccessMessage(null), 3000);
+      }
+    } catch (error) {
+      console.error('Ошибка при сборе прибыли:', error);
+      setError('Не удалось собрать прибыль');
+    } finally {
+      setCollecting(false);
+    }
+  };
+
+  // Вычисляем общую сумму накопленной прибыли
+  const totalPendingAmount = pendingIncome.reduce((sum, income) => sum + income.pending_amount, 0);
+  
+  // Проверяем, есть ли что собирать
+  const hasIncome = totalPendingAmount > 0;
+
+  return (
+    <div className="bg-gray-800 p-3 rounded-lg mb-4">
+      <h3 className="text-white text-center font-medium mb-2">Прибыль помощников</h3>
+      
+      {loading && !collecting && (
+        <div className="text-center text-gray-400 text-sm mb-2">Загрузка...</div>
+      )}
+      
+      {error && (
+        <div className="bg-red-500 text-white p-2 text-center text-sm mb-2 rounded">
+          {error}
+        </div>
+      )}
+      
+      {successMessage && (
+        <div className="bg-green-500 text-white p-2 text-center text-sm mb-2 rounded">
+          {successMessage}
+        </div>
+      )}
+      
+      <div className="text-center text-yellow-400 text-lg font-bold mb-2">
+        {hasIncome ? `${totalPendingAmount.toFixed(0)} монет` : 'Нет прибыли'}
+      </div>
+      
+      {pendingIncome.map(income => (
+        <div key={income.currency_id} className="flex justify-between text-xs text-gray-300 mb-1">
+          <span>Валюта {income.currency_id}:</span>
+          <span>{income.pending_amount.toFixed(0)}</span>
+        </div>
+      ))}
+      
+      <button
+        onClick={handleCollect}
+        disabled={!hasIncome || collecting}
+        className={`w-full mt-2 py-2 px-4 rounded text-sm font-medium ${
+          hasIncome && !collecting
+            ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+            : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+        }`}
+      >
+        {collecting ? 'Сбор...' : 'Собрать прибыль'}
+      </button>
+    </div>
+  );
+};
+
 const OfficeModal: React.FC<OfficeModalProps> = ({
   show,
   onClose,
@@ -270,28 +392,39 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
     }
   };
 
+  // Обработчик сбора прибыли помощников
+  const handleIncomeCollected = () => {
+    // Обновляем данные после сбора прибыли
+    onHelpersChanged();
+  };
+
   // Рендеринг модального окна
   if (!show) return null;
 
-  // Если компонент встроен в таб, отображаем только содержимое без модального окна
-  if (embedded) {
-    return (
-      <div>
-        {/* Сообщение об ошибке */}
-        {error && (
-          <div className="bg-red-500 text-white p-2 text-center mb-4">
-            {error}
-          </div>
-        )}
-        
-        {/* Список помощников */}
+  // Содержимое офиса (общее для обоих вариантов отображения)
+  const officeContent = (
+    <>
+      {/* Сообщение об ошибке */}
+      {error && (
+        <div className={`bg-red-500 text-white p-2 text-center ${embedded ? 'mb-4' : ''}`}>
+          {error}
+        </div>
+      )}
+      
+      {/* Компонент для сбора прибыли помощников */}
+      <div className={embedded ? '' : 'p-4 pb-0'}>
+        <HelperIncomeCollector onCollect={handleIncomeCollected} />
+      </div>
+      
+      {/* Список помощников */}
+      <div className={embedded ? '' : 'p-4 max-h-96 overflow-y-auto'}>
         {loading ? (
           <div className="text-center text-white py-4">Загрузка...</div>
         ) : helpers.length === 0 ? (
           <div className="text-center text-white py-4">Работников пока нет</div>
         ) : (
           <div>
-            <h3 className="text-white font-medium mb-4">Помощники локации</h3>
+            {embedded && <h3 className="text-white font-medium mb-4">Помощники локации</h3>}
             <div className="grid grid-cols-2 gap-2">
               {helpers.map(helper => (
                 <HelperCard
@@ -309,9 +442,15 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
           </div>
         )}
       </div>
-    );
+    </>
+  );
+
+  // Если компонент встроен в таб, отображаем только содержимое без модального окна
+  if (embedded) {
+    return <div>{officeContent}</div>;
   }
 
+  // Полноэкранное модальное окно
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
       <div className="bg-gray-800 rounded-lg w-full max-w-md relative">
@@ -329,36 +468,7 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
           <p className="text-gray-400 text-sm">Управление работниками всех локаций</p>
         </div>
         
-        {/* Сообщение об ошибке */}
-        {error && (
-          <div className="bg-red-500 text-white p-2 text-center">
-            {error}
-          </div>
-        )}
-        
-        {/* Список помощников */}
-        <div className="p-4 max-h-96 overflow-y-auto">
-          {loading ? (
-            <div className="text-center text-white py-4">Загрузка...</div>
-          ) : helpers.length === 0 ? (
-            <div className="text-center text-white py-4">Работников пока нет</div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {helpers.map(helper => (
-                <HelperCard
-                  key={helper.id}
-                  helper={helper}
-                  playerLevel={playerLevel}
-                  locationCurrency={locationCurrency}
-                  helperLevels={helperLevels}
-                  processingHelperId={processingHelperId}
-                  onBuy={handleBuyHelper}
-                  onUpgrade={handleUpgradeHelper}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {officeContent}
       </div>
     </div>
   );

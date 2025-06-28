@@ -200,38 +200,24 @@ app.get('/api/characters/:characterId/appearance/:toolId', async (req, res) => {
 // Получить инструменты для персонажа
 app.get('/api/characters/:id/tools', async (req, res) => {
   try {
-    const tools = await db.all(`
-      SELECT 
-        id, 
-        name, 
-        character_id as characterId, 
-        unlock_level as unlockLevel, 
-        unlock_cost as unlockCost, 
-        currency_type as currencyType, 
-        image_path as imagePath,
-        main_coins_power as mainCoinsPower,
-        location_coins_power as locationCoinsPower
-      FROM tools 
-      WHERE character_id = ?
-    `, [req.params.id]);
-    
-    console.log(`API: Получены инструменты для персонажа ${req.params.id}:`, tools);
-    res.json(tools);
-  } catch (error) {
-    console.error('Ошибка при получении инструментов:', error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-// Получить разблокированные инструменты игрока для персонажа
-app.get('/api/player/characters/:id/tools', async (req, res) => {
-  try {
     const { userId } = req;
     const characterId = req.params.id;
     
     // Получаем инструменты персонажа
     const characterTools = await db.all(`
-      SELECT * FROM tools WHERE character_id = ?
+      SELECT 
+        id, 
+        name, 
+        character_id, 
+        power,
+        unlock_level, 
+        unlock_cost, 
+        currency_id,
+        image_path,
+        main_coins_power,
+        location_coins_power
+      FROM tools 
+      WHERE character_id = ?
     `, [characterId]);
     
     // Получаем разблокированные инструменты
@@ -244,15 +230,38 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
     // Получаем уровень игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
     
-    // Добавляем флаг is_unlocked к инструментам
-    const toolsWithUnlockInfo = characterTools.map(tool => {
+    // Получаем текущий экипированный инструмент
+    const equippedTool = await db.get(`
+      SELECT tool_id FROM player_equipped_tools 
+      WHERE user_id = ? AND character_id = ?
+    `, [userId, characterId]);
+    
+    const equippedToolId = equippedTool ? equippedTool.tool_id : null;
+    
+    // Добавляем флаги к инструментам
+    const toolsWithInfo = characterTools.map(tool => {
+      const isUnlocked = unlockedToolIds.includes(tool.id);
+      const isEquipped = tool.id === equippedToolId;
+      const canEquip = isUnlocked || tool.unlock_level <= playerProgress.level;
+      
       return {
-        ...tool,
-        is_unlocked: unlockedToolIds.includes(tool.id)
+        id: tool.id,
+        name: tool.name,
+        characterId: tool.character_id,
+        power: tool.power,
+        unlockLevel: tool.unlock_level,
+        unlockCost: tool.unlock_cost,
+        currencyId: tool.currency_id,
+        imagePath: tool.image_path,
+        mainCoinsPower: tool.main_coins_power,
+        locationCoinsPower: tool.location_coins_power,
+        is_unlocked: isUnlocked,
+        is_equipped: isEquipped,
+        can_equip: canEquip
       };
     });
     
-    res.json(toolsWithUnlockInfo);
+    res.json(toolsWithInfo);
   } catch (error) {
     console.error('Ошибка при получении инструментов:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -306,16 +315,32 @@ app.post('/api/player/equip-tool', async (req, res) => {
       return res.status(404).json({ error: 'Инструмент не найден' });
     }
     
-    // Проверяем, разблокирован ли инструмент
+    // Получаем уровень игрока
+    const playerProgress = await getOrCreatePlayerProgress(userId);
+    
+    // Проверяем, разблокирован ли инструмент или доступен по уровню
     const unlocked = await db.get(`
       SELECT 1 FROM player_tools 
       WHERE user_id = ? AND tool_id = ?
     `, [userId, toolId]);
     
-    const playerProgress = await getOrCreatePlayerProgress(userId);
+    // Инструмент можно экипировать, если он разблокирован или если уровень игрока достаточен
+    const canEquip = unlocked || (tool.unlock_level <= playerProgress.level);
     
-    if (!unlocked && tool.unlock_level > playerProgress.level) {
-      return res.status(403).json({ error: 'Инструмент не разблокирован' });
+    if (!canEquip) {
+      return res.status(403).json({ 
+        error: 'Инструмент недоступен',
+        message: `Требуется уровень ${tool.unlock_level} или разблокировка инструмента`
+      });
+    }
+    
+    // Если инструмент не разблокирован, но доступен по уровню, разблокируем его автоматически
+    if (!unlocked && tool.unlock_level <= playerProgress.level) {
+      await db.run(`
+        INSERT INTO player_tools (user_id, tool_id)
+        VALUES (?, ?)
+      `, [userId, toolId]);
+      console.log(`Автоматически разблокирован инструмент ${toolId} для пользователя ${userId}`);
     }
     
     // Обновляем или добавляем экипированный инструмент
@@ -324,7 +349,22 @@ app.post('/api/player/equip-tool', async (req, res) => {
       VALUES (?, ?, ?)
     `, [userId, characterId, toolId]);
     
-    res.json({ success: true });
+    // Возвращаем подробную информацию об экипированном инструменте
+    const equippedToolInfo = {
+      id: tool.id,
+      name: tool.name,
+      characterId: tool.character_id,
+      power: tool.power,
+      mainCoinsPower: parseFloat(tool.main_coins_power) || 0.5,
+      locationCoinsPower: parseFloat(tool.location_coins_power) || 1,
+      is_equipped: true
+    };
+    
+    res.json({ 
+      success: true, 
+      message: 'Инструмент успешно экипирован',
+      tool: equippedToolInfo
+    });
   } catch (error) {
     console.error('Ошибка при экипировке инструмента:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -506,12 +546,25 @@ app.get('/api/player/resources/:currencyType', async (req, res) => {
       return res.status(401).json({ error: 'Не указан идентификатор пользователя' });
     }
     
-    const { currencyType } = req.params;
+    // Получаем параметр из URL, который может быть ID или устаревшим типом валюты (например, "forest")
+    const currencyParam = req.params.currencyType;
     
-    console.log(`Запрос на получение ресурсов: userId=${userId}, currencyType=${currencyType}`);
+    console.log(`Запрос на получение ресурсов: userId=${userId}, currencyParam=${currencyParam}`);
+    
+    let currencyId;
+    
+    // Проверяем, является ли параметр числом (ID валюты)
+    if (!isNaN(parseInt(currencyParam))) {
+      currencyId = currencyParam;
+    } else {
+      // Если это строка (например, "forest"), преобразуем в ID с помощью нашей функции
+      currencyId = (await getCurrencyIdByType(currencyParam)).id;
+    }
+    
+    console.log(`Определен ID валюты: ${currencyId}`);
     
     // Используем нашу улучшенную функцию для получения и создания валюты
-    const playerCurrency = await getOrCreatePlayerCurrency(userId, currencyType);
+    const playerCurrency = await getOrCreatePlayerCurrency(userId, currencyId);
     
     console.log(`Найдена валюта:`, playerCurrency);
     
@@ -572,7 +625,7 @@ app.get('/api/locations/:locationId', async (req, res) => {
       SELECT 
         id, name, background, resource_name as resourceName, 
         character_id as characterId, unlock_level as unlockLevel,
-        unlock_cost as unlockCost, currency_type as currencyType
+        unlock_cost as unlockCost, currency_id as currencyId
       FROM locations
       WHERE id = ?
     `, [locationId]);
@@ -630,35 +683,41 @@ app.post('/api/player/tap', async (req, res) => {
     `, [userId, location.character_id]);
     
     // Если нет экипированного инструмента, используем базовое значение
-    const locationCoinsPower = equipped ? (equipped.location_coins_power || 1) : 1;
-    const mainCoinsPower = equipped ? (equipped.main_coins_power || 0.5) : 0.5;
+    // Явно преобразуем строковые значения в числа с помощью parseFloat
+    let locationCoinsPower = 1; // Базовое значение
+    let mainCoinsPower = 0.5; // Базовое значение
+    
+    if (equipped) {
+      locationCoinsPower = equipped.location_coins_power ? parseFloat(equipped.location_coins_power) : 1;
+      mainCoinsPower = equipped.main_coins_power ? parseFloat(equipped.main_coins_power) : 0.5;
+    }
     
     console.log(`Тап с инструментом: ${equipped ? equipped.name : 'базовый'}`);
     console.log(`Сила для валюты локации: ${locationCoinsPower}`);
     console.log(`Сила для основной валюты: ${mainCoinsPower}`);
     
-    // Получаем тип валюты локации
-    const locationCurrencyType = location.currency_type || 'forest';
+    // Получаем ID валюты локации
+    const locationCurrencyId = location.currency_id || '1';
     
     // Обновляем валюту локации - получаем или создаем запись и затем обновляем
-    const locationCurrency = await getOrCreatePlayerCurrency(userId, locationCurrencyType);
+    const locationCurrency = await getOrCreatePlayerCurrency(userId, locationCurrencyId);
     await db.run(`
       UPDATE player_currencies
       SET amount = amount + ?
       WHERE user_id = ? AND currency_id = ?
     `, [locationCoinsPower, userId, locationCurrency.currency_id]);
     
-    console.log(`Добавлено ${locationCoinsPower} валюты ${locationCurrencyType} (ID: ${locationCurrency.currency_id})`);
+    console.log(`Добавлено ${locationCoinsPower} валюты ${locationCurrencyId} (ID: ${locationCurrency.currency_id})`);
     
     // Обновляем основную валюту (сад-коины)
-    const mainCurrency = await getOrCreatePlayerCurrency(userId, 'main');
+    const mainCurrency = await getOrCreatePlayerCurrency(userId, '5');
     await db.run(`
       UPDATE player_currencies
       SET amount = amount + ?
       WHERE user_id = ? AND currency_id = ?
     `, [mainCoinsPower, userId, mainCurrency.currency_id]);
     
-    console.log(`Добавлено ${mainCoinsPower} валюты main (ID: ${mainCurrency.currency_id})`);
+    console.log(`Добавлено ${mainCoinsPower} валюты с ID: ${mainCurrency.currency_id} (сад-коины)`);
     
     // Фиксированный опыт - всегда 1 за тап
     const experienceGained = 1;
@@ -714,7 +773,12 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     
     // Получаем информацию об инструменте
     const tool = await db.get(`
-      SELECT * FROM tools WHERE id = ?
+      SELECT 
+        id, name, character_id as characterId, power,
+        unlock_level as unlockLevel, unlock_cost as unlockCost,
+        currency_id as currencyId, image_path as imagePath
+      FROM tools
+      WHERE id = ?
     `, [toolId]);
     
     if (!tool) {
@@ -746,7 +810,7 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     // Получаем количество ресурсов
     const currency = await db.get(`
       SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
-    `, [userId, tool.currency_type]);
+    `, [userId, tool.currency_id]);
     
     // Проверяем, достаточно ли ресурсов
     if (!currency || currency.amount < tool.unlock_cost) {
@@ -761,8 +825,8 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     await db.run(`
       UPDATE player_currencies
       SET amount = amount - ?
-      WHERE user_id = ? AND (currency_type = ? OR currency_id = ?)
-    `, [tool.unlock_cost, userId, tool.currency_type, tool.currency_type]);
+      WHERE user_id = ? AND currency_id = ?
+    `, [tool.unlock_cost, userId, tool.currency_id]);
     
     // Разблокируем инструмент
     await db.run(`
@@ -793,7 +857,7 @@ app.get('/api/tools/:toolId', async (req, res) => {
       SELECT 
         id, name, character_id as characterId, power,
         unlock_level as unlockLevel, unlock_cost as unlockCost,
-        currency_type as currencyType, image_path as imagePath
+        currency_id as currencyId, image_path as imagePath
       FROM tools
       WHERE id = ?
     `, [toolId]);
@@ -928,16 +992,18 @@ app.post('/api/player/helpers/:helperId/buy', async (req, res) => {
     // Проверяем наличие ресурсов
     const playerCurrency = await db.get(`
       SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
-    `, [userId, helper.currency_type]);
+    `, [userId, helper.currency_id]);
     
     if (!playerCurrency || playerCurrency.amount < helper.unlock_cost) {
-      return res.status(400).json({ error: 'Недостаточно ресурсов' });
+      return res.status(400).json({ 
+        error: `Недостаточно ресурсов. Необходимо ${helper.unlock_cost} ${helper.currency_id}` 
+      });
     }
     
     // Списываем ресурсы
     await db.run(`
       UPDATE player_currencies SET amount = amount - ? WHERE user_id = ? AND currency_id = ?
-    `, [helper.unlock_cost, userId, helper.currency_type]);
+    `, [helper.unlock_cost, userId, helper.currency_id]);
     
     // Добавляем помощника в таблицу купленных
     await db.run(`
@@ -1041,7 +1107,7 @@ app.post('/api/player/helpers/collect', async (req, res) => {
     // Для каждого помощника рассчитываем полученную валюту
     let totalCollected = 0;
     let locationId = null;
-    let currencyType = null;
+    let currencyId = null;
     
     for (const helper of activeHelpers) {
       // Расчет времени, прошедшего с момента активации
@@ -1060,7 +1126,7 @@ app.post('/api/player/helpers/collect', async (req, res) => {
       totalCollected += collected;
       
       locationId = helper.location_id;
-      currencyType = helper.currency_type;
+      currencyId = helper.currency_id;
       
       // Обновляем время активации помощника на текущее
       const newActivationTime = new Date().toISOString();
@@ -1078,23 +1144,23 @@ app.post('/api/player/helpers/collect', async (req, res) => {
       // Проверяем, есть ли уже такая валюта у игрока
       const existingCurrency = await db.get(`
         SELECT * FROM player_currencies
-        WHERE user_id = ? AND currency_type = ?
-      `, [userId, currencyType]);
+        WHERE user_id = ? AND currency_id = ?
+      `, [userId, currencyId]);
       
       if (existingCurrency) {
         // Обновляем существующую валюту
         await db.run(`
           UPDATE player_currencies SET amount = amount + ? WHERE user_id = ? AND currency_id = ?
-        `, [totalCollected, userId, currencyType]);
+        `, [totalCollected, userId, currencyId]);
       } else {
         // Создаем новую запись о валюте
         await db.run(`
           INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)
-        `, [userId, currencyType, totalCollected]);
+        `, [userId, currencyId, totalCollected]);
       }
     }
     
-    res.json({ collected: totalCollected, locationId, currencyType });
+    res.json({ collected: totalCollected, locationId, currencyId });
   } catch (error) {
     console.error('Ошибка при сборе награды от помощников:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -1283,11 +1349,11 @@ app.post('/api/helpers/buy', async (req, res) => {
     const playerCurrency = await db.get(`
       SELECT amount FROM player_currencies 
       WHERE user_id = ? AND currency_id = ?
-    `, [userId, helper.currency_type]);
+    `, [userId, helper.currency_id]);
     
     if (!playerCurrency || playerCurrency.amount < helper.unlock_cost) {
       return res.status(400).json({ 
-        error: `Недостаточно ресурсов. Необходимо ${helper.unlock_cost} ${helper.currency_type}` 
+        error: `Недостаточно ресурсов. Необходимо ${helper.unlock_cost} ${helper.currency_id}` 
       });
     }
     
@@ -1300,7 +1366,7 @@ app.post('/api/helpers/buy', async (req, res) => {
         UPDATE player_currencies 
         SET amount = amount - ? 
         WHERE user_id = ? AND currency_id = ?
-      `, [helper.unlock_cost, userId, helper.currency_type]);
+      `, [helper.unlock_cost, userId, helper.currency_id]);
       
       // Добавляем помощника игроку
       await db.run(`
@@ -1351,7 +1417,7 @@ app.post('/api/helpers/upgrade', async (req, res) => {
     }
     
     // Получаем информацию о помощнике
-    const helper = await db.get(`SELECT id, max_level, currency_type FROM helpers WHERE id = ?`, [helperId]);
+    const helper = await db.get(`SELECT id, max_level, currency_id FROM helpers WHERE id = ?`, [helperId]);
     
     console.log('Информация о помощнике:', helper);
     
@@ -1373,13 +1439,13 @@ app.post('/api/helpers/upgrade', async (req, res) => {
     }
     
     // Получаем валюту игрока используя нашу улучшенную функцию
-    const playerCurrency = await getOrCreatePlayerCurrency(userId, helper.currency_type);
+    const playerCurrency = await getOrCreatePlayerCurrency(userId, helper.currency_id);
     
     console.log('Валюта игрока:', playerCurrency, 'Требуется:', nextLevel.upgrade_cost);
     
     if (!playerCurrency || playerCurrency.amount < nextLevel.upgrade_cost) {
       return res.status(400).json({ 
-        error: `Недостаточно ресурсов. Необходимо ${nextLevel.upgrade_cost} ${helper.currency_type}` 
+        error: `Недостаточно ресурсов. Необходимо ${nextLevel.upgrade_cost} ${helper.currency_id}` 
       });
     }
     
@@ -1424,7 +1490,7 @@ async function calculateHelperIncome(userId) {
   try {
     // Получаем всех помощников игрока с их уровнями
     const helpers = await db.all(`
-      SELECT h.id, h.location_id, h.currency_type, ph.level
+      SELECT h.id, h.location_id, h.currency_id, ph.level
       FROM player_helpers ph
       JOIN helpers h ON ph.helper_id = h.id
       WHERE ph.user_id = ?
@@ -1454,19 +1520,21 @@ async function calculateHelperIncome(userId) {
           const now = new Date();
           hours = (now.getTime() - lastLogin.getTime()) / (1000 * 60 * 60);
           
-          // Ограничиваем максимальное время накопления 24 часами
-          hours = Math.min(hours, 24);
+          // Ограничиваем максимальное время накопления 4 часами
+          hours = Math.min(hours, 4);
+          
+          console.log(`Помощник ${helper.id}: прошло ${hours.toFixed(2)} часов с последнего входа`);
         }
         
         // Рассчитываем накопленный доход
         const income = hourlyIncome * hours;
         
         // Добавляем доход к общему для этого типа валюты
-        if (!totalIncome[helper.currency_type]) {
-          totalIncome[helper.currency_type] = 0;
+        if (!totalIncome[helper.currency_id]) {
+          totalIncome[helper.currency_id] = 0;
         }
         
-        totalIncome[helper.currency_type] += income;
+        totalIncome[helper.currency_id] += income;
       }
     }
     
@@ -1475,28 +1543,30 @@ async function calculateHelperIncome(userId) {
       UPDATE player_progress SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?
     `, [userId]);
     
-    // Начисляем накопленный доход
-    for (const [currencyType, amount] of Object.entries(totalIncome)) {
+    // Накапливаем доход в таблице player_pending_income
+    for (const [currencyId, amount] of Object.entries(totalIncome)) {
       if (amount > 0) {
         // Округляем до двух знаков после запятой
         const roundedAmount = Math.round(amount * 100) / 100;
         
-        // Проверяем, есть ли у игрока эта валюта
-        const hasCurrency = await db.get(`
-          SELECT 1 FROM player_currencies WHERE user_id = ? AND currency_id = ?
-        `, [userId, currencyType]);
+        console.log(`Накапливаем доход от помощников: ${roundedAmount} валюты ${currencyId}`);
         
-        if (hasCurrency) {
+        // Проверяем, есть ли уже накопленный доход для этой валюты
+        const hasPendingIncome = await db.get(`
+          SELECT 1 FROM player_pending_income WHERE user_id = ? AND currency_id = ?
+        `, [userId, currencyId]);
+        
+        if (hasPendingIncome) {
           await db.run(`
-            UPDATE player_currencies 
+            UPDATE player_pending_income 
             SET amount = amount + ? 
             WHERE user_id = ? AND currency_id = ?
-          `, [roundedAmount, userId, currencyType]);
+          `, [roundedAmount, userId, currencyId]);
         } else {
           await db.run(`
-            INSERT INTO player_currencies (user_id, currency_id, amount)
+            INSERT INTO player_pending_income (user_id, currency_id, amount)
             VALUES (?, ?, ?)
-          `, [userId, currencyType, roundedAmount]);
+          `, [userId, currencyId, roundedAmount]);
         }
       }
     }
@@ -1528,10 +1598,10 @@ async function getOrCreatePlayerProgress(userId) {
   `, [userId]);
   
   // Создаем запись основной валюты (сад-коины)
-  await getOrCreatePlayerCurrency(userId, 'main');
+  await getOrCreatePlayerCurrency(userId, '5');
   
   // Создаем запись валюты леса
-  await getOrCreatePlayerCurrency(userId, 'forest');
+  await getOrCreatePlayerCurrency(userId, '1');
   
   // Разблокируем первую локацию
   await db.run(`
@@ -1558,80 +1628,31 @@ async function getOrCreatePlayerProgress(userId) {
 }
 
 // Получение или создание валюты игрока
-async function getOrCreatePlayerCurrency(userId, currencyType) {
-  // Нормализуем тип валюты к нижнему регистру
-  let normalizedType = currencyType.toLowerCase();
-  
-  // Обрабатываем различные форматы типов валют
-  if (normalizedType === 'garden_coins' || normalizedType === 'garden coins') {
-    normalizedType = 'main';
-  } else if (normalizedType === 'logs' || normalizedType === 'wood') {
-    normalizedType = 'forest';
-  } else if (normalizedType === 'vegetables') {
-    normalizedType = 'garden';
-  } else if (normalizedType === 'snowflakes') {
-    normalizedType = 'winter';
-  }
-  
-  console.log(`Нормализованный тип валюты: ${normalizedType} (исходный: ${currencyType})`);
-  
+async function getOrCreatePlayerCurrency(userId, currencyId) {
   try {
-    // Получаем ID валюты из таблицы currencies
+    // Проверяем, есть ли запись о валюте
     const currency = await db.get(`
-      SELECT id, currency_type FROM currencies 
-      WHERE currency_type = ?
-    `, [normalizedType]);
-    
-    // Если валюта найдена, используем её ID
-    let currencyId = null;
-    if (currency) {
-      currencyId = currency.id.toString();
-    } else {
-      // По умолчанию используем фиксированные ID
-      if (normalizedType === 'main') {
-        currencyId = '5';
-      } else if (normalizedType === 'forest') {
-        currencyId = '1';
-      } else if (normalizedType === 'garden') {
-        currencyId = '2';
-      } else if (normalizedType === 'winter') {
-        currencyId = '3';
-      } else if (normalizedType === 'mountain') {
-        currencyId = '4';
-      } else {
-        currencyId = '1'; // По умолчанию forest
-      }
-    }
-    
-    console.log(`Используем currency_id: ${currencyId} для типа ${normalizedType}`);
-    
-    // Проверяем, есть ли запись о валюте у игрока
-    const playerCurrency = await db.get(`
       SELECT * FROM player_currencies 
       WHERE user_id = ? AND currency_id = ?
     `, [userId, currencyId]);
     
-    if (playerCurrency) {
-      console.log(`Найдена валюта для пользователя: ${JSON.stringify(playerCurrency)}`);
-      return playerCurrency;
+    if (currency) {
+      return { 
+        user_id: currency.user_id, 
+        currency_id: currency.currency_id, 
+        amount: currency.amount 
+      };
     }
     
-    // Если записи нет, создаем новую
-    console.log(`Создаем новую запись валюты ${normalizedType} (ID: ${currencyId}) для пользователя ${userId}`);
-    
+    // Если валюты нет, создаем её
     await db.run(`
-      INSERT INTO player_currencies (user_id, currency_id, currency_type, amount)
-      VALUES (?, ?, ?, 0)
-    `, [userId, currencyId, normalizedType]);
+      INSERT INTO player_currencies (user_id, currency_id, amount)
+      VALUES (?, ?, 0)
+    `, [userId, currencyId]);
     
-    return {
-      user_id: userId,
-      currency_id: currencyId,
-      currency_type: normalizedType,
-      amount: 0
-    };
+    return { user_id: userId, currency_id: currencyId, amount: 0 };
   } catch (error) {
-    console.error(`Ошибка при получении/создании валюты ${normalizedType} для пользователя ${userId}:`, error);
+    console.error(`Ошибка при получении/создании валюты для пользователя ${userId}, валюта ${currencyId}:`, error);
     throw error;
   }
 }
@@ -1693,59 +1714,30 @@ async function addExperience(userId, exp) {
 
 // Обработка награды
 async function processReward(userId, reward) {
-  console.log(`Обрабатываем награду:`, reward);
-  
-  switch (reward.reward_type) {
+  switch(reward.reward_type) {
     case RewardType.MAIN_CURRENCY:
-      // Добавляем валюту, указанную в currency_id или основную валюту
-      const currencyTypeMain = reward.currency_id || 'main';
-      const currencyMain = await getOrCreatePlayerCurrency(userId, currencyTypeMain);
+      // Добавляем основную валюту (сад-коины)
+      const mainCurrency = await getOrCreatePlayerCurrency(userId, '5'); // 5 - ID основной валюты (сад-коины)
+      
       await db.run(`
         UPDATE player_currencies
         SET amount = amount + ?
         WHERE user_id = ? AND currency_id = ?
-      `, [reward.amount, userId, currencyMain.currency_id]);
-      console.log(`Награда: добавлено ${reward.amount} валюты ${currencyTypeMain} (ID: ${currencyMain.currency_id})`);
+      `, [reward.amount, userId, mainCurrency.currency_id]);
+      console.log(`Награда: добавлено ${reward.amount} основной валюты (сад-коины)`);
       break;
       
     case RewardType.LOCATION_CURRENCY:
-      // Обрабатываем специфическую валюту локации, если указан currency_id
-      if (reward.currency_id) {
-        const specificCurrency = await getOrCreatePlayerCurrency(userId, reward.currency_id);
-        await db.run(`
-          UPDATE player_currencies
-          SET amount = amount + ?
-          WHERE user_id = ? AND currency_id = ?
-        `, [reward.amount, userId, specificCurrency.currency_id]);
-        console.log(`Награда: добавлено ${reward.amount} валюты ${reward.currency_id} (ID: ${specificCurrency.currency_id})`);
-      } 
-      // Если указан target_id, получаем тип валюты из локации
-      else if (reward.target_id) {
-        const location = await db.get(`
-          SELECT * FROM locations WHERE id = ?
-        `, [reward.target_id]);
-        
-        if (location) {
-          const locationCurrencyType = location.currency_type || 'forest';
-          const locationCurrency = await getOrCreatePlayerCurrency(userId, locationCurrencyType);
-          await db.run(`
-            UPDATE player_currencies
-            SET amount = amount + ?
-            WHERE user_id = ? AND currency_id = ?
-          `, [reward.amount, userId, locationCurrency.currency_id]);
-          console.log(`Награда: добавлено ${reward.amount} валюты ${locationCurrencyType} (ID: ${locationCurrency.currency_id})`);
-        }
-      }
-      // По умолчанию используем forest
-      else {
-        const defaultCurrency = await getOrCreatePlayerCurrency(userId, 'forest');
-        await db.run(`
-          UPDATE player_currencies
-          SET amount = amount + ?
-          WHERE user_id = ? AND currency_id = ?
-        `, [reward.amount, userId, defaultCurrency.currency_id]);
-        console.log(`Награда: добавлено ${reward.amount} валюты forest (ID: ${defaultCurrency.currency_id})`);
-      }
+      // Добавляем валюту текущей локации
+      // Если нет информации о конкретной локации, используем лес (ID: 1)
+      const defaultCurrency = await getOrCreatePlayerCurrency(userId, '1');
+      
+      await db.run(`
+        UPDATE player_currencies
+        SET amount = amount + ?
+        WHERE user_id = ? AND currency_id = ?
+      `, [reward.amount, userId, defaultCurrency.currency_id]);
+      console.log(`Награда: добавлено ${reward.amount} валюты локации (брёвна)`);
       break;
       
     // Динамическая обработка специальных типов валют
@@ -1755,15 +1747,16 @@ async function processReward(userId, reward) {
     case 'mountain_currency':
     case 'desert_currency':
     case 'lake_currency':
-      // Извлекаем тип валюты из reward_type (например, forest_currency -> forest)
-      const specialCurrencyType = reward.reward_type.split('_')[0];
-      const specialCurrency = await getOrCreatePlayerCurrency(userId, specialCurrencyType);
+      // Получаем ID валюты по её коду
+      const currencyId = reward.currency_id || (await getCurrencyIdByType(reward.reward_type.split('_')[0])).id;
+      const specialCurrency = await getOrCreatePlayerCurrency(userId, currencyId);
+      
       await db.run(`
         UPDATE player_currencies
         SET amount = amount + ?
         WHERE user_id = ? AND currency_id = ?
       `, [reward.amount, userId, specialCurrency.currency_id]);
-      console.log(`Награда: добавлено ${reward.amount} валюты ${specialCurrencyType} (ID: ${specialCurrency.currency_id})`);
+      console.log(`Награда: добавлено ${reward.amount} валюты с ID ${currencyId}`);
       break;
       
     // Универсальная обработка валют по currency_id
@@ -1775,7 +1768,7 @@ async function processReward(userId, reward) {
           SET amount = amount + ?
           WHERE user_id = ? AND currency_id = ?
         `, [reward.amount, userId, currencyFromId.currency_id]);
-        console.log(`Награда (currency): добавлено ${reward.amount} валюты ${reward.currency_id} (ID: ${currencyFromId.currency_id})`);
+        console.log(`Награда: добавлено ${reward.amount} валюты ${reward.currency_id}`);
       }
       break;
       
@@ -1815,37 +1808,34 @@ async function processReward(userId, reward) {
 
 // Функция для получения правильного идентификатора валюты
 async function getCurrencyIdByType(currencyType) {
-  // Нормализуем тип валюты к нижнему регистру
-  const normalizedType = currencyType.toLowerCase();
-  
   try {
-    // Ищем валюту по типу (нужно только для логов)
+    // Нормализуем тип валюты к нижнему регистру
+    const normalizedType = currencyType.toLowerCase();
+    
+    // Ищем валюту по коду
     const currency = await db.get(`
-      SELECT id, currency_type FROM currencies 
-      WHERE currency_type = ?
+      SELECT id FROM currencies 
+      WHERE code = ?
     `, [normalizedType]);
     
     if (currency) {
-      console.log(`Найдена валюта с типом ${normalizedType}, ID: ${currency.id}`);
-      return {
-        type: normalizedType
-      };
+      console.log(`Найдена валюта с кодом ${normalizedType}, ID: ${currency.id}`);
+      return { id: currency.id };
     }
     
-    // Если не нашли, возвращаем тип по умолчанию
-    console.warn(`Валюта с типом ${normalizedType} не найдена, используем значение по умолчанию`);
+    // Если не нашли по коду, используем значения по умолчанию
+    console.warn(`Валюта с кодом ${normalizedType} не найдена, используем значение по умолчанию`);
     
-    // По умолчанию: main или forest
-    if (normalizedType === 'main' || normalizedType === 'forest') {
-      return { type: normalizedType };
+    // По умолчанию: 5 для main (сад-коины) или 1 для forest (брёвна)
+    if (normalizedType === 'main') {
+      return { id: '5' };
+    } else {
+      return { id: '1' }; // По умолчанию валюта леса (брёвна)
     }
-    
-    // Для других типов возвращаем forest
-    return { type: 'forest' };
   } catch (error) {
-    console.error(`Ошибка при получении типа валюты для типа ${normalizedType}:`, error);
-    // По умолчанию возвращаем forest
-    return { type: 'forest' };
+    console.error(`Ошибка при получении ID валюты для кода ${currencyType}:`, error);
+    // По умолчанию возвращаем ID валюты леса
+    return { id: '1' };
   }
 }
 
@@ -1878,9 +1868,9 @@ async function cleanupPlayerCurrencies() {
     // Создаем карту для объединения дубликатов
     const currencyMap = new Map();
     
-    // Объединяем записи с одинаковым user_id и currency_type
+    // Объединяем записи с одинаковым user_id и currency_id
     allCurrencies.forEach(currency => {
-      const key = `${currency.user_id}_${currency.currency_type}`;
+      const key = `${currency.user_id}_${currency.currency_id}`;
       if (currencyMap.has(key)) {
         // Берем запись с большим количеством
         const existingAmount = currencyMap.get(key).amount;
@@ -1900,27 +1890,23 @@ async function cleanupPlayerCurrencies() {
     for (const currency of currencyMap.values()) {
       await db.run(`
         INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, ?)
-      `, [currency.user_id, currency.currency_type, currency.amount]);
+      `, [currency.user_id, currency.currency_id, currency.amount]);
     }
     
     // 4. Убеждаемся, что у каждого пользователя есть записи для основных валют
     const users = [...new Set(allCurrencies.map(c => c.user_id))];
     
     for (const userId of users) {
-      // Создаем основную валюту, если её нет
-      await getOrCreatePlayerCurrency(userId, 'main');
+      // Создаем основную валюту (сад-коины), если её нет
+      await getOrCreatePlayerCurrency(userId, '5');
       
-      // Создаем валюту леса, если её нет
-      await getOrCreatePlayerCurrency(userId, 'forest');
+      // Создаем валюту леса (брёвна), если её нет
+      await getOrCreatePlayerCurrency(userId, '1');
     }
-    
-    // 5. Проверяем результат
-    const newCurrencies = await db.all('SELECT * FROM player_currencies');
-    console.log('Новые записи в таблице player_currencies после очистки:', newCurrencies);
     
     console.log('Очистка дубликатов в таблице player_currencies завершена успешно');
   } catch (error) {
-    console.error('Ошибка при очистке дубликатов:', error);
+    console.error('Ошибка при очистке дубликатов в таблице player_currencies:', error);
   }
 }
 
@@ -2251,5 +2237,167 @@ app.get('/api/storage-levels/:locationId', async (req, res) => {
   } catch (error) {
     console.error('Ошибка при получении уровней хранилища:', error);
     res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  }
+});
+
+// Получить информацию о накопленной прибыли помощников
+app.get('/api/player/helpers/pending-income', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем информацию о накопленной прибыли
+    const pendingIncome = await db.all(`
+      SELECT currency_id, amount
+      FROM player_pending_income
+      WHERE user_id = ?
+    `, [userId]);
+    
+    // Получаем информацию о максимальной вместимости склада для каждой валюты
+    const storageCapacity = {
+      '1': 10000, // Лес - 10000 единиц
+      '5': 100000 // Основная валюта - 100000 единиц
+    };
+    
+    // Получаем текущее количество валют у игрока
+    const playerCurrencies = await db.all(`
+      SELECT currency_id, amount
+      FROM player_currencies
+      WHERE user_id = ?
+    `, [userId]);
+    
+    // Создаем карту текущих валют игрока
+    const currencyMap = {};
+    playerCurrencies.forEach(currency => {
+      currencyMap[currency.currency_id] = parseFloat(currency.amount);
+    });
+    
+    // Формируем ответ с информацией о прибыли и ограничениях
+    const result = pendingIncome.map(income => {
+      const currencyId = income.currency_id;
+      const pendingAmount = parseFloat(income.amount);
+      const currentAmount = currencyMap[currencyId] || 0;
+      const capacity = storageCapacity[currencyId] || 10000;
+      const availableSpace = Math.max(0, capacity - currentAmount);
+      
+      return {
+        currency_id: currencyId,
+        pending_amount: pendingAmount,
+        current_amount: currentAmount,
+        capacity: capacity,
+        available_space: availableSpace,
+        can_collect_all: availableSpace >= pendingAmount
+      };
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Ошибка при получении информации о накопленной прибыли:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Собрать накопленную прибыль помощников
+app.post('/api/player/helpers/collect-income', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем информацию о накопленной прибыли
+    const pendingIncome = await db.all(`
+      SELECT currency_id, amount
+      FROM player_pending_income
+      WHERE user_id = ?
+    `, [userId]);
+    
+    if (pendingIncome.length === 0) {
+      return res.json({ collected: [] });
+    }
+    
+    // Получаем информацию о максимальной вместимости склада для каждой валюты
+    const storageCapacity = {
+      '1': 10000, // Лес - 10000 единиц
+      '5': 100000 // Основная валюта - 100000 единиц
+    };
+    
+    // Начинаем транзакцию
+    await db.run('BEGIN TRANSACTION');
+    
+    try {
+      const collectedResults = [];
+      
+      for (const income of pendingIncome) {
+        const currencyId = income.currency_id;
+        const pendingAmount = parseFloat(income.amount);
+        
+        // Получаем текущее количество валюты у игрока
+        const playerCurrency = await db.get(`
+          SELECT amount FROM player_currencies
+          WHERE user_id = ? AND currency_id = ?
+        `, [userId, currencyId]);
+        
+        const currentAmount = playerCurrency ? parseFloat(playerCurrency.amount) : 0;
+        const capacity = storageCapacity[currencyId] || 10000;
+        const availableSpace = Math.max(0, capacity - currentAmount);
+        
+        // Определяем, сколько можно собрать
+        const amountToCollect = Math.min(pendingAmount, availableSpace);
+        
+        if (amountToCollect > 0) {
+          // Обновляем количество валюты у игрока
+          if (playerCurrency) {
+            await db.run(`
+              UPDATE player_currencies
+              SET amount = amount + ?
+              WHERE user_id = ? AND currency_id = ?
+            `, [amountToCollect, userId, currencyId]);
+          } else {
+            await db.run(`
+              INSERT INTO player_currencies (user_id, currency_id, amount)
+              VALUES (?, ?, ?)
+            `, [userId, currencyId, amountToCollect]);
+          }
+          
+          // Уменьшаем накопленную прибыль
+          if (amountToCollect >= pendingAmount) {
+            // Если собрали всё, удаляем запись
+            await db.run(`
+              DELETE FROM player_pending_income
+              WHERE user_id = ? AND currency_id = ?
+            `, [userId, currencyId]);
+          } else {
+            // Если собрали часть, обновляем запись
+            await db.run(`
+              UPDATE player_pending_income
+              SET amount = amount - ?
+              WHERE user_id = ? AND currency_id = ?
+            `, [amountToCollect, userId, currencyId]);
+          }
+          
+          collectedResults.push({
+            currency_id: currencyId,
+            collected: amountToCollect,
+            remaining: pendingAmount - amountToCollect,
+            storage_full: amountToCollect < pendingAmount
+          });
+        } else {
+          collectedResults.push({
+            currency_id: currencyId,
+            collected: 0,
+            remaining: pendingAmount,
+            storage_full: true
+          });
+        }
+      }
+      
+      // Фиксируем транзакцию
+      await db.run('COMMIT');
+      
+      res.json({ collected: collectedResults });
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Ошибка при сборе накопленной прибыли:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
