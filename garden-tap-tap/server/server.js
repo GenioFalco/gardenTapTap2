@@ -203,6 +203,8 @@ app.get('/api/characters/:id/tools', async (req, res) => {
     const { userId } = req;
     const characterId = req.params.id;
     
+    console.log(`Получение инструментов для персонажа ${characterId} пользователя ${userId}`);
+    
     // Получаем инструменты персонажа
     const characterTools = await db.all(`
       SELECT 
@@ -228,6 +230,7 @@ app.get('/api/characters/:id/tools', async (req, res) => {
     `, [userId]);
     
     const unlockedToolIds = unlockedTools.map(tool => tool.tool_id);
+    console.log(`Разблокированные инструменты: ${JSON.stringify(unlockedToolIds)}`);
     
     // Получаем уровень игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
@@ -239,19 +242,28 @@ app.get('/api/characters/:id/tools', async (req, res) => {
     `, [userId, characterId]);
     
     const equippedToolId = equippedTool ? equippedTool.tool_id : null;
+    console.log(`Экипированный инструмент: ${equippedToolId}`);
     
-    // Преобразуем результаты для клиента
-    const formattedTools = characterTools.map(tool => {
-      // Добавляем флаг, указывающий, разблокирован ли инструмент
-      const is_unlocked = unlockedToolIds.includes(tool.id);
+    // Получаем информацию о валютах игрока
+    const playerCurrencies = await db.all(`
+      SELECT currency_id, amount FROM player_currencies WHERE user_id = ?
+    `, [userId]);
+    
+    const currencyMap = {};
+    playerCurrencies.forEach(currency => {
+      currencyMap[currency.currency_id] = parseFloat(currency.amount);
+    });
+    
+    console.log(`Валюты игрока: ${JSON.stringify(currencyMap)}`);
+    
+    // Добавляем информацию о разблокировке и экипировке к инструментам
+    const toolsWithInfo = characterTools.map(tool => {
+      const isUnlocked = unlockedToolIds.includes(tool.id);
+      const isEquipped = equippedToolId === tool.id;
+      const canEquip = isUnlocked && !isEquipped;
+      const hasEnoughResources = currencyMap[tool.currency_id] >= parseFloat(tool.unlock_cost);
+      const canUnlock = !isUnlocked && playerProgress.level >= tool.unlock_level && hasEnoughResources;
       
-      // Добавляем флаг, указывающий, экипирован ли инструмент
-      const is_equipped = tool.id === equippedToolId;
-      
-      // Добавляем флаг, указывающий, может ли игрок экипировать инструмент
-      const can_equip = is_unlocked && !is_equipped;
-      
-      // Преобразуем имена полей для клиента
       return {
         id: tool.id,
         name: tool.name,
@@ -260,19 +272,21 @@ app.get('/api/characters/:id/tools', async (req, res) => {
         unlockLevel: tool.unlock_level,
         unlockCost: tool.unlock_cost,
         currencyId: tool.currency_id,
-        currencyType: tool.currency_type, // Добавляем тип валюты для совместимости
+        currencyType: tool.currency_type,
         imagePath: tool.image_path,
-        main_coins_power: tool.main_coins_power,
-        location_coins_power: tool.location_coins_power,
-        is_unlocked,
-        is_equipped,
-        can_equip
+        mainCoinsPower: tool.main_coins_power,
+        locationCoinsPower: tool.location_coins_power,
+        is_unlocked: isUnlocked,
+        is_equipped: isEquipped,
+        can_equip: canEquip,
+        can_unlock: canUnlock
       };
     });
     
-    res.json(formattedTools);
+    console.log(`Отправка инструментов с информацией: ${JSON.stringify(toolsWithInfo)}`);
+    res.json(toolsWithInfo);
   } catch (error) {
-    console.error('Ошибка при получении инструментов персонажа:', error);
+    console.error('Ошибка при получении инструментов:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -567,47 +581,47 @@ app.post('/api/player/update-energy', async (req, res) => {
 app.get('/api/player/resources/:currencyType', async (req, res) => {
   try {
     const { userId } = req;
-    const { currencyType } = req.params;
+    let { currencyType } = req.params;
     
-    // Преобразуем строковый тип валюты в ID
+    console.log(`Получение ресурсов для пользователя ${userId}, тип валюты: ${currencyType}`);
+    
+    // Определяем, является ли currencyType числом (ID) или строкой (код)
     let currencyId;
     
-    // Нормализуем тип валюты для сравнения (приводим к верхнему регистру)
-    const normalizedType = currencyType.toUpperCase();
-    
-    if (normalizedType === 'FOREST' || currencyType.toLowerCase() === 'forest') {
-      currencyId = 2;
-    } else if (normalizedType === 'MAIN' || currencyType.toLowerCase() === 'main') {
-      currencyId = 1;
-    } else if (!isNaN(parseInt(currencyType))) {
-      // Если передан числовой ID, используем его
+    if (!isNaN(currencyType)) {
+      // Если это число, используем его как ID
       currencyId = parseInt(currencyType);
+      console.log(`Использование числового ID валюты: ${currencyId}`);
     } else {
-      // Пробуем найти валюту по коду
+      // Иначе ищем ID по коду валюты
       const currency = await db.get(`
-        SELECT id FROM currencies 
-        WHERE LOWER(code) = LOWER(?)
+        SELECT id FROM currencies WHERE code = ? COLLATE NOCASE
       `, [currencyType]);
       
-      if (currency) {
-        currencyId = currency.id;
-      } else {
-        return res.status(400).json({ error: 'Неизвестный тип валюты' });
+      if (!currency) {
+        console.log(`Валюта с кодом ${currencyType} не найдена`);
+        return res.status(404).json({ error: 'Валюта не найдена' });
       }
+      
+      currencyId = currency.id;
+      console.log(`Найден ID валюты по коду: ${currencyId}`);
     }
     
-    // Получаем количество ресурсов
-    const currency = await db.get(`
-      SELECT amount FROM player_currencies 
+    // Получаем или создаем запись о валюте игрока
+    await getOrCreatePlayerCurrency(userId, currencyId);
+    
+    // Получаем текущее количество ресурсов
+    const result = await db.get(`
+      SELECT amount FROM player_currencies
       WHERE user_id = ? AND currency_id = ?
     `, [userId, currencyId]);
     
-    // Если ресурса нет, возвращаем 0
-    const amount = currency ? parseFloat(currency.amount) : 0;
+    const amount = result ? parseFloat(result.amount) : 0;
+    console.log(`Количество ресурсов: ${amount}`);
     
     res.json({ amount });
   } catch (error) {
-    console.error('Ошибка при получении количества ресурсов:', error);
+    console.error('Ошибка при получении ресурсов игрока:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -804,6 +818,9 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
   try {
     const { userId } = req;
     const { toolId } = req.body;
+    
+    console.log(`Попытка улучшения инструмента: userId=${userId}, toolId=${toolId}`);
+    
     if (!toolId) {
       return res.status(400).json({ error: 'Отсутствует ID инструмента' });
     }
@@ -819,8 +836,11 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     `, [toolId]);
     
     if (!tool) {
+      console.log(`Инструмент с ID ${toolId} не найден`);
       return res.status(404).json({ error: 'Инструмент не найден' });
     }
+    
+    console.log(`Информация об инструменте: ${JSON.stringify(tool)}`);
     
     // Проверяем, разблокирован ли уже инструмент
     const alreadyUnlocked = await db.get(`
@@ -829,6 +849,7 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     `, [userId, toolId]);
     
     if (alreadyUnlocked) {
+      console.log(`Инструмент ${toolId} уже разблокирован для пользователя ${userId}`);
       return res.json({ success: true, message: 'Инструмент уже разблокирован' });
     }
     
@@ -836,10 +857,11 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     const playerProgress = await getOrCreatePlayerProgress(userId);
     
     // Проверяем уровень
-    if (tool.unlock_level > playerProgress.level) {
+    if (tool.unlockLevel > playerProgress.level) {
+      console.log(`Недостаточный уровень: требуется ${tool.unlockLevel}, текущий ${playerProgress.level}`);
       return res.status(403).json({ 
         error: 'Недостаточный уровень',
-        requiredLevel: tool.unlock_level,
+        requiredLevel: tool.unlockLevel,
         currentLevel: playerProgress.level
       });
     }
@@ -847,23 +869,29 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     // Получаем количество ресурсов
     const currency = await db.get(`
       SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
-    `, [userId, tool.currency_id]);
+    `, [userId, tool.currencyId]);
+    
+    console.log(`Проверка ресурсов: требуется ${tool.unlockCost}, доступно ${currency ? currency.amount : 0}`);
     
     // Проверяем, достаточно ли ресурсов
-    if (!currency || currency.amount < tool.unlock_cost) {
+    if (!currency || parseFloat(currency.amount) < parseFloat(tool.unlockCost)) {
+      console.log(`Недостаточно ресурсов: требуется ${tool.unlockCost}, доступно ${currency ? currency.amount : 0}`);
       return res.status(403).json({ 
         error: 'Недостаточно ресурсов',
-        required: tool.unlock_cost,
+        required: tool.unlockCost,
         available: currency ? currency.amount : 0
       });
     }
     
     // Списываем ресурсы
+    const unlockCost = parseFloat(tool.unlockCost);
     await db.run(`
       UPDATE player_currencies
       SET amount = amount - ?
       WHERE user_id = ? AND currency_id = ?
-    `, [tool.unlock_cost, userId, tool.currency_id]);
+    `, [unlockCost, userId, tool.currencyId]);
+    
+    console.log(`Списано ${unlockCost} ресурсов с типом ${tool.currencyId}`);
     
     // Разблокируем инструмент
     await db.run(`
@@ -871,11 +899,15 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
       VALUES (?, ?)
     `, [userId, toolId]);
     
+    console.log(`Инструмент ${toolId} разблокирован для пользователя ${userId}`);
+    
     // Автоматически экипируем новый инструмент
     await db.run(`
       INSERT OR REPLACE INTO player_equipped_tools (user_id, character_id, tool_id)
       VALUES (?, ?, ?)
-    `, [userId, tool.character_id, toolId]);
+    `, [userId, tool.characterId, toolId]);
+    
+    console.log(`Инструмент ${toolId} экипирован для персонажа ${tool.characterId}`);
     
     res.json({ success: true });
   } catch (error) {
@@ -2609,6 +2641,76 @@ app.get('/api/currencies/:currencyType', async (req, res) => {
     res.json(currency);
   } catch (error) {
     console.error('Ошибка при получении информации о валюте:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Получить инструменты игрока для персонажа
+app.get('/api/player/characters/:id/tools', async (req, res) => {
+  try {
+    const { userId } = req;
+    const characterId = req.params.id;
+    
+    console.log(`Получение инструментов игрока для персонажа ${characterId} пользователя ${userId}`);
+    
+    // Получаем инструменты персонажа
+    const characterTools = await db.all(`
+      SELECT 
+        t.id, 
+        t.name, 
+        t.character_id, 
+        t.power,
+        t.unlock_level, 
+        t.unlock_cost, 
+        t.currency_id,
+        t.image_path,
+        t.main_coins_power,
+        t.location_coins_power,
+        c.code as currency_type
+      FROM tools t
+      LEFT JOIN currencies c ON t.currency_id = c.id
+      JOIN player_tools pt ON t.id = pt.tool_id
+      WHERE t.character_id = ? AND pt.user_id = ?
+    `, [characterId, userId]);
+    
+    console.log(`Найдено ${characterTools.length} инструментов игрока`);
+    
+    // Получаем текущий экипированный инструмент
+    const equippedTool = await db.get(`
+      SELECT tool_id FROM player_equipped_tools 
+      WHERE user_id = ? AND character_id = ?
+    `, [userId, characterId]);
+    
+    const equippedToolId = equippedTool ? equippedTool.tool_id : null;
+    console.log(`Экипированный инструмент: ${equippedToolId}`);
+    
+    // Преобразуем результаты для клиента
+    const formattedTools = characterTools.map(tool => {
+      // Добавляем флаг, указывающий, экипирован ли инструмент
+      const is_equipped = tool.id === equippedToolId;
+      
+      return {
+        id: tool.id,
+        name: tool.name,
+        characterId: tool.character_id,
+        power: tool.power,
+        unlockLevel: tool.unlock_level,
+        unlockCost: tool.unlock_cost,
+        currencyId: tool.currency_id,
+        currencyType: tool.currency_type,
+        imagePath: tool.image_path,
+        mainCoinsPower: tool.main_coins_power,
+        locationCoinsPower: tool.location_coins_power,
+        is_unlocked: true, // Всегда true, так как это уже разблокированные инструменты
+        is_equipped: is_equipped,
+        can_equip: !is_equipped
+      };
+    });
+    
+    console.log(`Отправка инструментов игрока: ${JSON.stringify(formattedTools)}`);
+    res.json(formattedTools);
+  } catch (error) {
+    console.error('Ошибка при получении инструментов игрока:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
