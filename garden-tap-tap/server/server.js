@@ -2203,8 +2203,57 @@ initDatabase().then(async () => {
     } else {
       console.log('Столбец last_login найден в таблице player_progress');
     }
+    
+    // Создаем таблицу для уровней улучшения хранилища, если её нет
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS storage_upgrade_levels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        location_id INTEGER NOT NULL,
+        level INTEGER NOT NULL,
+        capacity INTEGER NOT NULL,
+        upgrade_cost REAL NOT NULL,
+        currency_id INTEGER NOT NULL,
+        UNIQUE(location_id, level)
+      )
+    `);
+    
+    // Проверяем, есть ли записи в таблице
+    const storageUpgradeLevels = await db.get(`SELECT COUNT(*) as count FROM storage_upgrade_levels`);
+    if (storageUpgradeLevels.count === 0) {
+      console.log('Добавляем начальные данные для уровней хранилища...');
+      
+      // Добавляем уровни для локации 1 (Лес)
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (1, 1, 500, 0, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (1, 2, 1000, 100, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (1, 3, 2000, 250, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (1, 4, 5000, 500, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (1, 5, 10000, 1000, 1)`);
+      
+      // Добавляем уровни для локации 2 (Ферма)
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (2, 1, 500, 0, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (2, 2, 1000, 150, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (2, 3, 2000, 300, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (2, 4, 5000, 600, 1)`);
+      await db.run(`INSERT INTO storage_upgrade_levels (location_id, level, capacity, upgrade_cost, currency_id) VALUES (2, 5, 10000, 1200, 1)`);
+      
+      console.log('Начальные данные для уровней хранилища добавлены');
+    }
+    
+    // Создаем таблицу для хранения лимитов хранилищ игрока
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS player_storage_limits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        location_id INTEGER NOT NULL,
+        currency_id INTEGER NOT NULL,
+        storage_level INTEGER NOT NULL DEFAULT 1,
+        capacity INTEGER NOT NULL DEFAULT 500,
+        UNIQUE(user_id, location_id, currency_id)
+      )
+    `);
+    
   } catch (error) {
-    console.error('Ошибка при проверке структуры таблицы player_progress:', error);
+    console.error('Ошибка при проверке структуры таблицы player_progress или создании таблиц хранилища:', error);
   }
   
   // Запускаем сервер после инициализации базы данных
@@ -2334,7 +2383,7 @@ app.get('/api/player/storage/:locationId/:currencyId/upgrade-info', async (req, 
     
     // Получаем информацию о следующем уровне
     const nextLevelInfo = await db.get(`
-      SELECT level, capacity, upgrade_cost, currency_type 
+      SELECT level, capacity, upgrade_cost, currency_id 
       FROM storage_upgrade_levels 
       WHERE location_id = ? AND level = ?
     `, [locationId, currentLevel + 1]);
@@ -2356,7 +2405,7 @@ app.get('/api/player/storage/:locationId/:currencyId/upgrade-info', async (req, 
     const playerCurrency = await db.get(`
       SELECT amount FROM player_currencies 
       WHERE user_id = ? AND currency_id = ?
-    `, [userId, nextLevelInfo.currency_type]);
+    `, [userId, nextLevelInfo.currency_id]);
     
     const playerAmount = playerCurrency ? playerCurrency.amount : 0;
     const canUpgrade = playerAmount >= nextLevelInfo.upgrade_cost;
@@ -2367,7 +2416,7 @@ app.get('/api/player/storage/:locationId/:currencyId/upgrade-info', async (req, 
       currentCapacity,
       nextCapacity: nextLevelInfo.capacity,
       upgradeCost: nextLevelInfo.upgrade_cost,
-      currencyType: nextLevelInfo.currency_type,
+      currencyType: nextLevelInfo.currency_id,
       canUpgrade
     });
   } catch (error) {
@@ -2404,7 +2453,7 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
     
     // Получаем информацию о следующем уровне
     const nextLevelInfo = await db.get(`
-      SELECT level, capacity, upgrade_cost, currency_type 
+      SELECT level, capacity, upgrade_cost, currency_id 
       FROM storage_upgrade_levels 
       WHERE location_id = ? AND level = ?
     `, [locationId, currentLevel + 1]);
@@ -2421,15 +2470,9 @@ app.post('/api/player/storage/upgrade', async (req, res) => {
     console.log('Информация о следующем уровне:', nextLevelInfo);
     
     // Получаем ID валюты для оплаты из таблицы валют по типу
-    const paymentCurrency = await db.get(`
-      SELECT id FROM currencies 
-      WHERE currency_type = ?
-    `, [nextLevelInfo.currency_type]);
-    
-    const paymentCurrencyId = paymentCurrency ? paymentCurrency.id : nextLevelInfo.currency_type;
+    const paymentCurrencyId = nextLevelInfo.currency_id;
     
     console.log('Валюта для оплаты:', { 
-      type: nextLevelInfo.currency_type, 
       id: paymentCurrencyId 
     });
     
