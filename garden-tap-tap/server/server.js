@@ -1025,7 +1025,7 @@ app.get('/api/helpers/location/:locationId', async (req, res) => {
     });
     
     // Форматируем помощников для клиента
-    const formattedHelpers = locationHelpers.map(helper => {
+    const formattedHelpers = await Promise.all(locationHelpers.map(async (helper) => {
       // Проверяем, разблокирован ли помощник
       const isUnlocked = helper.id in unlockedHelperMap;
       
@@ -1041,8 +1041,24 @@ app.get('/api/helpers/location/:locationId', async (req, res) => {
       // Определяем, может ли игрок купить помощника
       const canBuy = !isUnlocked && hasRequiredLevel && hasEnoughResources;
       
-      // Получаем доход в час для текущего уровня
+      // Получаем доход в час для текущего или первого уровня
       let incomePerHour = 0;
+      
+      // Если помощник куплен, берем доход для его текущего уровня
+      // Если не куплен, берем доход для первого уровня (чтобы показать, сколько будет приносить)
+      const levelToCheck = isUnlocked ? level : 1;
+      
+      // Получаем информацию о доходе для уровня
+      const levelData = await db.get(`
+        SELECT income_per_hour FROM helper_levels
+        WHERE helper_id = ? AND level = ?
+      `, [helper.id, levelToCheck]);
+      
+      if (levelData) {
+        incomePerHour = parseFloat(levelData.income_per_hour);
+      }
+      
+      console.log(`Помощник ${helper.id}: уровень ${levelToCheck}, доход ${incomePerHour}/ч`);
       
       // Форматируем помощника для клиента
       return {
@@ -1062,7 +1078,7 @@ app.get('/api/helpers/location/:locationId', async (req, res) => {
         canBuy: canBuy,
         playerLevel: playerProgress.level
       };
-    });
+    }));
     
     console.log(`Отправка помощников: ${JSON.stringify(formattedHelpers)}`);
     res.json(formattedHelpers);
@@ -1077,6 +1093,8 @@ app.post('/api/player/helpers/:helperId/buy', async (req, res) => {
   try {
     const { userId } = req;
     const { helperId } = req.params;
+    
+    console.log(`Попытка покупки помощника ${helperId} пользователем ${userId}`);
     
     // Получаем информацию о помощнике
     const helper = await db.get(`
@@ -1119,13 +1137,35 @@ app.post('/api/player/helpers/:helperId/buy', async (req, res) => {
       UPDATE player_currencies SET amount = amount - ? WHERE user_id = ? AND currency_id = ?
     `, [helper.unlock_cost, userId, helper.currency_id]);
     
-    // Добавляем помощника в таблицу купленных
+    // Добавляем помощника в таблицу купленных с уровнем 1
     await db.run(`
-      INSERT INTO player_helpers (user_id, helper_id)
-      VALUES (?, ?)
+      INSERT INTO player_helpers (user_id, helper_id, level)
+      VALUES (?, ?, 1)
     `, [userId, helperId]);
     
-    res.json({ success: true });
+    // Получаем обновленное количество ресурсов
+    const updatedCurrency = await db.get(`
+      SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
+    `, [userId, helper.currency_id]);
+    
+    const updatedAmount = updatedCurrency ? parseFloat(updatedCurrency.amount) : 0;
+    
+    console.log(`Помощник ${helperId} успешно куплен. Обновленное количество ресурсов: ${updatedAmount}`);
+    
+    // Получаем информацию о валюте для отображения
+    const currencyInfo = await db.get(`
+      SELECT code FROM currencies WHERE id = ?
+    `, [helper.currency_id]);
+    
+    // Возвращаем успех и обновленное количество ресурсов
+    res.json({ 
+      success: true, 
+      updatedCurrency: {
+        currencyId: helper.currency_id,
+        currencyType: currencyInfo ? currencyInfo.code : null,
+        amount: updatedAmount
+      }
+    });
   } catch (error) {
     console.error('Ошибка при покупке помощника:', error);
     res.status(500).json({ error: 'Ошибка сервера' });

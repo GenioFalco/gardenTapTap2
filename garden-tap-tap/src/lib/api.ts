@@ -312,10 +312,23 @@ export const getActiveHelpers = async (): Promise<any[]> => {
 };
 
 // Купить помощника
-export const buyHelper = async (helperId: number): Promise<{ success: boolean }> => {
-  return await fetchApi<{ success: boolean }>('/helpers/buy', {
-    method: 'POST',
-    body: JSON.stringify({ helperId })
+export const buyHelper = async (helperId: number): Promise<{ 
+  success: boolean;
+  updatedCurrency?: {
+    currencyId: number;
+    currencyType: string;
+    amount: number;
+  }
+}> => {
+  return await fetchApi<{ 
+    success: boolean;
+    updatedCurrency?: {
+      currencyId: number;
+      currencyType: string;
+      amount: number;
+    }
+  }>(`/player/helpers/${helperId}/buy`, {
+    method: 'POST'
   });
 };
 

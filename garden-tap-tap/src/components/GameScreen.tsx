@@ -18,7 +18,8 @@ const UpgradeModal = ({
   locationCurrencyType,
   unlockedTools = [], // Массив ID разблокированных инструментов
   locationId, // Добавляем ID локации для работы с помощниками
-  onHelpersChanged // Добавляем обработчик изменения помощников
+  onHelpersChanged, // Добавляем обработчик изменения помощников
+  updateResources
 }: { 
   show: boolean; 
   onClose: () => void; 
@@ -33,6 +34,7 @@ const UpgradeModal = ({
   unlockedTools?: number[]; // Новый пропс для разблокированных инструментов
   locationId: number; // ID локации для работы с помощниками
   onHelpersChanged?: () => void; // Обработчик изменения помощников
+  updateResources?: (currencyId?: string | number, newAmount?: number) => Promise<void>; // Функция для обновления ресурсов
 }) => {
   const [activeTab, setActiveTab] = useState<'tools' | 'office'>('tools');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -231,6 +233,7 @@ const UpgradeModal = ({
               locationCurrencyType={locationCurrencyType}
               onHelpersChanged={handleHelpersChanged}
               embedded={true} // Добавляем флаг, что модальное окно встроено в таб
+              updateResources={updateResources}
             />
           )}
         </div>
@@ -256,6 +259,7 @@ interface GameScreenProps {
   characterImageUrl?: string;
   gardenCoins?: number;
   unlockedTools?: number[]; // Добавляем список разблокированных инструментов
+  updateResources?: (currencyId?: string | number, newAmount?: number) => Promise<void>; // Функция для обновления ресурсов
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({
@@ -275,6 +279,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
   characterImageUrl = '/assets/characters/lumberjack.png',
   gardenCoins = 0,
   unlockedTools = [], // По умолчанию пустой массив
+  updateResources
 }) => {
   // Состояние для модального окна
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -435,12 +440,41 @@ const GameScreen: React.FC<GameScreenProps> = ({
     setCurrentResourceAmount(resourceAmount);
   }, [resourceAmount]);
   
-  // Функция для загрузки текущего количества ресурсов
-  const loadResourceAmount = async () => {
+  // Обработчик изменения помощников
+  const handleHelpersChanged = (updatedAmount?: number) => {
+    // Если передано обновленное количество ресурсов, обновляем его
+    if (updatedAmount !== undefined) {
+      console.log(`Обновление количества ресурсов: ${updatedAmount}`);
+      if (updateResources) {
+        // Используем функцию из родительского компонента для обновления всех ресурсов
+        updateResources(location.currencyId || location.currency_id, updatedAmount);
+      } else {
+        // Запасной вариант, если функция не передана
+        loadResourceAmount(updatedAmount);
+      }
+    } else {
+      // Иначе просто перезагружаем ресурсы
+      if (updateResources) {
+        // Обновляем все ресурсы
+        updateResources();
+      } else {
+        loadResourceAmount();
+      }
+    }
+  };
+  
+  // Загрузка количества ресурсов
+  const loadResourceAmount = async (newAmount?: number) => {
     try {
-      // Загружаем текущее количество ресурсов для локации
-      const amount = await api.getResourceAmount(location.currencyId || location.currency_id || '');
-      setCurrentResourceAmount(amount);
+      if (newAmount !== undefined) {
+        // Если передано новое значение, используем его без запроса к API
+        setCurrentResourceAmount(newAmount);
+      } else {
+        // Иначе загружаем с сервера
+        const currencyId = currencyType.toLowerCase();
+        const amount = await api.getResourceAmount(currencyId);
+        setCurrentResourceAmount(amount);
+      }
     } catch (error) {
       console.error('Ошибка при загрузке количества ресурсов:', error);
     }
@@ -611,12 +645,6 @@ const GameScreen: React.FC<GameScreenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleTap]);
 
-  // Обработчик изменения помощников
-  const handleHelpersChanged = () => {
-    // Обновляем информацию о ресурсах после изменения помощников
-    loadResourceAmount();
-  };
-
   return (
     <div 
       className="h-screen w-full flex flex-col items-center justify-between py-8 px-4 pt-24"
@@ -756,6 +784,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
         unlockedTools={unlockedTools}
         locationId={location.id}
         onHelpersChanged={handleHelpersChanged}
+        updateResources={updateResources}
       />
       
 

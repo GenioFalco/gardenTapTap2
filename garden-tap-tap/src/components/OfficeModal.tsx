@@ -10,8 +10,9 @@ interface OfficeModalProps {
   playerLevel: number;
   locationCurrency: number;
   locationCurrencyType: CurrencyType;
-  onHelpersChanged: () => void; // Callback для обновления игрового экрана
+  onHelpersChanged: (amount?: number) => void; // Callback для обновления игрового экрана
   embedded?: boolean; // Флаг, указывающий что компонент встроен в таб
+  updateResources?: (currencyId?: string | number, newAmount?: number) => Promise<void>; // Функция для обновления ресурсов
 }
 
 const HelperCard: React.FC<{
@@ -282,7 +283,8 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
   locationCurrency,
   locationCurrencyType,
   onHelpersChanged,
-  embedded = false // По умолчанию не встроен
+  embedded = false, // По умолчанию не встроен
+  updateResources
 }) => {
   const [helpers, setHelpers] = useState<Helper[]>([]);
   const [loading, setLoading] = useState(false);
@@ -358,7 +360,27 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
     try {
       setProcessingHelperId(helper.id);
       setError(null);
-      await api.buyHelper(helper.id);
+      const result = await api.buyHelper(helper.id);
+      
+      // Если покупка успешна и вернулось обновленное количество ресурсов
+      if (result.success && result.updatedCurrency) {
+        console.log(`Помощник ${helper.id} успешно куплен. Обновленное количество ресурсов:`, result.updatedCurrency);
+        
+        // Обновляем локальное состояние количества ресурсов
+        if (result.updatedCurrency.currencyId === helper.currencyId) {
+          // Если передана функция updateResources, используем её
+          if (updateResources) {
+            await updateResources(
+              result.updatedCurrency.currencyId, 
+              result.updatedCurrency.amount
+            );
+          } else {
+            // Иначе используем старый способ
+            onHelpersChanged(result.updatedCurrency.amount);
+          }
+        }
+      }
+      
       await loadHelpers();
       onHelpersChanged(); // Обновляем состояние игрового экрана
     } catch (error: any) {
@@ -411,9 +433,18 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
   };
 
   // Обработчик сбора прибыли помощников
-  const handleIncomeCollected = () => {
-    // Обновляем данные после сбора прибыли
-    onHelpersChanged();
+  const handleIncomeCollected = async () => {
+    try {
+      // Если передана функция updateResources, используем её для обновления всех ресурсов
+      if (updateResources) {
+        await updateResources();
+      } else {
+        // Иначе используем старый способ
+        onHelpersChanged();
+      }
+    } catch (error) {
+      console.error('Ошибка при обновлении ресурсов после сбора прибыли:', error);
+    }
   };
 
   // Рендеринг модального окна

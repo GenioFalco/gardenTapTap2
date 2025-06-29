@@ -913,6 +913,50 @@ function App() {
     setShowStorageModal(!showStorageModal);
   };
   
+  // Функция для обновления ресурсов
+  const updateResources = async (currencyId?: string | number, newAmount?: number) => {
+    try {
+      console.log(`Обновление ресурсов: currencyId=${currencyId}, newAmount=${newAmount}`);
+      
+      // Если передан ID валюты и новое количество, обновляем сразу
+      if (currencyId !== undefined && newAmount !== undefined) {
+        // Преобразуем ID валюты в строку для сравнения
+        const currencyIdStr = String(currencyId).toLowerCase();
+        
+        // Проверяем, какая валюта обновляется
+        if (currencyIdStr === 'main' || currencyIdStr === '5') {
+          console.log(`Обновление сад-коинов: ${newAmount}`);
+          setGardenCoins(newAmount);
+        }
+        
+        // Если это валюта текущей локации, обновляем её
+        if (currentLocation && 
+            (currencyIdStr === String(currentLocation.currencyId).toLowerCase() || 
+             currencyIdStr === String(currentLocation.currency_id).toLowerCase())) {
+          console.log(`Обновление ресурсов локации: ${newAmount}`);
+          setResourceAmount(newAmount);
+        }
+      } else {
+        // Если не переданы параметры, обновляем все ресурсы
+        
+        // Обновляем сад-коины
+        const mainCoins = await api.getResourceAmount('main');
+        setGardenCoins(mainCoins);
+        
+        // Обновляем ресурсы текущей локации, если она выбрана
+        if (currentLocation) {
+          const currencyId = currentLocation.currencyId?.toLowerCase() || 
+                            currentLocation.currency_type?.toLowerCase() || 
+                            'forest';
+          const locationResources = await api.getResourceAmount(currencyId);
+          setResourceAmount(locationResources);
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при обновлении ресурсов:', error);
+    }
+  };
+  
   if (!initialized || !playerProgress || !currentLocation) {
     return <div className="loading">Загрузка...</div>;
   }
@@ -1020,23 +1064,26 @@ function App() {
       />
       
       {/* Игровой экран или другие вкладки в зависимости от activeTab */}
-      {activeTab === "tap" && <GameScreen
-        location={currentLocation}
-        tools={tools}
-        equippedToolId={equippedToolId}
-        resourceAmount={resourceAmount}
-        currencyType={locationCurrencyType}
-        energy={playerProgress.energy}
-        maxEnergy={playerProgress.maxEnergy}
-        level={playerProgress.level}
-        experience={playerProgress.experience}
-        nextLevelExperience={nextLevelExp}
-        onTap={handleTap}
-        onUpgrade={handleUpgrade}
-        gardenCoins={gardenCoins}
-        onActivateTool={handleActivateTool}
-        unlockedTools={playerProgress.unlockedTools || []}
-      />}
+      {activeTab === "tap" && (
+        <GameScreen
+          location={currentLocation}
+          tools={tools}
+          equippedToolId={equippedToolId}
+          resourceAmount={resourceAmount}
+          currencyType={(currentLocation.currencyType || currentLocation.currency_type || 'FOREST') as CurrencyType}
+          energy={playerProgress.energy}
+          maxEnergy={playerProgress.maxEnergy}
+          level={playerProgress.level}
+          experience={playerProgress.experience}
+          nextLevelExperience={nextLevelExp}
+          onTap={handleTap}
+          onUpgrade={handleUpgrade}
+          onActivateTool={handleActivateTool}
+          gardenCoins={gardenCoins}
+          unlockedTools={playerProgress.unlockedTools || []}
+          updateResources={updateResources}
+        />
+      )}
       
       {/* Экран локаций */}
       {activeTab === "locations" && (
