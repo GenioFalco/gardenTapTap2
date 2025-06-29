@@ -140,14 +140,22 @@ export interface Helper {
   unlockLevel: number;
   unlockCost: number;
   currencyType: CurrencyType;
+  currencyId?: number;
   imagePath: string;
-  isUnlocked?: boolean;  // Куплен ли помощник
-  max_level?: number;    // Максимальный уровень помощника
-  level?: number;        // Текущий уровень помощника
+  isUnlocked?: boolean;   // Куплен ли помощник
+  max_level?: number;     // Максимальный уровень помощника
+  maxLevel?: number;      // Альтернативное имя для max_level
+  level?: number;         // Текущий уровень помощника
+  
+  // Новые поля для проверки доступности
+  hasRequiredLevel?: boolean;  // Достаточно ли уровня игрока
+  canBuy?: boolean;           // Может ли игрок купить помощника
+  playerLevel?: number;       // Текущий уровень игрока
   
   // Поля для обратной совместимости
-  description?: string;  // Убрано в новой версии
-  incomePerHour?: number; // Заменено на значение из таблицы helper_levels
+  description?: string;       // Убрано в новой версии
+  incomePerHour?: number;     // Заменено на значение из таблицы helper_levels
+  is_unlocked?: boolean;      // Альтернативное имя для isUnlocked
 }
 
 // Интерфейс уровня помощника

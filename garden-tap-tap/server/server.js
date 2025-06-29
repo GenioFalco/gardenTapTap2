@@ -979,55 +979,93 @@ app.get('/api/locations/unlock-level/:level', async (req, res) => {
   }
 });
 
-// Получить помощников для локации
-app.get('/api/player/locations/:locationId/helpers', async (req, res) => {
+// Получить помощников для локации (без привязки к игроку)
+app.get('/api/helpers/location/:locationId', async (req, res) => {
   try {
-    const { userId } = req;
     const { locationId } = req.params;
+    const { userId } = req;
+    
+    console.log(`Получение всех помощников для локации ${locationId}`);
     
     // Получаем помощников для локации
     const locationHelpers = await db.all(`
-      SELECT * FROM helpers WHERE location_id = ?
+      SELECT 
+        h.*,
+        c.code as currency_type
+      FROM helpers h
+      JOIN currencies c ON h.currency_id = c.id
+      WHERE h.location_id = ?
     `, [locationId]);
     
     // Получаем купленных помощников
     const unlockedHelpers = await db.all(`
-      SELECT helper_id FROM player_helpers WHERE user_id = ?
+      SELECT helper_id, level FROM player_helpers WHERE user_id = ?
     `, [userId]);
     
-    const unlockedHelperIds = unlockedHelpers.map(helper => helper.helper_id);
+    // Создаем карту разблокированных помощников и их уровней
+    const unlockedHelperMap = {};
+    unlockedHelpers.forEach(h => {
+      unlockedHelperMap[h.helper_id] = h.level || 1;
+    });
     
-    // Получаем активных помощников
-    const activeHelpers = await db.all(`
-      SELECT helper_id, location_id, activated_time FROM player_active_helpers WHERE user_id = ?
-    `, [userId]);
-    
-    const activeHelperIds = activeHelpers.map(helper => helper.helper_id);
-    const activeLocationIds = activeHelpers.map(helper => helper.location_id);
-    
-    // Узнаем, есть ли активные помощники на других локациях
-    const hasActiveHelperInOtherLocation = activeHelpers.some(helper => 
-      helper.location_id != locationId
-    );
+    console.log(`Разблокированные помощники: ${JSON.stringify(unlockedHelperMap)}`);
     
     // Получаем уровень игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
+    console.log(`Уровень игрока: ${playerProgress.level}`);
     
-    // Добавляем флаги к помощникам
-    const helpersWithInfo = locationHelpers.map(helper => {
-      // Находим запись активного помощника, если есть
-      const activeHelper = activeHelpers.find(ah => ah.helper_id === helper.id);
+    // Получаем информацию о валютах игрока
+    const playerCurrencies = await db.all(`
+      SELECT currency_id, amount FROM player_currencies WHERE user_id = ?
+    `, [userId]);
+    
+    const currencyMap = {};
+    playerCurrencies.forEach(currency => {
+      currencyMap[currency.currency_id] = parseFloat(currency.amount);
+    });
+    
+    // Форматируем помощников для клиента
+    const formattedHelpers = locationHelpers.map(helper => {
+      // Проверяем, разблокирован ли помощник
+      const isUnlocked = helper.id in unlockedHelperMap;
       
+      // Уровень помощника (0 если не разблокирован)
+      const level = isUnlocked ? unlockedHelperMap[helper.id] : 0;
+      
+      // Проверяем, достаточно ли у игрока ресурсов для покупки
+      const hasEnoughResources = currencyMap[helper.currency_id] >= helper.unlock_cost;
+      
+      // Проверяем, достаточно ли у игрока уровня для покупки
+      const hasRequiredLevel = playerProgress.level >= helper.unlock_level;
+      
+      // Определяем, может ли игрок купить помощника
+      const canBuy = !isUnlocked && hasRequiredLevel && hasEnoughResources;
+      
+      // Получаем доход в час для текущего уровня
+      let incomePerHour = 0;
+      
+      // Форматируем помощника для клиента
       return {
-        ...helper,
-        is_unlocked: unlockedHelperIds.includes(helper.id),
-        is_active: activeHelperIds.includes(helper.id),
-        can_activate: !hasActiveHelperInOtherLocation || activeLocationIds.includes(parseInt(locationId)),
-        activated_time: activeHelper ? activeHelper.activated_time : null
+        id: helper.id,
+        name: helper.name,
+        locationId: helper.location_id,
+        unlockLevel: helper.unlock_level,
+        unlockCost: helper.unlock_cost,
+        currencyId: helper.currency_id,
+        currencyType: helper.currency_type,
+        maxLevel: helper.max_level,
+        imagePath: helper.image_path,
+        isUnlocked: isUnlocked,
+        level: level,
+        incomePerHour: incomePerHour,
+        hasRequiredLevel: hasRequiredLevel,
+        canBuy: canBuy,
+        playerLevel: playerProgress.level
       };
     });
     
-    res.json(helpersWithInfo);
+    console.log(`Отправка помощников: ${JSON.stringify(formattedHelpers)}`);
+    res.json(formattedHelpers);
   } catch (error) {
     console.error('Ошибка при получении помощников:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
