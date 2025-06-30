@@ -13,6 +13,7 @@ interface TopPanelProps {
   locationCurrency: number;
   locationCurrencyType: CurrencyType;
   lastEnergyRefillTime: string;
+  onAvatarClick?: () => void;
 }
 
 const TopPanel: React.FC<TopPanelProps> = ({
@@ -26,7 +27,8 @@ const TopPanel: React.FC<TopPanelProps> = ({
   gardenCoins,
   locationCurrency,
   locationCurrencyType,
-  lastEnergyRefillTime
+  lastEnergyRefillTime,
+  onAvatarClick
 }) => {
   const [secondsUntilRefill, setSecondsUntilRefill] = useState<number>(60);
   
@@ -99,7 +101,10 @@ const TopPanel: React.FC<TopPanelProps> = ({
       {/* Верхняя часть с аватаром, именем, уровнем и прогрессом */}
       <div className="flex items-start mb-2">
         {/* Аватар пользователя */}
-        <div className="avatar mr-3">
+        <div 
+          className="avatar mr-3 cursor-pointer" 
+          onClick={onAvatarClick}
+        >
           <img src={avatarSrc} alt="Аватар" className="w-full h-full object-cover" />
         </div>
         
@@ -107,7 +112,12 @@ const TopPanel: React.FC<TopPanelProps> = ({
         <div className="flex flex-col flex-grow">
           {/* Имя и уровень */}
           <div className="flex items-center justify-between mb-1">
-            <span className="text-white font-bold text-base">{userName}</span>
+            <span 
+              className="text-white font-bold text-base cursor-pointer" 
+              onClick={onAvatarClick}
+            >
+              {userName}
+            </span>
             <span className="text-white font-medium text-xs bg-yellow-500 rounded-full px-2 py-1">Уровень {level}</span>
           </div>
           

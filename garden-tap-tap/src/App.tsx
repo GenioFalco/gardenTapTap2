@@ -7,6 +7,7 @@ import LevelUpModal from './components/LevelUpModal';
 import LoadingScreen from './components/LoadingScreen';
 import StorageButton from './components/StorageButton';
 import StorageModal from './components/StorageModal';
+import ProfileModal from './components/ProfileModal';
 import * as api from './lib/api';
 import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
@@ -60,6 +61,9 @@ function App() {
   // Кеши имен инструментов и локаций для отображения в модальном окне
   const [toolNames, setToolNames] = useState<Record<number, string>>({});
   const [locationNames, setLocationNames] = useState<Record<number, string>>({});
+  
+  // Состояние для модального окна профиля
+  const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
   
   // Генерация случайного имени пользователя, если не удалось получить из Telegram
   const generateRandomUserName = () => {
@@ -913,6 +917,11 @@ function App() {
     setShowStorageModal(!showStorageModal);
   };
   
+  // Функция для переключения отображения модального окна профиля
+  const toggleProfileModal = () => {
+    setShowProfileModal(!showProfileModal);
+  };
+  
   // Функция для обновления ресурсов
   const updateResources = async (currencyId?: string | number, newAmount?: number) => {
     try {
@@ -1061,6 +1070,7 @@ function App() {
         locationCurrency={resourceAmount}
         locationCurrencyType={locationCurrencyType}
         lastEnergyRefillTime={playerProgress.lastEnergyRefillTime}
+        onAvatarClick={toggleProfileModal}
       />
       
       {/* Игровой экран или другие вкладки в зависимости от activeTab */}
@@ -1281,6 +1291,12 @@ function App() {
         show={showStorageModal}
         onClose={toggleStorageModal}
         playerLevel={playerProgress.level}
+      />
+      
+      {/* Модальное окно профиля */}
+      <ProfileModal
+        show={showProfileModal}
+        onClose={toggleProfileModal}
       />
       
       {/* Модальное окно повышения уровня */}

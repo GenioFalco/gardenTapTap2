@@ -454,4 +454,38 @@ export const collectHelpersPendingIncome = async (): Promise<any> => {
     method: 'POST'
   });
   return response;
+};
+
+// Получить профиль игрока
+export const getPlayerProfile = async (): Promise<{
+  userId: string;
+  avatar: string;
+  username: string;
+  level: number;
+  currentRank: {
+    id: number;
+    name: string;
+    imagePath: string;
+  };
+  highestRank: {
+    id: number;
+    name: string;
+    imagePath: string;
+  };
+  currentSeason: {
+    id: number;
+    name: string;
+    endDate: string;
+    daysLeft: number;
+  };
+  seasonPoints: number;
+  featuredAchievement: {
+    id: number;
+    name: string;
+    description: string;
+    imagePath: string;
+    dateUnlocked: string;
+  } | null;
+}> => {
+  return await fetchApi('/player/profile');
 }; 

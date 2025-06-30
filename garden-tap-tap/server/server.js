@@ -2835,3 +2835,170 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+// Получить профиль игрока
+app.get('/api/player/profile', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем основную информацию о прогрессе игрока
+    const playerProgress = await db.get(`
+      SELECT level FROM player_progress WHERE user_id = ?
+    `, [userId]);
+    
+    if (!playerProgress) {
+      return res.status(404).json({ error: 'Игрок не найден' });
+    }
+    
+    // Получаем или создаем профиль игрока
+    let playerProfile = await db.get(`
+      SELECT * FROM player_profile WHERE user_id = ?
+    `, [userId]);
+    
+    // Если профиля нет, создаем его с базовыми значениями
+    if (!playerProfile) {
+      // По умолчанию используем ранг 1 (Бронза I)
+      await db.run(`
+        INSERT INTO player_profile (user_id, current_rank_id, highest_rank_id, avatar_path, total_points)
+        VALUES (?, 1, 1, '/assets/avatars/default.png', 0)
+      `, [userId]);
+      
+      playerProfile = {
+        user_id: userId,
+        current_rank_id: 1,
+        highest_rank_id: 1,
+        featured_achievement_id: null,
+        avatar_path: '/assets/avatars/default.png',
+        total_points: 0
+      };
+    }
+    
+    // Получаем информацию о текущем ранге
+    const currentRank = await db.get(`
+      SELECT id, name, image_path FROM ranks WHERE id = ?
+    `, [playerProfile.current_rank_id || 1]);
+    
+    // Получаем информацию о наивысшем ранге
+    const highestRank = await db.get(`
+      SELECT id, name, image_path FROM ranks WHERE id = ?
+    `, [playerProfile.highest_rank_id || 1]);
+    
+    // Получаем информацию о текущем сезоне
+    const currentSeason = await db.get(`
+      SELECT * FROM seasons WHERE is_active = 1 OR (CURRENT_TIMESTAMP BETWEEN start_date AND end_date)
+      ORDER BY start_date DESC LIMIT 1
+    `);
+    
+    // Получаем информацию о сезонном прогрессе игрока
+    let seasonPoints = 0;
+    let seasonRankId = 1;
+    
+    if (currentSeason) {
+      const playerSeason = await db.get(`
+        SELECT points, rank_id FROM player_season 
+        WHERE user_id = ? AND season_id = ?
+      `, [userId, currentSeason.id]);
+      
+      if (playerSeason) {
+        seasonPoints = playerSeason.points;
+        seasonRankId = playerSeason.rank_id;
+      } else {
+        // Если записи о сезоне для игрока нет, создаем её
+        await db.run(`
+          INSERT INTO player_season (user_id, season_id, points, rank_id, highest_rank_id)
+          VALUES (?, ?, 0, 1, 1)
+        `, [userId, currentSeason.id]);
+      }
+    }
+    
+    // Получаем информацию о последнем достижении
+    let featuredAchievement = null;
+    
+    if (playerProfile.featured_achievement_id) {
+      // Если в профиле указано избранное достижение, получаем его
+      const achievement = await db.get(`
+        SELECT a.*, pa.date_unlocked
+        FROM achievements a
+        JOIN player_achievements pa ON a.id = pa.achievement_id
+        WHERE a.id = ? AND pa.user_id = ?
+      `, [playerProfile.featured_achievement_id, userId]);
+      
+      if (achievement) {
+        featuredAchievement = {
+          id: achievement.id,
+          name: achievement.name,
+          description: achievement.description,
+          imagePath: achievement.image_path,
+          dateUnlocked: achievement.date_unlocked
+        };
+      }
+    } else {
+      // Иначе получаем последнее разблокированное достижение
+      const lastAchievement = await db.get(`
+        SELECT a.*, pa.date_unlocked
+        FROM achievements a
+        JOIN player_achievements pa ON a.id = pa.achievement_id
+        WHERE pa.user_id = ?
+        ORDER BY pa.date_unlocked DESC
+        LIMIT 1
+      `, [userId]);
+      
+      if (lastAchievement) {
+        featuredAchievement = {
+          id: lastAchievement.id,
+          name: lastAchievement.name,
+          description: lastAchievement.description,
+          imagePath: lastAchievement.image_path,
+          dateUnlocked: lastAchievement.date_unlocked
+        };
+      }
+    }
+    
+    // Рассчитываем количество дней до конца сезона
+    let daysLeft = 0;
+    if (currentSeason) {
+      const endDate = new Date(currentSeason.end_date);
+      const now = new Date();
+      daysLeft = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+    
+    // Формируем ответ
+    const response = {
+      userId,
+      username: `Игрок ${userId.substring(0, 6)}`, // Простая генерация имени из ID
+      avatar: playerProfile.avatar_path || '/assets/avatars/default.png',
+      level: playerProgress.level,
+      currentRank: currentRank ? {
+        id: currentRank.id,
+        name: currentRank.name,
+        imagePath: currentRank.image_path
+      } : {
+        id: 1,
+        name: 'Бронза I',
+        imagePath: '/assets/ranks/bronze_1.png'
+      },
+      highestRank: highestRank ? {
+        id: highestRank.id,
+        name: highestRank.name,
+        imagePath: highestRank.image_path
+      } : {
+        id: 1,
+        name: 'Бронза I',
+        imagePath: '/assets/ranks/bronze_1.png'
+      },
+      currentSeason: currentSeason ? {
+        id: currentSeason.id,
+        name: currentSeason.name,
+        endDate: currentSeason.end_date,
+        daysLeft
+      } : null,
+      seasonPoints,
+      featuredAchievement
+    };
+    
+    res.json(response);
+  } catch (error) {
+    console.error('Ошибка при получении профиля игрока:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
