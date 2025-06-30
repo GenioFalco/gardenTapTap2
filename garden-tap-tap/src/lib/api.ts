@@ -488,4 +488,52 @@ export const getPlayerProfile = async (): Promise<{
   } | null;
 }> => {
   return await fetchApi('/player/profile');
+};
+
+// Обновить ранг игрока
+export const updatePlayerRank = async (seasonId: number = 1): Promise<{
+  success: boolean;
+  rankChanged: boolean;
+  newRank?: {
+    id: number;
+    name: string;
+    imagePath: string;
+    minPoints: number;
+  };
+  currentRank?: {
+    id: number;
+    name: string;
+    imagePath: string;
+    minPoints: number;
+  };
+}> => {
+  return await fetchApi('/player/update-rank', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ seasonId })
+  });
+};
+
+// Разблокировать достижение
+export const unlockAchievement = async (achievementId: number): Promise<{
+  success: boolean;
+  alreadyUnlocked: boolean;
+  achievement: {
+    id: number;
+    name: string;
+    description: string;
+    imagePath: string;
+    rewardValue: number;
+    dateUnlocked: string;
+  };
+}> => {
+  return await fetchApi('/player/unlock-achievement', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ achievementId })
+  });
 }; 

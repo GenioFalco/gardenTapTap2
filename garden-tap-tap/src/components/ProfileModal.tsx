@@ -138,7 +138,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ show, onClose }) => {
                 <div className="flex items-center">
                   <div className="w-10 h-10 mr-2">
                     <img 
-                      src={profileData.currentRank?.imagePath || '/assets/ranks/default.png'} 
+                      src={profileData.currentRank?.imagePath ? `/assets/${profileData.currentRank.imagePath}` : '/assets/ranks/bronze_1.png'} 
                       alt="Ранг" 
                       className="w-full h-full object-contain"
                     />
@@ -175,7 +175,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ show, onClose }) => {
                 <div className="flex items-center">
                   <div className="w-12 h-12 mr-3">
                     <img 
-                      src={profileData.featuredAchievement.imagePath || '/assets/achievements/default.png'} 
+                      src={profileData.featuredAchievement?.imagePath ? `/assets/${profileData.featuredAchievement.imagePath}` : '/assets/achievements/default.png'} 
                       alt="Достижение" 
                       className="w-full h-full object-contain"
                     />

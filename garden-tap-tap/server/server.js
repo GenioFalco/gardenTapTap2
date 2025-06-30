@@ -3002,3 +3002,247 @@ app.get('/api/player/profile', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+// Обновить ранг игрока в сезоне
+app.post('/api/player/update-rank', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { seasonId } = req.body;
+    
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Не указан ID сезона' });
+    }
+    
+    // Получаем текущий сезон, если ID не указан
+    let actualSeasonId = seasonId;
+    if (!actualSeasonId) {
+      const currentSeason = await db.get(`
+        SELECT id FROM seasons WHERE is_active = 1
+        OR (CURRENT_TIMESTAMP BETWEEN start_date AND end_date)
+        ORDER BY start_date DESC LIMIT 1
+      `);
+      
+      if (!currentSeason) {
+        return res.status(404).json({ error: 'Активный сезон не найден' });
+      }
+      
+      actualSeasonId = currentSeason.id;
+    }
+    
+    // Получаем текущие очки игрока в сезоне
+    const playerSeason = await db.get(`
+      SELECT points, rank_id, highest_rank_id FROM player_season
+      WHERE user_id = ? AND season_id = ?
+    `, [userId, actualSeasonId]);
+    
+    if (!playerSeason) {
+      return res.status(404).json({ error: 'Прогресс игрока в сезоне не найден' });
+    }
+    
+    // Получаем все ранги
+    const ranks = await db.all(`
+      SELECT id, name, min_points, image_path FROM ranks
+      ORDER BY min_points ASC
+    `);
+    
+    if (!ranks || ranks.length === 0) {
+      return res.status(404).json({ error: 'Ранги не найдены' });
+    }
+    
+    // Определяем текущий ранг на основе очков
+    let newRankId = 1; // По умолчанию первый ранг
+    let newRank = ranks[0];
+    
+    for (const rank of ranks) {
+      if (playerSeason.points >= rank.min_points) {
+        newRankId = rank.id;
+        newRank = rank;
+      } else {
+        break;
+      }
+    }
+    
+    // Если ранг изменился, обновляем его
+    if (newRankId !== playerSeason.rank_id) {
+      // Обновляем текущий ранг
+      await db.run(`
+        UPDATE player_season
+        SET rank_id = ?
+        WHERE user_id = ? AND season_id = ?
+      `, [newRankId, userId, actualSeasonId]);
+      
+      // Если новый ранг выше предыдущего максимального, обновляем и его
+      if (newRankId > playerSeason.highest_rank_id) {
+        await db.run(`
+          UPDATE player_season
+          SET highest_rank_id = ?
+          WHERE user_id = ? AND season_id = ?
+        `, [newRankId, userId, actualSeasonId]);
+        
+        // Обновляем также в профиле игрока
+        await db.run(`
+          UPDATE player_profile
+          SET current_rank_id = ?, highest_rank_id = ?
+          WHERE user_id = ?
+        `, [newRankId, newRankId, userId]);
+        
+        // Проверяем достижение "Мастер ранга" (достичь ранга Золото I)
+        if (newRankId >= 5) { // ID 5 соответствует рангу "Золото I"
+          const achievementExists = await db.get(`
+            SELECT 1 FROM player_achievements
+            WHERE user_id = ? AND achievement_id = 4
+          `, [userId]);
+          
+          if (!achievementExists) {
+            // Добавляем достижение
+            await db.run(`
+              INSERT INTO player_achievements (user_id, achievement_id, date_unlocked, is_claimed)
+              VALUES (?, 4, CURRENT_TIMESTAMP, 0)
+            `, [userId]);
+            
+            // Обновляем избранное достижение в профиле
+            await db.run(`
+              UPDATE player_profile
+              SET featured_achievement_id = 4
+              WHERE user_id = ?
+            `, [userId]);
+            
+            // Возвращаем информацию о достижении
+            const achievement = await db.get(`
+              SELECT * FROM achievements WHERE id = 4
+            `);
+            
+            if (achievement) {
+              // Выдаем награду за достижение
+              if (achievement.reward_type === 'coins' && achievement.reward_value > 0) {
+                await getOrCreatePlayerCurrency(userId, 5); // ID 5 - сад-коины
+                await db.run(`
+                  UPDATE player_currencies
+                  SET amount = amount + ?
+                  WHERE user_id = ? AND currency_id = 5
+                `, [achievement.reward_value, userId]);
+              }
+            }
+          }
+        }
+      } else {
+        // Обновляем только текущий ранг в профиле
+        await db.run(`
+          UPDATE player_profile
+          SET current_rank_id = ?
+          WHERE user_id = ?
+        `, [newRankId, userId]);
+      }
+      
+      // Возвращаем информацию о новом ранге
+      res.json({
+        success: true,
+        rankChanged: true,
+        previousRankId: playerSeason.rank_id,
+        newRank: {
+          id: newRank.id,
+          name: newRank.name,
+          imagePath: newRank.image_path,
+          minPoints: newRank.min_points
+        }
+      });
+    } else {
+      // Ранг не изменился
+      res.json({
+        success: true,
+        rankChanged: false,
+        currentRank: {
+          id: newRank.id,
+          name: newRank.name,
+          imagePath: newRank.image_path,
+          minPoints: newRank.min_points
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Ошибка при обновлении ранга игрока:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Получить достижение
+app.post('/api/player/unlock-achievement', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { achievementId } = req.body;
+    
+    if (!achievementId) {
+      return res.status(400).json({ error: 'Не указан ID достижения' });
+    }
+    
+    // Проверяем, существует ли достижение
+    const achievement = await db.get(`
+      SELECT * FROM achievements WHERE id = ?
+    `, [achievementId]);
+    
+    if (!achievement) {
+      return res.status(404).json({ error: 'Достижение не найдено' });
+    }
+    
+    // Проверяем, есть ли уже это достижение у игрока
+    const existingAchievement = await db.get(`
+      SELECT * FROM player_achievements
+      WHERE user_id = ? AND achievement_id = ?
+    `, [userId, achievementId]);
+    
+    if (existingAchievement) {
+      return res.json({
+        success: true,
+        alreadyUnlocked: true,
+        achievement: {
+          id: achievement.id,
+          name: achievement.name,
+          description: achievement.description,
+          imagePath: achievement.image_path,
+          rewardValue: achievement.reward_value,
+          dateUnlocked: existingAchievement.date_unlocked
+        }
+      });
+    }
+    
+    // Добавляем достижение игроку
+    await db.run(`
+      INSERT INTO player_achievements (user_id, achievement_id, date_unlocked, is_claimed)
+      VALUES (?, ?, CURRENT_TIMESTAMP, 0)
+    `, [userId, achievementId]);
+    
+    // Обновляем избранное достижение в профиле
+    await db.run(`
+      UPDATE player_profile
+      SET featured_achievement_id = ?
+      WHERE user_id = ?
+    `, [achievementId, userId]);
+    
+    // Выдаем награду за достижение
+    if (achievement.reward_type === 'coins' && achievement.reward_value > 0) {
+      await getOrCreatePlayerCurrency(userId, 5); // ID 5 - сад-коины
+      await db.run(`
+        UPDATE player_currencies
+        SET amount = amount + ?
+        WHERE user_id = ? AND currency_id = 5
+      `, [achievement.reward_value, userId]);
+    }
+    
+    // Возвращаем информацию о достижении
+    res.json({
+      success: true,
+      alreadyUnlocked: false,
+      achievement: {
+        id: achievement.id,
+        name: achievement.name,
+        description: achievement.description,
+        imagePath: achievement.image_path,
+        rewardValue: achievement.reward_value,
+        dateUnlocked: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Ошибка при разблокировке достижения:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});

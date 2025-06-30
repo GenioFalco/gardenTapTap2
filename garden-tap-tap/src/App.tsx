@@ -8,10 +8,12 @@ import LoadingScreen from './components/LoadingScreen';
 import StorageButton from './components/StorageButton';
 import StorageModal from './components/StorageModal';
 import ProfileModal from './components/ProfileModal';
+import RankUpModal from './components/RankUpModal';
+import AchievementModal from './components/AchievementModal';
 import * as api from './lib/api';
 import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
-import { AppEvent, subscribe, unsubscribe } from './lib/events';
+import { AppEvent, subscribe, unsubscribe, emit } from './lib/events';
 
 // Определение типа для совместимости с LevelUpModal
 interface ModalReward {
@@ -64,6 +66,18 @@ function App() {
   
   // Состояние для модального окна профиля
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+  
+  // Состояния для модальных окон рангов и достижений
+  const [showRankUpModal, setShowRankUpModal] = useState<boolean>(false);
+  const [showAchievementModal, setShowAchievementModal] = useState<boolean>(false);
+  const [currentRank, setCurrentRank] = useState<{id: number; name: string; imagePath: string;} | null>(null);
+  const [currentAchievement, setCurrentAchievement] = useState<{
+    id: number;
+    name: string;
+    description: string;
+    imagePath: string;
+    rewardValue?: number;
+  } | null>(null);
   
   // Генерация случайного имени пользователя, если не удалось получить из Telegram
   const generateRandomUserName = () => {
@@ -517,6 +531,20 @@ function App() {
     }
   };
 
+  // Функция для проверки ранга игрока
+  const checkPlayerRank = async () => {
+    try {
+      const result = await api.updatePlayerRank();
+      
+      if (result.rankChanged && result.newRank) {
+        // Вызываем событие получения нового ранга
+        emit(AppEvent.RANK_UP, result.newRank);
+      }
+    } catch (error) {
+      console.error('Ошибка при проверке ранга игрока:', error);
+    }
+  };
+
   // Обработка тапа с вибрацией для Telegram
   const handleTap = async () => {
     if (!currentLocation || !playerProgress) return;
@@ -705,6 +733,9 @@ function App() {
         }));
         
         setLocations(locationsWithPlaceholders);
+
+        // После успешного тапа и получения опыта проверяем ранг
+        await checkPlayerRank();
       }
     } catch (error) {
       console.error('Ошибка при тапе:', error);
@@ -965,6 +996,38 @@ function App() {
       console.error('Ошибка при обновлении ресурсов:', error);
     }
   };
+  
+  // Обработчик события получения нового ранга
+  useEffect(() => {
+    const handleRankUp = (data: any) => {
+      setCurrentRank(data);
+      setShowRankUpModal(true);
+    };
+    
+    // Подписываемся на событие
+    subscribe(AppEvent.RANK_UP, handleRankUp);
+    
+    return () => {
+      // Отписываемся при размонтировании
+      unsubscribe(AppEvent.RANK_UP, handleRankUp);
+    };
+  }, []);
+  
+  // Обработчик события получения нового достижения
+  useEffect(() => {
+    const handleAchievement = (data: any) => {
+      setCurrentAchievement(data);
+      setShowAchievementModal(true);
+    };
+    
+    // Подписываемся на событие
+    subscribe(AppEvent.ACHIEVEMENT_UNLOCKED, handleAchievement);
+    
+    return () => {
+      // Отписываемся при размонтировании
+      unsubscribe(AppEvent.ACHIEVEMENT_UNLOCKED, handleAchievement);
+    };
+  }, []);
   
   if (!initialized || !playerProgress || !currentLocation) {
     return <div className="loading">Загрузка...</div>;
@@ -1307,6 +1370,24 @@ function App() {
           onClose={handleCloseLevelUpModal}
           toolNames={toolNames}
           locationNames={locationNames}
+        />
+      )}
+      
+      {/* Модальное окно нового ранга */}
+      {currentRank && (
+        <RankUpModal
+          show={showRankUpModal}
+          onClose={() => setShowRankUpModal(false)}
+          rank={currentRank}
+        />
+      )}
+      
+      {/* Модальное окно нового достижения */}
+      {currentAchievement && (
+        <AchievementModal
+          show={showAchievementModal}
+          onClose={() => setShowAchievementModal(false)}
+          achievement={currentAchievement}
         />
       )}
         </>
