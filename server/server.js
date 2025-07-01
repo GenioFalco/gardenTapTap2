@@ -66,8 +66,23 @@ async function ensureUserExists(userId) {
         VALUES (?, 'main', 0), (?, 'forest', 0)
       `, [userId, userId]);
       
+      // Создаем запись в player_profile
+      await db.run(`
+        INSERT INTO player_profile (user_id, current_rank_id, highest_rank_id, total_points)
+        VALUES (?, 1, 1, 0)
+      `, [userId]);
+      
       console.log(`User ${userId} initialized with starting values`);
     }
+    
+    // Обновляем историю входов
+    await updateLoginHistory(userId);
+    
+    // Проверяем и выдаем достижения
+    await checkAndGrantAchievements(userId);
+    
+    // Обновляем профиль с последним достижением
+    await updateProfileWithLatestAchievement(userId);
   } catch (error) {
     console.error(`Error in ensureUserExists: ${error.message}`);
     throw error;
@@ -697,115 +712,73 @@ app.post('/api/player/tap', async (req, res) => {
   try {
     const { userId } = req;
     const { locationId } = req.body;
+    
     if (!locationId) {
-      return res.status(400).json({ error: 'Отсутствует ID локации' });
-    }
-    
-    // Получаем информацию о локации
-    const location = await db.get(`
-      SELECT * FROM locations WHERE id = ?
-    `, [locationId]);
-    
-    if (!location) {
-      return res.status(404).json({ error: 'Локация не найдена' });
+      return res.status(400).json({ error: 'Отсутствует параметр locationId' });
     }
     
     // Получаем прогресс игрока
-    const playerProgress = await db.get(`
-      SELECT * FROM player_progress WHERE user_id = ?
-    `, [userId]);
+    const playerProgress = await getOrCreatePlayerProgress(userId);
     
-    if (!playerProgress) {
-      return res.status(404).json({ error: 'Прогресс игрока не найден' });
-    }
-    
-    console.log('Текущий прогресс игрока:', playerProgress);
-    
-    // Проверяем, есть ли энергия
+    // Проверяем, достаточно ли энергии
     if (playerProgress.energy <= 0) {
       return res.status(403).json({ error: 'Недостаточно энергии' });
     }
     
-    // Получаем экипированный инструмент
-    const equipped = await db.get(`
-      SELECT t.* FROM player_equipped_tools et
-      JOIN tools t ON et.tool_id = t.id
-      WHERE et.user_id = ? AND et.character_id = ?
-    `, [userId, location.character_id]);
-    
-    // Если нет экипированного инструмента, используем базовое значение
-    // Явно преобразуем строковые значения в числа с помощью parseFloat
-    let locationCoinsPower = 1; // Базовое значение
-    let mainCoinsPower = 0.5; // Базовое значение
-    
-    if (equipped) {
-      locationCoinsPower = equipped.location_coins_power ? parseFloat(equipped.location_coins_power) : 1;
-      mainCoinsPower = equipped.main_coins_power ? parseFloat(equipped.main_coins_power) : 0.5;
+    // Получаем информацию о локации
+    const location = await db.get('SELECT * FROM locations WHERE id = ?', [locationId]);
+    if (!location) {
+      return res.status(404).json({ error: 'Локация не найдена' });
     }
     
-    console.log(`Тап с инструментом: ${equipped ? equipped.name : 'базовый'}`);
-    console.log(`Сила для валюты локации: ${locationCoinsPower}`);
-    console.log(`Сила для основной валюты: ${mainCoinsPower}`);
+    // Получаем экипированный инструмент
+    const equippedTool = await db.get(`
+      SELECT t.* FROM tools t
+      JOIN player_equipped_tools pet ON t.id = pet.tool_id
+      WHERE pet.user_id = ? AND pet.character_id = ?
+    `, [userId, location.character_id]);
     
-    // Получаем ID валюты локации
-    const locationCurrencyId = location.currency_id || '2';
+    // Если инструмент не экипирован, используем базовые значения
+    const toolPower = equippedTool ? equippedTool.power : 1;
+    const mainCoinsPower = equippedTool ? equippedTool.main_coins_power : 0.5;
+    const locationCoinsPower = equippedTool ? equippedTool.location_coins_power : 1;
     
-    // Обновляем валюту локации - получаем или создаем запись и затем обновляем
-    const locationCurrency = await getOrCreatePlayerCurrency(userId, locationCurrencyId);
+    // Рассчитываем полученные ресурсы
+    const resourcesGained = Math.round(toolPower * locationCoinsPower);
+    const mainCurrencyGained = Math.round(toolPower * mainCoinsPower);
+    
+    // Добавляем ресурсы локации
     await db.run(`
-      UPDATE player_currencies
-      SET amount = amount + ?
-      WHERE user_id = ? AND currency_id = ?
-    `, [locationCoinsPower, userId, locationCurrency.currency_id]);
+      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
+      VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?), 0) + ?)
+    `, [userId, location.currency_id, userId, location.currency_id, resourcesGained]);
     
-    console.log(`Добавлено ${locationCoinsPower} валюты ${locationCurrencyId} (ID: ${locationCurrency.currency_id})`);
-    
-    // Обновляем основную валюту (сад-коины)
-    const mainCurrency = await getOrCreatePlayerCurrency(userId, '1');
+    // Добавляем основную валюту
     await db.run(`
-      UPDATE player_currencies
-      SET amount = amount + ?
-      WHERE user_id = ? AND currency_id = ?
-    `, [mainCoinsPower, userId, mainCurrency.currency_id]);
+      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
+      VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?), 0) + ?)
+    `, [userId, 1, userId, 1, mainCurrencyGained]); // Предполагаем, что ID основной валюты = 1
     
-    console.log(`Добавлено ${mainCoinsPower} валюты с ID: ${mainCurrency.currency_id} (сад-коины)`);
+    // Уменьшаем энергию
+    const newEnergy = Math.max(0, playerProgress.energy - 1);
+    await db.run('UPDATE player_progress SET energy = ? WHERE user_id = ?', [newEnergy, userId]);
     
-    // Фиксированный опыт - всегда 1 за тап
-    const experienceGained = 1;
+    // Добавляем опыт (1-3 единицы за тап)
+    const expGained = Math.floor(Math.random() * 3) + 1;
+    const levelResult = await addExperience(userId, expGained);
     
-    // Текущее время для обновления времени последнего изменения энергии
-    const currentTime = new Date().toISOString();
+    // Обновляем статистику тапов
+    await updateTapStats(userId, resourcesGained, 1);
     
-    // Уменьшаем энергию и обновляем время последнего изменения
-    await db.run(`
-      UPDATE player_progress
-      SET energy = energy - 1, last_energy_refill_time = ?
-      WHERE user_id = ?
-    `, [currentTime, userId]);
-    
-    console.log(`Энергия уменьшена на 1, время обновления: ${currentTime}`);
-    
-    // Обработка опыта и проверка повышения уровня
-    const { levelUp, level, rewards } = await addExperience(userId, experienceGained);
-    
-    // Получаем оставшуюся энергию
-    const updatedProgress = await db.get(`
-      SELECT energy, max_energy as maxEnergy, last_energy_refill_time as lastEnergyRefillTime 
-      FROM player_progress WHERE user_id = ?
-    `, [userId]);
-    
-    console.log('Обновленный прогресс после тапа:', updatedProgress);
-    
+    // Отправляем результат
     res.json({
-      resourcesGained: locationCoinsPower,  // Заработано валюты локации
-      mainCurrencyGained: mainCoinsPower,  // Заработано сад-коинов
-      experienceGained, // Заработано опыта (всегда 1)
-      levelUp,
-      level,
-      rewards,
-      energyLeft: updatedProgress.energy,
-      maxEnergy: updatedProgress.maxEnergy,
-      lastEnergyRefillTime: updatedProgress.lastEnergyRefillTime
+      resourcesGained,
+      mainCurrencyGained,
+      experienceGained: expGained,
+      levelUp: levelResult.levelUp,
+      level: levelResult.level,
+      rewards: levelResult.rewards,
+      energyLeft: newEnergy
     });
   } catch (error) {
     console.error('Ошибка при тапе:', error);
@@ -1935,56 +1908,60 @@ async function getOrCreatePlayerCurrency(userId, currencyId) {
 
 // Добавление опыта и проверка повышения уровня
 async function addExperience(userId, exp) {
-  // Получаем текущий прогресс
-  const progress = await db.get(`
-    SELECT * FROM player_progress WHERE user_id = ?
-  `, [userId]);
-  
-  // Добавляем опыт
-  const newExp = progress.experience + exp;
-  
-  // Получаем информацию о следующем уровне
-  const nextLevel = await db.get(`
-    SELECT * FROM levels WHERE level = ?
-  `, [progress.level + 1]);
-  
-  // Проверяем, достаточно ли опыта для повышения уровня
-  if (nextLevel && newExp >= nextLevel.required_exp) {
-    // Повышаем уровень
-    await db.run(`
-      UPDATE player_progress
-      SET level = level + 1, experience = ?
-      WHERE user_id = ?
-    `, [newExp - nextLevel.required_exp, userId]);
+  try {
+    // Получаем текущий прогресс игрока
+    const playerProgress = await getOrCreatePlayerProgress(userId);
+    const currentLevel = playerProgress.level;
+    const currentExp = playerProgress.experience;
     
-    // Получаем награды за уровень
-    const rewards = await db.all(`
-      SELECT * FROM rewards WHERE level_id = ?
-    `, [progress.level + 1]);
+    // Добавляем опыт
+    const newExp = currentExp + exp;
     
-    // Обрабатываем награды
-    for (const reward of rewards) {
-      await processReward(userId, reward);
+    // Получаем информацию о текущем уровне
+    const currentLevelInfo = await db.get('SELECT required_exp FROM levels WHERE level = ?', [currentLevel + 1]);
+    
+    // Если информация о следующем уровне не найдена, просто добавляем опыт без повышения уровня
+    if (!currentLevelInfo) {
+      await db.run('UPDATE player_progress SET experience = ? WHERE user_id = ?', [newExp, userId]);
+      return { levelUp: false, level: currentLevel, rewards: [] };
     }
     
-    return {
-      levelUp: true,
-      level: progress.level + 1,
-      rewards
-    };
-  } else {
-    // Просто обновляем опыт
-    await db.run(`
-      UPDATE player_progress
-      SET experience = ?
-      WHERE user_id = ?
-    `, [newExp, userId]);
+    // Проверяем, достаточно ли опыта для повышения уровня
+    const requiredExp = currentLevelInfo.required_exp;
     
-    return {
-      levelUp: false,
-      level: progress.level,
-      rewards: []
-    };
+    if (newExp >= requiredExp) {
+      // Повышаем уровень
+      const newLevel = currentLevel + 1;
+      
+      // Обновляем уровень и опыт
+      await db.run(
+        'UPDATE player_progress SET level = ?, experience = ? WHERE user_id = ?',
+        [newLevel, newExp - requiredExp, userId]
+      );
+      
+      // Получаем награды за новый уровень
+      const rewards = await db.all(
+        'SELECT * FROM rewards WHERE level_id = ?',
+        [newLevel]
+      );
+      
+      // Обрабатываем каждую награду
+      for (const reward of rewards) {
+        await processReward(userId, reward);
+      }
+      
+      // Проверяем и выдаем достижения после повышения уровня
+      await checkAndGrantAchievements(userId);
+      
+      return { levelUp: true, level: newLevel, rewards };
+    } else {
+      // Просто обновляем опыт
+      await db.run('UPDATE player_progress SET experience = ? WHERE user_id = ?', [newExp, userId]);
+      return { levelUp: false, level: currentLevel, rewards: [] };
+    }
+  } catch (error) {
+    console.error(`Ошибка при добавлении опыта: ${error.message}`);
+    throw error;
   }
 }
 
@@ -2118,19 +2095,347 @@ async function getCurrencyIdByType(currencyType) {
 // Асинхронно инициализируем базу данных и запускаем сервер
 async function startServer() {
   try {
+    // Инициализируем базу данных
     await initDatabase();
     
-    // Отключаем очистку дубликатов, которая вызывает ошибки
-    // await cleanupPlayerCurrencies();
+    // Создаем дополнительные таблицы для системы достижений
+    await ensureLoginHistoryTable();
+    await ensurePlayerStatsTable();
+    await ensureNotificationsTable();
+    await ensureAchievementCongratulationsTable();
     
+    // Запускаем сервер
     app.listen(port, () => {
-      console.log(`Сервер запущен на порту ${port}`);
+      console.log(`Server running on port ${port}`);
     });
   } catch (error) {
-    console.error('Ошибка при запуске сервера:', error);
-    process.exit(1);
+    console.error('Failed to start server:', error);
   }
 }
+
+// Добавляем API-эндпоинт для получения достижений игрока
+app.get('/api/player/achievements', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем все достижения игрока с информацией о них
+    const achievements = await db.all(`
+      SELECT 
+        a.id, a.name, a.description, a.condition_type, a.condition_value, a.image_path,
+        pa.date_unlocked
+      FROM achievements a
+      JOIN player_achievements pa ON a.id = pa.achievement_id
+      WHERE pa.user_id = ?
+      ORDER BY pa.date_unlocked DESC
+    `, [userId]);
+    
+    res.json(achievements);
+  } catch (error) {
+    console.error('Ошибка при получении достижений игрока:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Добавляем API-эндпоинт для получения всех доступных достижений
+app.get('/api/achievements', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем все достижения
+    const achievements = await db.all('SELECT * FROM achievements');
+    
+    // Получаем достижения, уже полученные игроком
+    const userAchievements = await db.all(
+      'SELECT achievement_id, date_unlocked FROM player_achievements WHERE user_id = ?',
+      [userId]
+    );
+    
+    // Создаем карту полученных достижений для быстрого поиска
+    const unlockedMap = new Map();
+    userAchievements.forEach(ua => {
+      unlockedMap.set(ua.achievement_id, ua.date_unlocked);
+    });
+    
+    // Добавляем информацию о разблокировке к каждому достижению
+    const achievementsWithStatus = achievements.map(achievement => ({
+      ...achievement,
+      unlocked: unlockedMap.has(achievement.id),
+      date_unlocked: unlockedMap.get(achievement.id) || null
+    }));
+    
+    res.json(achievementsWithStatus);
+  } catch (error) {
+    console.error('Ошибка при получении списка достижений:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Добавляем API-эндпоинт для ручной проверки достижений
+app.post('/api/check-achievements', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Запускаем проверку достижений
+    const result = await checkAndGrantAchievements(userId);
+    
+    // Получаем обновленный список достижений игрока
+    const achievements = await db.all(`
+      SELECT 
+        a.id, a.name, a.description, a.condition_type, a.condition_value, a.image_path,
+        pa.date_unlocked
+      FROM achievements a
+      JOIN player_achievements pa ON a.id = pa.achievement_id
+      WHERE pa.user_id = ?
+      ORDER BY pa.date_unlocked DESC
+    `, [userId]);
+    
+    res.json({
+      success: result,
+      achievements
+    });
+  } catch (error) {
+    console.error('Ошибка при проверке достижений:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для обновления ранга игрока
+app.post('/api/player/update-rank', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { seasonId = 1, points } = req.body;
+    
+    if (points === undefined) {
+      return res.status(400).json({ error: 'Не указаны очки (points)' });
+    }
+    
+    // Обновляем ранг и проверяем достижения
+    const result = await updatePlayerRank(userId, seasonId, points);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Ошибка при обновлении ранга:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для получения уведомлений о достижениях
+app.get('/api/player/notifications', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { limit = 10, offset = 0, type } = req.query;
+    
+    // Базовый запрос
+    let query = `
+      SELECT * FROM player_notifications 
+      WHERE user_id = ?
+    `;
+    
+    const params = [userId];
+    
+    // Если указан тип, добавляем фильтр
+    if (type) {
+      query += ' AND type = ?';
+      params.push(type);
+    }
+    
+    // Добавляем сортировку и пагинацию
+    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
+    
+    // Выполняем запрос
+    const notifications = await db.all(query, params);
+    
+    // Получаем общее количество уведомлений
+    let countQuery = 'SELECT COUNT(*) as total FROM player_notifications WHERE user_id = ?';
+    const countParams = [userId];
+    
+    if (type) {
+      countQuery += ' AND type = ?';
+      countParams.push(type);
+    }
+    
+    const countResult = await db.get(countQuery, countParams);
+    const total = countResult ? countResult.total : 0;
+    
+    res.json({
+      notifications,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: total > parseInt(offset) + parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Ошибка при получении уведомлений:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для отметки уведомлений как прочитанных
+app.post('/api/player/notifications/read', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { notificationIds } = req.body;
+    
+    if (!notificationIds || !Array.isArray(notificationIds) || notificationIds.length === 0) {
+      return res.status(400).json({ error: 'Не указаны ID уведомлений' });
+    }
+    
+    // Отмечаем уведомления как прочитанные
+    await db.run(`
+      UPDATE player_notifications 
+      SET is_read = 1, read_at = CURRENT_TIMESTAMP 
+      WHERE user_id = ? AND id IN (${notificationIds.map(() => '?').join(',')})
+    `, [userId, ...notificationIds]);
+    
+    res.json({ success: true, count: notificationIds.length });
+  } catch (error) {
+    console.error('Ошибка при отметке уведомлений как прочитанных:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для получения последних полученных достижений
+app.get('/api/player/recent-achievements', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { limit = 5 } = req.query;
+    
+    // Получаем последние полученные достижения
+    const achievements = await db.all(`
+      SELECT 
+        a.id, a.name, a.description, a.condition_type, a.condition_value, a.image_path,
+        pa.date_unlocked
+      FROM achievements a
+      JOIN player_achievements pa ON a.id = pa.achievement_id
+      WHERE pa.user_id = ?
+      ORDER BY pa.date_unlocked DESC
+      LIMIT ?
+    `, [userId, parseInt(limit)]);
+    
+    res.json(achievements);
+  } catch (error) {
+    console.error('Ошибка при получении последних достижений:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для получения непрочитанных уведомлений о достижениях
+app.get('/api/player/achievement-notifications', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем непрочитанные уведомления о достижениях
+    const notifications = await db.all(`
+      SELECT * FROM player_notifications
+      WHERE user_id = ? AND type = 'achievement' AND is_read = 0
+      ORDER BY created_at DESC
+    `, [userId]);
+    
+    res.json(notifications);
+  } catch (error) {
+    console.error('Ошибка при получении уведомлений о достижениях:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для получения непоказанных поздравлений с достижениями
+app.get('/api/player/achievement-congratulations', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Проверяем, существует ли таблица
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='achievement_congratulations'"
+    );
+    
+    if (!tableExists) {
+      await ensureAchievementCongratulationsTable();
+      return res.json([]);
+    }
+    
+    // Получаем непоказанные поздравления
+    const congratulations = await db.all(`
+      SELECT * FROM achievement_congratulations
+      WHERE user_id = ? AND is_shown = 0
+      ORDER BY created_at DESC
+    `, [userId]);
+    
+    res.json(congratulations);
+  } catch (error) {
+    console.error('Ошибка при получении поздравлений с достижениями:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для отметки поздравления как показанного
+app.post('/api/player/achievement-congratulations/:id/shown', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { id } = req.params;
+    
+    // Проверяем, существует ли таблица
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='achievement_congratulations'"
+    );
+    
+    if (!tableExists) {
+      return res.status(404).json({ error: 'Таблица поздравлений не существует' });
+    }
+    
+    // Отмечаем поздравление как показанное
+    await db.run(`
+      UPDATE achievement_congratulations
+      SET is_shown = 1, shown_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND user_id = ?
+    `, [id, userId]);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ошибка при отметке поздравления как показанного:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// API-эндпоинт для обновления профиля с последним достижением
+app.post('/api/player/update-profile-achievement', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Обновляем профиль с последним достижением
+    const result = await updateProfileWithLatestAchievement(userId);
+    
+    if (result) {
+      // Получаем обновленный профиль
+      const profile = await db.get(`
+        SELECT 
+          p.user_id, 
+          p.featured_achievement_id,
+          a.name as achievement_name,
+          a.description as achievement_description,
+          a.image_path as achievement_image
+        FROM player_profile p
+        LEFT JOIN achievements a ON p.featured_achievement_id = a.id
+        WHERE p.user_id = ?
+      `, [userId]);
+      
+      res.json({ 
+        success: true, 
+        profile 
+      });
+    } else {
+      res.json({ 
+        success: false, 
+        message: 'Не удалось обновить профиль или у пользователя нет достижений' 
+      });
+    }
+  } catch (error) {
+    console.error('Ошибка при обновлении профиля с последним достижением:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
 
 // Функция для очистки дубликатов в таблице player_currencies
 async function cleanupPlayerCurrencies() {
@@ -3246,3 +3551,685 @@ app.post('/api/player/unlock-achievement', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+// Функция для проверки и выдачи достижений игроку
+async function checkAndGrantAchievements(userId) {
+  try {
+    console.log(`Проверка достижений для пользователя ${userId}`);
+    
+    // Получаем все достижения из базы данных
+    const allAchievements = await db.all('SELECT * FROM achievements');
+    
+    // Получаем список уже полученных достижений пользователя
+    const userAchievements = await db.all(
+      'SELECT achievement_id FROM player_achievements WHERE user_id = ?',
+      [userId]
+    );
+    
+    // Создаем множество ID уже полученных достижений для быстрой проверки
+    const userAchievementIds = new Set(userAchievements.map(a => a.achievement_id));
+    
+    // Получаем данные о прогрессе пользователя
+    const playerProgress = await getOrCreatePlayerProgress(userId);
+    
+    // Получаем профиль пользователя
+    const playerProfile = await db.get(
+      'SELECT * FROM player_profile WHERE user_id = ?',
+      [userId]
+    );
+    
+    // Получаем данные о сезонах пользователя
+    const playerSeasons = await db.all(
+      'SELECT DISTINCT season_id FROM player_season WHERE user_id = ?',
+      [userId]
+    );
+    
+    // Получаем данные о ежедневных входах
+    const dailyLoginData = await getDailyLoginStreak(userId);
+    
+    // Проходим по каждому достижению и проверяем условия
+    for (const achievement of allAchievements) {
+      // Пропускаем, если достижение уже получено
+      if (userAchievementIds.has(achievement.id)) {
+        continue;
+      }
+      
+      let conditionMet = false;
+      
+      // Проверяем условие в зависимости от типа достижения
+      switch (achievement.condition_type) {
+        case 'level':
+          // Достижение за уровень
+          conditionMet = playerProgress && playerProgress.level >= achievement.condition_value;
+          break;
+          
+        case 'rank':
+          // Достижение за ранг
+          conditionMet = playerProfile && 
+                         (playerProfile.current_rank_id >= achievement.condition_value || 
+                          playerProfile.highest_rank_id >= achievement.condition_value);
+          break;
+          
+        case 'seasons_participated':
+          // Достижение за участие в сезонах
+          conditionMet = playerSeasons && playerSeasons.length >= achievement.condition_value;
+          break;
+          
+        case 'daily_streak':
+          // Достижение за ежедневные входы
+          conditionMet = dailyLoginData && dailyLoginData.currentStreak >= achievement.condition_value;
+          break;
+          
+        case 'days_inactive':
+          // Достижение за возвращение после перерыва
+          conditionMet = dailyLoginData && dailyLoginData.daysInactive >= achievement.condition_value;
+          break;
+          
+        case 'taps':
+          // Достижение за количество тапов
+          const tapCount = await getTotalTapCount(userId);
+          conditionMet = tapCount >= achievement.condition_value;
+          break;
+          
+        case 'helpers_count':
+          // Достижение за количество помощников
+          const helpersCount = await getActiveHelpersCount(userId);
+          conditionMet = helpersCount >= achievement.condition_value;
+          break;
+          
+        case 'storage_level':
+          // Достижение за уровень хранилища
+          const maxStorageLevel = await getMaxStorageLevel(userId);
+          conditionMet = maxStorageLevel >= achievement.condition_value;
+          break;
+          
+        // Можно добавить другие типы достижений
+        default:
+          console.log(`Неизвестный тип достижения: ${achievement.condition_type}`);
+          break;
+      }
+      
+      // Если условие выполнено, выдаем достижение
+      if (conditionMet) {
+        console.log(`Выдаем достижение ${achievement.id} (${achievement.name}) пользователю ${userId}`);
+        
+        try {
+          await db.run(
+            'INSERT INTO player_achievements (user_id, achievement_id, date_unlocked) VALUES (?, ?, CURRENT_TIMESTAMP)',
+            [userId, achievement.id]
+          );
+          
+          // Отправляем уведомление о получении достижения
+          await sendAchievementNotification(userId, achievement);
+          
+        } catch (error) {
+          // Обрабатываем ошибку дублирования (если достижение уже было выдано)
+          if (error.message.includes('UNIQUE constraint failed')) {
+            console.log(`Достижение ${achievement.id} уже было выдано пользователю ${userId}`);
+          } else {
+            throw error;
+          }
+        }
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`Ошибка при проверке достижений: ${error.message}`);
+    return false;
+  }
+}
+
+// Функция для получения данных о ежедневных входах пользователя
+async function getDailyLoginStreak(userId) {
+  try {
+    // Получаем данные о последнем входе пользователя
+    const playerProgress = await getOrCreatePlayerProgress(userId);
+    
+    if (!playerProgress || !playerProgress.last_login) {
+      return { currentStreak: 0, daysInactive: 0 };
+    }
+    
+    // Получаем историю входов пользователя (если есть такая таблица)
+    // Если нет, можно создать или использовать другую логику
+    let loginHistory;
+    try {
+      loginHistory = await db.all(
+        'SELECT login_date FROM player_login_history WHERE user_id = ? ORDER BY login_date DESC',
+        [userId]
+      );
+    } catch (error) {
+      // Если таблицы нет, создаем пустой массив
+      loginHistory = [];
+    }
+    
+    const now = new Date();
+    const lastLogin = new Date(playerProgress.last_login);
+    
+    // Вычисляем количество дней неактивности
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysInactive = Math.floor((now - lastLogin) / msPerDay);
+    
+    // Если нет истории входов, используем только last_login
+    if (!loginHistory || loginHistory.length === 0) {
+      // Если вход был сегодня или вчера, считаем streak = 1
+      if (daysInactive <= 1) {
+        return { currentStreak: 1, daysInactive };
+      } else {
+        return { currentStreak: 0, daysInactive };
+      }
+    }
+    
+    // Вычисляем текущий streak на основе истории входов
+    let currentStreak = 1;
+    let prevDate = new Date(loginHistory[0].login_date);
+    
+    for (let i = 1; i < loginHistory.length; i++) {
+      const currentDate = new Date(loginHistory[i].login_date);
+      const dayDiff = Math.floor((prevDate - currentDate) / msPerDay);
+      
+      if (dayDiff === 1) {
+        // Последовательные дни
+        currentStreak++;
+      } else if (dayDiff > 1) {
+        // Разрыв в последовательности
+        break;
+      }
+      
+      prevDate = currentDate;
+    }
+    
+    return { currentStreak, daysInactive };
+  } catch (error) {
+    console.error(`Ошибка при получении данных о входах: ${error.message}`);
+    return { currentStreak: 0, daysInactive: 0 };
+  }
+}
+
+// Функция для получения общего количества тапов пользователя
+async function getTotalTapCount(userId) {
+  try {
+    // Проверяем, существует ли таблица player_stats
+    let hasTable = false;
+    try {
+      const tableCheck = await db.get(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='player_stats'"
+      );
+      hasTable = !!tableCheck;
+    } catch (error) {
+      hasTable = false;
+    }
+    
+    // Если таблица существует, получаем количество тапов
+    if (hasTable) {
+      const stats = await db.get(
+        'SELECT total_taps FROM player_stats WHERE user_id = ?',
+        [userId]
+      );
+      
+      return stats ? stats.total_taps : 0;
+    }
+    
+    // Если таблицы нет, возвращаем 0
+    return 0;
+  } catch (error) {
+    console.error(`Ошибка при получении количества тапов: ${error.message}`);
+    return 0;
+  }
+}
+
+// Функция для получения количества активных помощников
+async function getActiveHelpersCount(userId) {
+  try {
+    const helpers = await db.all(
+      'SELECT COUNT(*) as count FROM player_helpers WHERE user_id = ?',
+      [userId]
+    );
+    
+    return helpers && helpers[0] ? helpers[0].count : 0;
+  } catch (error) {
+    console.error(`Ошибка при получении количества помощников: ${error.message}`);
+    return 0;
+  }
+}
+
+// Функция для получения максимального уровня хранилища
+async function getMaxStorageLevel(userId) {
+  try {
+    const storages = await db.all(
+      'SELECT MAX(storage_level) as max_level FROM player_storage_limits WHERE user_id = ?',
+      [userId]
+    );
+    
+    return storages && storages[0] && storages[0].max_level ? storages[0].max_level : 0;
+  } catch (error) {
+    console.error(`Ошибка при получении уровня хранилища: ${error.message}`);
+    return 0;
+  }
+}
+
+// Функция для создания таблицы истории входов, если её нет
+async function ensureLoginHistoryTable() {
+  try {
+    // Проверяем, существует ли таблица
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='player_login_history'"
+    );
+    
+    if (!tableExists) {
+      console.log('Создаем таблицу истории входов player_login_history');
+      
+      // Создаем таблицу для хранения истории входов
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS player_login_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          login_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, login_date)
+        )
+      `);
+      
+      // Создаем индекс для быстрого поиска
+      await db.run(`
+        CREATE INDEX IF NOT EXISTS idx_player_login_history_user_id 
+        ON player_login_history (user_id)
+      `);
+      
+      console.log('Таблица player_login_history успешно создана');
+    }
+  } catch (error) {
+    console.error(`Ошибка при создании таблицы истории входов: ${error.message}`);
+  }
+}
+
+// Функция для создания таблицы статистики игрока, если её нет
+async function ensurePlayerStatsTable() {
+  try {
+    // Проверяем, существует ли таблица
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='player_stats'"
+    );
+    
+    if (!tableExists) {
+      console.log('Создаем таблицу статистики игрока player_stats');
+      
+      // Создаем таблицу для хранения статистики
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS player_stats (
+          user_id TEXT PRIMARY KEY,
+          total_taps INTEGER NOT NULL DEFAULT 0,
+          total_resources_gained INTEGER NOT NULL DEFAULT 0,
+          total_energy_spent INTEGER NOT NULL DEFAULT 0,
+          last_updated TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      console.log('Таблица player_stats успешно создана');
+    }
+  } catch (error) {
+    console.error(`Ошибка при создании таблицы статистики игрока: ${error.message}`);
+  }
+}
+
+// Функция для обновления истории входов пользователя
+async function updateLoginHistory(userId) {
+  try {
+    // Проверяем, была ли запись о входе сегодня
+    const today = new Date().toISOString().split('T')[0]; // Получаем только дату в формате YYYY-MM-DD
+    
+    // Проверяем, есть ли запись за сегодня
+    const todayLogin = await db.get(
+      "SELECT id FROM player_login_history WHERE user_id = ? AND date(login_date) = date(?)",
+      [userId, today]
+    );
+    
+    // Если записи за сегодня нет, добавляем новую
+    if (!todayLogin) {
+      await db.run(
+        'INSERT INTO player_login_history (user_id, login_date) VALUES (?, CURRENT_TIMESTAMP)',
+        [userId]
+      );
+      
+      console.log(`Добавлена запись о входе пользователя ${userId} за ${today}`);
+      
+      // Обновляем last_login в player_progress
+      await db.run(
+        'UPDATE player_progress SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?',
+        [userId]
+      );
+      
+      // Проверяем достижения после обновления истории входов
+      await checkAndGrantAchievements(userId);
+    }
+  } catch (error) {
+    console.error(`Ошибка при обновлении истории входов: ${error.message}`);
+  }
+}
+
+// Функция для обновления ранга игрока и проверки достижений
+async function updatePlayerRank(userId, seasonId, points) {
+  try {
+    // Получаем текущий ранг игрока
+    const currentPlayerSeason = await db.get(
+      'SELECT rank_id, highest_rank_id FROM player_season WHERE user_id = ? AND season_id = ?',
+      [userId, seasonId]
+    );
+    
+    // Если нет записи о сезоне, создаем
+    if (!currentPlayerSeason) {
+      await db.run(
+        'INSERT INTO player_season (user_id, season_id, points, rank_id, highest_rank_id) VALUES (?, ?, ?, 1, 1)',
+        [userId, seasonId, points]
+      );
+      return { rankChanged: false, newRank: { id: 1 } };
+    }
+    
+    // Получаем все ранги
+    const ranks = await db.all('SELECT * FROM ranks ORDER BY min_points ASC');
+    
+    // Определяем новый ранг на основе очков
+    let newRankId = 1; // По умолчанию первый ранг
+    
+    for (let i = ranks.length - 1; i >= 0; i--) {
+      if (points >= ranks[i].min_points) {
+        newRankId = ranks[i].id;
+        break;
+      }
+    }
+    
+    // Получаем информацию о новом ранге
+    const newRank = ranks.find(r => r.id === newRankId);
+    
+    // Если ранг изменился или это новый максимальный ранг
+    const rankChanged = currentPlayerSeason.rank_id !== newRankId;
+    const newHighestRank = Math.max(newRankId, currentPlayerSeason.highest_rank_id || 1);
+    
+    // Обновляем ранг в базе
+    await db.run(
+      'UPDATE player_season SET points = ?, rank_id = ?, highest_rank_id = ? WHERE user_id = ? AND season_id = ?',
+      [points, newRankId, newHighestRank, userId, seasonId]
+    );
+    
+    // Обновляем профиль игрока
+    await db.run(
+      'UPDATE player_profile SET current_rank_id = ?, highest_rank_id = ? WHERE user_id = ?',
+      [newRankId, newHighestRank, userId]
+    );
+    
+    // Если ранг изменился, проверяем достижения
+    if (rankChanged || newHighestRank > currentPlayerSeason.highest_rank_id) {
+      await checkAndGrantAchievements(userId);
+    }
+    
+    return { 
+      rankChanged, 
+      newRank,
+      currentRank: currentPlayerSeason ? ranks.find(r => r.id === currentPlayerSeason.rank_id) : null
+    };
+  } catch (error) {
+    console.error(`Ошибка при обновлении ранга: ${error.message}`);
+    return { rankChanged: false };
+  }
+}
+
+// Функция для обновления статистики тапов
+async function updateTapStats(userId, resourcesGained = 0, energySpent = 1) {
+  try {
+    // Проверяем, существует ли запись для пользователя
+    const userStats = await db.get(
+      'SELECT * FROM player_stats WHERE user_id = ?',
+      [userId]
+    );
+    
+    if (userStats) {
+      // Обновляем существующую запись
+      await db.run(
+        `UPDATE player_stats 
+         SET total_taps = total_taps + 1, 
+             total_resources_gained = total_resources_gained + ?, 
+             total_energy_spent = total_energy_spent + ?,
+             last_updated = CURRENT_TIMESTAMP
+         WHERE user_id = ?`,
+        [resourcesGained, energySpent, userId]
+      );
+    } else {
+      // Создаем новую запись
+      await db.run(
+        `INSERT INTO player_stats 
+         (user_id, total_taps, total_resources_gained, total_energy_spent) 
+         VALUES (?, 1, ?, ?)`,
+        [userId, resourcesGained, energySpent]
+      );
+    }
+    
+    // Проверяем достижения после обновления статистики тапов
+    await checkAndGrantAchievements(userId);
+  } catch (error) {
+    console.error(`Ошибка при обновлении статистики тапов: ${error.message}`);
+  }
+}
+
+// Функция для отправки уведомления о получении достижения
+async function sendAchievementNotification(userId, achievement) {
+  try {
+    console.log(`Отправка уведомления о достижении ${achievement.id} (${achievement.name}) для пользователя ${userId}`);
+    
+    // Получаем текущие данные игрока
+    const playerProfile = await db.get('SELECT * FROM player_profile WHERE user_id = ?', [userId]);
+    
+    // Всегда обновляем профиль с последним полученным достижением
+    await db.run(
+      'UPDATE player_profile SET featured_achievement_id = ? WHERE user_id = ?',
+      [achievement.id, userId]
+    );
+    
+    console.log(`Установлено достижение ${achievement.id} как последнее полученное для пользователя ${userId}`);
+    
+    // Создаем запись в таблице уведомлений
+    try {
+      const tableExists = await db.get(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='player_notifications'"
+      );
+      
+      if (tableExists) {
+        await db.run(
+          `INSERT INTO player_notifications 
+           (user_id, type, title, message, related_id, image_path, is_read, created_at) 
+           VALUES (?, 'achievement', ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)`,
+          [userId, 'Новое достижение!', `Вы получили достижение "${achievement.name}"`, achievement.id, achievement.image_path]
+        );
+        
+        console.log(`Уведомление о достижении ${achievement.id} добавлено в базу`);
+      }
+    } catch (error) {
+      // Если таблицы нет или возникла ошибка, логируем её
+      console.log(`Ошибка при создании уведомления: ${error.message}`);
+    }
+    
+    // Создаем поздравление с достижением для отображения плашки
+    await createAchievementCongratulation(userId, achievement);
+    
+    return true;
+  } catch (error) {
+    console.error(`Ошибка при отправке уведомления о достижении: ${error.message}`);
+    return false;
+  }
+}
+
+// Функция для создания таблицы уведомлений, если её нет
+async function ensureNotificationsTable() {
+  try {
+    // Проверяем, существует ли таблица
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='player_notifications'"
+    );
+    
+    if (!tableExists) {
+      console.log('Создаем таблицу уведомлений player_notifications');
+      
+      // Создаем таблицу для хранения уведомлений
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS player_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          related_id INTEGER,
+          image_path TEXT,
+          is_read INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          read_at TEXT
+        )
+      `);
+      
+      // Создаем индекс для быстрого поиска
+      await db.run(`
+        CREATE INDEX IF NOT EXISTS idx_player_notifications_user_id 
+        ON player_notifications (user_id)
+      `);
+      
+      console.log('Таблица player_notifications успешно создана');
+    }
+  } catch (error) {
+    console.error(`Ошибка при создании таблицы уведомлений: ${error.message}`);
+  }
+}
+
+// Функция для создания поздравления с достижением
+async function createAchievementCongratulation(userId, achievement) {
+  try {
+    // Проверяем, существует ли таблица поздравлений
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='achievement_congratulations'"
+    );
+    
+    // Если таблицы нет, создаем её
+    if (!tableExists) {
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS achievement_congratulations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          achievement_id INTEGER NOT NULL,
+          achievement_name TEXT NOT NULL,
+          achievement_description TEXT NOT NULL,
+          image_path TEXT NOT NULL,
+          is_shown INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          shown_at TEXT,
+          UNIQUE(user_id, achievement_id)
+        )
+      `);
+      
+      await db.run(`
+        CREATE INDEX IF NOT EXISTS idx_achievement_congratulations_user_id 
+        ON achievement_congratulations (user_id)
+      `);
+      
+      console.log('Таблица achievement_congratulations успешно создана');
+    }
+    
+    // Добавляем запись о поздравлении
+    try {
+      await db.run(`
+        INSERT INTO achievement_congratulations 
+        (user_id, achievement_id, achievement_name, achievement_description, image_path) 
+        VALUES (?, ?, ?, ?, ?)
+      `, [userId, achievement.id, achievement.name, achievement.description, achievement.image_path]);
+      
+      console.log(`Создано поздравление с достижением ${achievement.id} для пользователя ${userId}`);
+    } catch (error) {
+      // Если запись уже существует, обновляем её
+      if (error.message.includes('UNIQUE constraint failed')) {
+        await db.run(`
+          UPDATE achievement_congratulations 
+          SET is_shown = 0, created_at = CURRENT_TIMESTAMP, shown_at = NULL 
+          WHERE user_id = ? AND achievement_id = ?
+        `, [userId, achievement.id]);
+        
+        console.log(`Обновлено поздравление с достижением ${achievement.id} для пользователя ${userId}`);
+      } else {
+        throw error;
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`Ошибка при создании поздравления с достижением: ${error.message}`);
+    return false;
+  }
+}
+
+// Функция для создания таблицы поздравлений, если её нет
+async function ensureAchievementCongratulationsTable() {
+  try {
+    // Проверяем, существует ли таблица
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='achievement_congratulations'"
+    );
+    
+    if (!tableExists) {
+      console.log('Создаем таблицу поздравлений achievement_congratulations');
+      
+      // Создаем таблицу для хранения поздравлений
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS achievement_congratulations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          achievement_id INTEGER NOT NULL,
+          achievement_name TEXT NOT NULL,
+          achievement_description TEXT NOT NULL,
+          image_path TEXT NOT NULL,
+          is_shown INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          shown_at TEXT,
+          UNIQUE(user_id, achievement_id)
+        )
+      `);
+      
+      // Создаем индекс для быстрого поиска
+      await db.run(`
+        CREATE INDEX IF NOT EXISTS idx_achievement_congratulations_user_id 
+        ON achievement_congratulations (user_id)
+      `);
+      
+      console.log('Таблица achievement_congratulations успешно создана');
+    }
+  } catch (error) {
+    console.error(`Ошибка при создании таблицы поздравлений: ${error.message}`);
+  }
+}
+
+// Функция для обновления профиля с последним полученным достижением
+async function updateProfileWithLatestAchievement(userId) {
+  try {
+    console.log(`Обновление профиля пользователя ${userId} с последним достижением`);
+    
+    // Получаем последнее достижение пользователя
+    const latestAchievement = await db.get(`
+      SELECT achievement_id 
+      FROM player_achievements 
+      WHERE user_id = ? 
+      ORDER BY date_unlocked DESC 
+      LIMIT 1
+    `, [userId]);
+    
+    if (!latestAchievement) {
+      console.log(`У пользователя ${userId} нет достижений`);
+      return false;
+    }
+    
+    // Обновляем профиль
+    await db.run(`
+      UPDATE player_profile 
+      SET featured_achievement_id = ? 
+      WHERE user_id = ?
+    `, [latestAchievement.achievement_id, userId]);
+    
+    console.log(`Профиль пользователя ${userId} обновлен с последним достижением ${latestAchievement.achievement_id}`);
+    return true;
+  } catch (error) {
+    console.error(`Ошибка при обновлении профиля с последним достижением: ${error.message}`);
+    return false;
+  }
+}

@@ -10,6 +10,7 @@ import StorageModal from './components/StorageModal';
 import ProfileModal from './components/ProfileModal';
 import RankUpModal from './components/RankUpModal';
 import AchievementModal from './components/AchievementModal';
+import AchievementToast from './components/AchievementToast';
 import * as api from './lib/api';
 import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
@@ -1390,6 +1391,9 @@ function App() {
           achievement={currentAchievement}
         />
       )}
+      
+      {/* Компонент для отображения поздравлений с достижениями */}
+      <AchievementToast />
         </>
       )}
     </div>

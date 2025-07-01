@@ -536,4 +536,26 @@ export const unlockAchievement = async (achievementId: number): Promise<{
     },
     body: JSON.stringify({ achievementId })
   });
+};
+
+// Получить непоказанные поздравления с достижениями
+export const getAchievementCongratulations = async (): Promise<{
+  id: number;
+  achievement_id: number;
+  achievement_name: string;
+  achievement_description: string;
+  image_path: string;
+  shown: boolean;
+}[]> => {
+  return await fetchApi('/player/achievement-congratulations');
+};
+
+// Отметить поздравление как показанное
+export const markAchievementCongratulationAsShown = async (congratulationId: number): Promise<{ success: boolean }> => {
+  return await fetchApi('/player/achievement-congratulations/' + congratulationId + '/shown', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
 }; 
