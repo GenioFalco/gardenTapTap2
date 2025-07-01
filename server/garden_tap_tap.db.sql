@@ -5,8 +5,6 @@ CREATE TABLE IF NOT EXISTS "achievements" (
 	"description"	TEXT NOT NULL,
 	"condition_type"	TEXT NOT NULL,
 	"condition_value"	INTEGER NOT NULL,
-	"reward_type"	TEXT NOT NULL,
-	"reward_value"	INTEGER NOT NULL,
 	"image_path"	TEXT NOT NULL,
 	PRIMARY KEY("id")
 );
@@ -79,12 +77,12 @@ CREATE TABLE IF NOT EXISTS "locations" (
 	FOREIGN KEY("currency_id") REFERENCES "currencies"("id")
 );
 CREATE TABLE IF NOT EXISTS "player_achievements" (
+	"id"	INTEGER,
 	"user_id"	TEXT NOT NULL,
 	"achievement_id"	INTEGER NOT NULL,
 	"date_unlocked"	TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	"is_claimed"	BOOLEAN DEFAULT FALSE,
-	PRIMARY KEY("user_id","achievement_id"),
-	FOREIGN KEY("achievement_id") REFERENCES "achievements"("id")
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("user_id","achievement_id")
 );
 CREATE TABLE IF NOT EXISTS "player_currencies" (
 	"user_id"	TEXT NOT NULL,
@@ -223,6 +221,16 @@ CREATE TABLE IF NOT EXISTS "tools" (
 	PRIMARY KEY("id"),
 	FOREIGN KEY("character_id") REFERENCES "characters"("id")
 );
+INSERT INTO "achievements" VALUES (1,'Первый шаг','Достигни 2 уровня','level',2,'achievements/first_step.png');
+INSERT INTO "achievements" VALUES (2,'Уверенный путь','Достигни 5 уровня','level',5,'achievements/level_5.png');
+INSERT INTO "achievements" VALUES (3,'Полпути','Достигни 10 уровня','level',10,'achievements/level_10.png');
+INSERT INTO "achievements" VALUES (4,'Почти легенда','Достигни 15 уровня','level',15,'achievements/level_15.png');
+INSERT INTO "achievements" VALUES (5,'Легенда','Достигни 20 уровня','level',20,'achievements/level_20.png');
+INSERT INTO "achievements" VALUES (6,'Мастер ранга','Получи ранг Золото I или выше','rank',5,'achievements/rank_master.png');
+INSERT INTO "achievements" VALUES (7,'Элита','Получи максимальный ранг','rank',9,'achievements/rank_elite.png');
+INSERT INTO "achievements" VALUES (8,'Ветеран','Участвуй в 3 сезонах','seasons_participated',3,'achievements/veteran.png');
+INSERT INTO "achievements" VALUES (9,'Вернувшийся герой','Вернись в игру после 7 дней отсутствия','days_inactive',7,'achievements/comeback.png');
+INSERT INTO "achievements" VALUES (10,'Путь продолжается','Играй ежедневно в течение 7 дней подряд','daily_streak',7,'achievements/streak_7.png');
 INSERT INTO "character_appearances" VALUES (1,1,1,'/assets/characters/lumberjack_static1.png','png','/assets/characters/lumberjack1.png');
 INSERT INTO "character_appearances" VALUES (2,1,2,'/assets/characters/lumberjack_static2.png','png','/assets/characters/lumberjack2.png');
 INSERT INTO "character_appearances" VALUES (3,1,3,'/assets/characters/lumberjack_static3.png','png','/assets/characters/lumberjack3.png');
@@ -245,33 +253,44 @@ INSERT INTO "levels" VALUES (7,5);
 INSERT INTO "levels" VALUES (8,5);
 INSERT INTO "levels" VALUES (9,5);
 INSERT INTO "levels" VALUES (10,5);
-INSERT INTO "levels" VALUES (11,5766);
-INSERT INTO "levels" VALUES (12,8649);
-INSERT INTO "levels" VALUES (13,12974);
-INSERT INTO "levels" VALUES (14,19461);
-INSERT INTO "levels" VALUES (15,29192);
-INSERT INTO "levels" VALUES (16,43789);
+INSERT INTO "levels" VALUES (11,261);
+INSERT INTO "levels" VALUES (12,3);
+INSERT INTO "levels" VALUES (13,3);
+INSERT INTO "levels" VALUES (14,3);
+INSERT INTO "levels" VALUES (15,3);
+INSERT INTO "levels" VALUES (16,3);
 INSERT INTO "levels" VALUES (17,65684);
 INSERT INTO "levels" VALUES (18,98526);
 INSERT INTO "levels" VALUES (19,147789);
 INSERT INTO "levels" VALUES (20,221683);
 INSERT INTO "locations" VALUES (1,'Лес','/assets/backgrounds/forest.jpg',2,1,1,0);
-INSERT INTO "player_currencies" VALUES ('test_user',1,31.4);
-INSERT INTO "player_currencies" VALUES ('test_user',2,253.48);
+INSERT INTO "player_currencies" VALUES ('test_user',1,2001.0);
+INSERT INTO "player_currencies" VALUES ('test_user',2,2001.0);
 INSERT INTO "player_equipped_tools" VALUES ('test_user',1,1);
-INSERT INTO "player_helpers" VALUES ('test_user',1,2);
+INSERT INTO "player_helpers" VALUES ('test_user',1,3);
 INSERT INTO "player_locations" VALUES ('test_user',1);
-INSERT INTO "player_pending_income" VALUES ('test_user',2,20.66);
-INSERT INTO "player_progress" VALUES ('test_user',10,62,110,110,'2025-06-29T20:39:39.282Z','2025-06-29 21:18:39');
-INSERT INTO "player_storage_limits" VALUES ('test_user',1,1,3,5000);
+INSERT INTO "player_pending_income" VALUES ('test_user',2,30.3);
+INSERT INTO "player_profile" VALUES ('test_user',1,1,NULL,NULL,'/assets/avatars/default.png',0);
+INSERT INTO "player_progress" VALUES ('test_user',16,12,110,110,'2025-06-30T20:45:08.585Z','2025-06-30 21:09:44');
+INSERT INTO "player_season" VALUES ('test_user',1,0,1,1);
+INSERT INTO "player_storage_limits" VALUES ('test_user',1,1,4,10000);
 INSERT INTO "player_tools" VALUES ('test_user',1);
 INSERT INTO "player_tools" VALUES ('test_user',2);
-INSERT INTO "player_tools" VALUES ('test_user',3);
+INSERT INTO "ranks" VALUES (1,'Бронза I',0,'ranks/bronze_1.png');
+INSERT INTO "ranks" VALUES (2,'Бронза II',100,'ranks/bronze_2.png');
+INSERT INTO "ranks" VALUES (3,'Серебро I',300,'ranks/silver_1.png');
+INSERT INTO "ranks" VALUES (4,'Серебро II',600,'ranks/silver_2.png');
+INSERT INTO "ranks" VALUES (5,'Золото I',1000,'ranks/gold_1.png');
+INSERT INTO "ranks" VALUES (6,'Золото II',1500,'ranks/gold_2.png');
+INSERT INTO "ranks" VALUES (7,'Платина',2200,'ranks/platinum.png');
+INSERT INTO "ranks" VALUES (8,'Бриллиант',3000,'ranks/diamond.png');
+INSERT INTO "ranks" VALUES (9,'Легенда',5000,'ranks/legend.png');
 INSERT INTO "rewards" VALUES (1,1,'main_currency',1,100,NULL);
 INSERT INTO "rewards" VALUES (2,2,'main_currency',1,200,NULL);
 INSERT INTO "rewards" VALUES (3,3,'main_currency',1,300,NULL);
 INSERT INTO "rewards" VALUES (4,4,'forest_currency',2,400,NULL);
 INSERT INTO "rewards" VALUES (5,5,'energy',NULL,10,'');
+INSERT INTO "seasons" VALUES (1,'Летний сезон','2025-06-01','2025-07-31','Жара, валка, прокачка!',1);
 INSERT INTO "storage_upgrade_levels" VALUES (1,1,1000,0,1);
 INSERT INTO "storage_upgrade_levels" VALUES (1,2,2500,500,1);
 INSERT INTO "storage_upgrade_levels" VALUES (1,3,5000,1500,1);
