@@ -747,39 +747,92 @@ app.post('/api/player/tap', async (req, res) => {
     const resourcesGained = Math.round(toolPower * locationCoinsPower);
     const mainCurrencyGained = Math.round(toolPower * mainCoinsPower);
     
-    // Добавляем ресурсы локации
-    await db.run(`
-      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
-      VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?), 0) + ?)
-    `, [userId, location.currency_id, userId, location.currency_id, resourcesGained]);
+    // Начинаем транзакцию
+    await db.run('BEGIN TRANSACTION');
     
-    // Добавляем основную валюту
-    await db.run(`
-      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
-      VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?), 0) + ?)
-    `, [userId, 1, userId, 1, mainCurrencyGained]); // Предполагаем, что ID основной валюты = 1
-    
-    // Уменьшаем энергию
-    const newEnergy = Math.max(0, playerProgress.energy - 1);
-    await db.run('UPDATE player_progress SET energy = ? WHERE user_id = ?', [newEnergy, userId]);
-    
-    // Добавляем опыт (1-3 единицы за тап)
-    const expGained = Math.floor(Math.random() * 3) + 1;
-    const levelResult = await addExperience(userId, expGained);
-    
-    // Обновляем статистику тапов
-    await updateTapStats(userId, resourcesGained, 1);
-    
-    // Отправляем результат
-    res.json({
-      resourcesGained,
-      mainCurrencyGained,
-      experienceGained: expGained,
-      levelUp: levelResult.levelUp,
-      level: levelResult.level,
-      rewards: levelResult.rewards,
-      energyLeft: newEnergy
-    });
+    try {
+      // Проверяем лимит хранилища для валюты локации
+      const storageLimit = await db.get(`
+        SELECT capacity 
+        FROM player_storage_limits 
+        WHERE user_id = ? AND location_id = ? AND currency_id = ?
+      `, [userId, locationId, location.currency_id]);
+      
+      const storageCapacity = storageLimit ? storageLimit.capacity : 1000;
+      console.log(`Емкость хранилища: ${storageCapacity}`);
+      
+      // Получаем текущее количество ресурсов валюты локации
+      const currencyAmount = await db.get(`
+        SELECT amount 
+        FROM player_currencies 
+        WHERE user_id = ? AND currency_id = ?
+      `, [userId, location.currency_id]);
+      
+      const currentAmount = currencyAmount ? parseFloat(currencyAmount.amount) : 0;
+      console.log(`Текущее количество ресурсов локации: ${currentAmount}`);
+      
+      // Добавляем основную валюту (всегда добавляем)
+      await db.run(`
+        INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
+        VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?), 0) + ?)
+      `, [userId, 1, userId, 1, mainCurrencyGained]); // Предполагаем, что ID основной валюты = 1
+      console.log(`Добавлены монеты: ${mainCurrencyGained}`);
+      
+      // Проверяем, не превышен ли лимит хранилища для ресурсов локации
+      let actualResourcesGained = resourcesGained;
+      let storageIsFull = false;
+      
+      if (currentAmount >= storageCapacity) {
+        console.log(`Хранилище полностью заполнено: ${currentAmount}/${storageCapacity}, ресурсы локации НЕ будут добавлены`);
+        actualResourcesGained = 0;
+        storageIsFull = true;
+      } else if (currentAmount + resourcesGained > storageCapacity) {
+        actualResourcesGained = storageCapacity - currentAmount;
+        console.log(`Хранилище почти заполнено: ${currentAmount}/${storageCapacity}, добавляем только ${actualResourcesGained}`);
+      }
+      
+      // Добавляем ресурсы локации только если хранилище не заполнено
+      if (!storageIsFull && actualResourcesGained > 0) {
+        await db.run(`
+          INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
+          VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?), 0) + ?)
+        `, [userId, location.currency_id, userId, location.currency_id, actualResourcesGained]);
+        console.log(`Добавлены ресурсы локации: ${actualResourcesGained}`);
+      } else {
+        console.log(`Ресурсы локации НЕ добавлены из-за заполненного хранилища`);
+      }
+      
+      // Уменьшаем энергию
+      const newEnergy = Math.max(0, playerProgress.energy - 1);
+      await db.run('UPDATE player_progress SET energy = ? WHERE user_id = ?', [newEnergy, userId]);
+      
+      // Добавляем опыт (1-3 единицы за тап)
+      const expGained = Math.floor(Math.random() * 3) + 1;
+      const levelResult = await addExperience(userId, expGained);
+      
+      // Обновляем статистику тапов
+      await updateTapStats(userId, actualResourcesGained, 1);
+      
+      // Фиксируем транзакцию
+      await db.run('COMMIT');
+      
+      // Отправляем результат
+      res.json({
+        resourcesGained: actualResourcesGained,
+        mainCurrencyGained,
+        experienceGained: expGained,
+        levelUp: levelResult.levelUp,
+        level: levelResult.level,
+        rewards: levelResult.rewards,
+        energyLeft: newEnergy,
+        storageIsFull
+      });
+    } catch (error) {
+      // Откатываем транзакцию в случае ошибки
+      await db.run('ROLLBACK');
+      console.error('Ошибка при выполнении транзакции тапа:', error);
+      throw error;
+    }
   } catch (error) {
     console.error('Ошибка при тапе:', error);
     res.status(500).json({ error: 'Ошибка сервера' });

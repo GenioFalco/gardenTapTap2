@@ -500,16 +500,23 @@ const api = {
   // Тап по кнопке (основная механика)
   tap: async (userId, locationId) => {
     try {
+      console.log(`[TAP] Начало обработки тапа для пользователя ${userId} в локации ${locationId}`);
+      
       // Получаем прогресс игрока
-      const progress = await api.getPlayerProgress(userId);
+      const progress = await getOne(`
+        SELECT level, experience, energy
+        FROM player_progress
+        WHERE user_id = ?
+      `, [userId]);
       
       // Проверяем, есть ли энергия
-      if (progress.energy <= 0) {
+      if (!progress || progress.energy <= 0) {
+        console.log(`[TAP] Недостаточно энергии: ${progress ? progress.energy : 0}`);
         return { 
           resourcesGained: 0, 
           experienceGained: 0, 
           levelUp: false, 
-          level: progress.level, 
+          level: progress ? progress.level : 1, 
           rewards: [],
           energyLeft: 0
         };
@@ -523,17 +530,26 @@ const api = {
       `, [locationId]);
       
       if (!location) {
-        console.error(`Локация с ID ${locationId} не найдена`);
+        console.error(`[TAP] Локация с ID ${locationId} не найдена`);
         throw new Error(`Локация с ID ${locationId} не найдена`);
       }
       
+      console.log(`[TAP] Локация найдена: ID=${locationId}, валюта=${location.currencyId}`);
+      
       // Получаем экипированный инструмент
-      const tool = await api.getEquippedTool(userId, location.characterId);
+      const tool = await getOne(`
+        SELECT t.power, t.main_coins_power as mainCoinsPower
+        FROM tools t
+        JOIN player_equipped_tools pet ON t.id = pet.tool_id
+        WHERE pet.user_id = ? AND pet.character_id = ?
+      `, [userId, location.characterId]);
       
       if (!tool) {
-        console.error(`Экипированный инструмент для персонажа ${location.characterId} не найден`);
+        console.error(`[TAP] Экипированный инструмент для персонажа ${location.characterId} не найден`);
         throw new Error(`Экипированный инструмент не найден`);
       }
+      
+      console.log(`[TAP] Инструмент найден: сила=${tool.power}, множитель монет=${tool.mainCoinsPower || 0.5}`);
       
       // Рассчитываем полученные ресурсы (сила инструмента)
       const resourcesGained = parseFloat(tool.power);
@@ -542,80 +558,108 @@ const api = {
       const experienceGained = resourcesGained;
       
       // Рассчитываем полученные монеты (основная валюта)
-      const mainCoinsPower = tool.main_coins_power || 0.5;
+      const mainCoinsPower = tool.mainCoinsPower || 0.5;
       const mainCurrencyGained = Math.round(tool.power * mainCoinsPower);
       
-      // Проверяем лимит хранилища для валюты локации
-      const storageInfo = await getOne(`
-        SELECT capacity 
-        FROM player_storage_limits 
-        WHERE user_id = ? AND location_id = ? AND currency_id = ?
-      `, [userId, locationId, location.currencyId]);
+      console.log(`[TAP] Расчет наград: ресурсы=${resourcesGained}, опыт=${experienceGained}, монеты=${mainCurrencyGained}`);
       
-      // Если записи о хранилище нет, используем значение из таблицы storage_upgrade_levels
-      let storageCapacity = 1000; // Значение по умолчанию
-      
-      if (storageInfo) {
-        storageCapacity = storageInfo.capacity;
-      } else {
-        // Получаем начальную емкость из таблицы уровней хранилища
-        const initialLevel = await getOne(`
-          SELECT capacity FROM storage_upgrade_levels 
-          WHERE location_id = ? AND level = 1
-        `, [locationId]);
-        
-        if (initialLevel) {
-          storageCapacity = initialLevel.capacity;
-        }
-        
-        // Создаем запись о хранилище
-        await runQuery(`
-          INSERT INTO player_storage_limits (user_id, location_id, currency_id, storage_level, capacity)
-          VALUES (?, ?, ?, 1, ?)
-        `, [userId, locationId, location.currencyId, storageCapacity]);
-      }
-      
-      // Получаем текущее количество ресурсов валюты локации
-      const currencyAmount = await getOne(`
-        SELECT amount FROM player_currencies 
-        WHERE user_id = ? AND currency_id = ?
-      `, [userId, location.currencyId]);
-      
-      const currentAmount = currencyAmount ? parseFloat(currencyAmount.amount) : 0;
-      
-      console.log(`[TAP] Текущее количество ресурсов: ${currentAmount}, емкость: ${storageCapacity}, добавляем: ${resourcesGained}`);
-      
-      // Проверяем, не будет ли превышен лимит хранилища
-      let storageIsFull = false;
-      let actualResourcesGained = resourcesGained;
-      
-      if (currentAmount + resourcesGained > storageCapacity) {
-        console.log(`[TAP] Хранилище заполнено: ${currentAmount}/${storageCapacity}, ресурсы не добавлены`);
-        actualResourcesGained = 0;
-        storageIsFull = true;
-      }
-      
-      // Добавляем опыт и проверяем повышение уровня
-      const levelResult = await api.addExperience(userId, experienceGained);
-      
-      // Уменьшаем энергию
-      const newEnergy = Math.max(0, progress.energy - 1);
-      await api.updatePlayerEnergy(userId, newEnergy);
-      
-      // Начинаем транзакцию для атомарного обновления ресурсов
+      // Начинаем транзакцию для атомарного обновления
       await runQuery('BEGIN TRANSACTION');
       
       try {
-        // Добавляем основную валюту (монеты) всегда
-        await api.addResources(userId, 1, mainCurrencyGained);
+        // 1. Проверяем лимит хранилища для валюты локации
+        const storageLimit = await getOne(`
+          SELECT capacity 
+          FROM player_storage_limits 
+          WHERE user_id = ? AND location_id = ? AND currency_id = ?
+        `, [userId, locationId, location.currencyId]);
         
-        // Добавляем ресурсы локации только если хранилище не заполнено
-        if (!storageIsFull) {
-          await api.addResources(userId, location.currencyId, resourcesGained);
+        const storageCapacity = storageLimit ? storageLimit.capacity : 1000;
+        console.log(`[TAP] Емкость хранилища: ${storageCapacity}`);
+        
+        // 2. Получаем текущее количество ресурсов валюты локации
+        const currencyAmount = await getOne(`
+          SELECT amount 
+          FROM player_currencies 
+          WHERE user_id = ? AND currency_id = ?
+        `, [userId, location.currencyId]);
+        
+        const currentAmount = currencyAmount ? parseFloat(currencyAmount.amount) : 0;
+        console.log(`[TAP] Текущее количество ресурсов локации: ${currentAmount}`);
+        
+        // 3. Проверяем, не будет ли превышен лимит хранилища
+        let actualResourcesGained = resourcesGained;
+        let storageIsFull = false;
+        
+        if (currentAmount >= storageCapacity) {
+          console.log(`[TAP] Хранилище полностью заполнено: ${currentAmount}/${storageCapacity}, ресурсы локации НЕ будут добавлены`);
+          actualResourcesGained = 0;
+          storageIsFull = true;
+        } else if (currentAmount + resourcesGained > storageCapacity) {
+          actualResourcesGained = storageCapacity - currentAmount;
+          console.log(`[TAP] Хранилище почти заполнено: ${currentAmount}/${storageCapacity}, добавляем только ${actualResourcesGained}`);
+        }
+        
+        // 4. Добавляем опыт и уменьшаем энергию
+        await runQuery(`
+          UPDATE player_progress
+          SET experience = experience + ?,
+              energy = energy - 1
+          WHERE user_id = ?
+        `, [experienceGained, userId]);
+        console.log(`[TAP] Добавлен опыт: ${experienceGained}, уменьшена энергия на 1`);
+        
+        // 5. Всегда добавляем основную валюту (монеты)
+        // Проверяем, существует ли запись о валюте
+        const mainCurrencyExists = await getOne(`
+          SELECT 1 FROM player_currencies 
+          WHERE user_id = ? AND currency_id = 1
+        `, [userId]);
+        
+        if (mainCurrencyExists) {
+          await runQuery(`
+            UPDATE player_currencies
+            SET amount = amount + ?
+            WHERE user_id = ? AND currency_id = 1
+          `, [mainCurrencyGained, userId]);
+          console.log(`[TAP] Добавлены монеты (обновление): ${mainCurrencyGained}`);
+        } else {
+          await runQuery(`
+            INSERT INTO player_currencies (user_id, currency_id, amount)
+            VALUES (?, 1, ?)
+          `, [userId, mainCurrencyGained]);
+          console.log(`[TAP] Добавлены монеты (создание): ${mainCurrencyGained}`);
+        }
+        
+        // 6. Добавляем ресурсы локации только если хранилище не заполнено
+        if (!storageIsFull && actualResourcesGained > 0) {
+          // Проверяем, существует ли запись о валюте локации
+          const locationCurrencyExists = await getOne(`
+            SELECT 1 FROM player_currencies 
+            WHERE user_id = ? AND currency_id = ?
+          `, [userId, location.currencyId]);
+          
+          if (locationCurrencyExists) {
+            await runQuery(`
+              UPDATE player_currencies
+              SET amount = amount + ?
+              WHERE user_id = ? AND currency_id = ?
+            `, [actualResourcesGained, userId, location.currencyId]);
+            console.log(`[TAP] Добавлены ресурсы локации (обновление): ${actualResourcesGained}`);
+          } else {
+            await runQuery(`
+              INSERT INTO player_currencies (user_id, currency_id, amount)
+              VALUES (?, ?, ?)
+            `, [userId, location.currencyId, actualResourcesGained]);
+            console.log(`[TAP] Добавлены ресурсы локации (создание): ${actualResourcesGained}`);
+          }
+        } else {
+          console.log(`[TAP] Ресурсы локации НЕ добавлены из-за заполненного хранилища`);
         }
         
         // Фиксируем транзакцию
         await runQuery('COMMIT');
+        console.log(`[TAP] Транзакция успешно завершена`);
         
         // Проверяем, что ресурсы действительно не были добавлены при заполненном хранилище
         if (storageIsFull) {
@@ -625,30 +669,38 @@ const api = {
           `, [userId, location.currencyId]);
           
           const newAmount = newCurrencyAmount ? parseFloat(newCurrencyAmount.amount) : 0;
-          console.log(`[TAP] После тапа: ${newAmount}, было: ${currentAmount}. Разница: ${newAmount - currentAmount}`);
+          console.log(`[TAP] Проверка после тапа: было=${currentAmount}, стало=${newAmount}`);
           
-          if (newAmount > currentAmount) {
-            console.error(`[TAP] ОШИБКА: Ресурсы были добавлены (${newAmount - currentAmount}), несмотря на заполненное хранилище!`);
+          if (Math.abs(newAmount - currentAmount) > 0.001) {
+            console.error(`[TAP] ОШИБКА: Ресурсы локации были добавлены (${newAmount - currentAmount}), несмотря на заполненное хранилище!`);
           }
         }
+        
+        // Получаем обновленный прогресс
+        const newProgress = await getOne(`
+          SELECT level, energy
+          FROM player_progress
+          WHERE user_id = ?
+        `, [userId]);
+        
+        return {
+          resourcesGained: actualResourcesGained,
+          mainCurrencyGained,
+          experienceGained,
+          levelUp: false, // Повышение уровня обрабатывается отдельно
+          level: newProgress.level,
+          rewards: [],
+          energyLeft: newProgress.energy,
+          storageIsFull
+        };
       } catch (error) {
         // Откатываем транзакцию в случае ошибки
         await runQuery('ROLLBACK');
+        console.error(`[TAP] Ошибка в транзакции, выполнен откат: ${error.message}`);
         throw error;
       }
-      
-      return {
-        resourcesGained: actualResourcesGained,
-        mainCurrencyGained,
-        experienceGained,
-        levelUp: levelResult.levelUp,
-        level: levelResult.level,
-        rewards: levelResult.rewards,
-        energyLeft: newEnergy,
-        storageIsFull
-      };
     } catch (error) {
-      console.error('Ошибка при тапе:', error);
+      console.error(`[TAP] Критическая ошибка: ${error.message}`);
       throw error;
     }
   },
