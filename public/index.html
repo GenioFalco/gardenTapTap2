@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Garden Tap Tap - A gardening clicker game for Telegram"
+    />
+    <meta name="telegram:channel" content="@GardenTapTapChannel" />
+    <meta name="telegram:site" content="@GardenTapTapBot" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <!--
+      manifest.json provides metadata used when your web app is installed on a
+      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
+    -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <!--
+      Notice the use of %PUBLIC_URL% in the tags above.
+      It will be replaced with the URL of the `public` folder during the build.
+      Only files inside the `public` folder can be referenced from the HTML.
+
+      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
+      work correctly both with client-side routing and a non-root public URL.
+      Learn how to configure a non-root public URL by running `npm run build`.
+    -->
+    <title>Garden Tap Tap</title>
+    <style>
+      /* Стили для начального экрана загрузки */
+      #initial-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #000;
+        background-size: cover;
+        background-position: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease-out;
+      }
+      #initial-loader.loaded {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #initial-loader .content {
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 2rem;
+        border-radius: 0.5rem;
+        text-align: center;
+      }
+      #initial-loader h1 {
+        color: white;
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+      }
+      #initial-loader p {
+        color: #d1d5db;
+        font-size: 1.25rem;
+        margin-bottom: 1.5rem;
+      }
+      #initial-loader .progress-bar {
+        width: 20rem;
+        height: 1rem;
+        background-color: #374151;
+        border-radius: 9999px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+      }
+      #initial-loader .progress-fill {
+        height: 100%;
+        background-color: #10b981;
+        width: 0%;
+        transition: width 0.3s;
+        animation: progress-animation 2s infinite;
+      }
+      @keyframes progress-animation {
+        0% { width: 0%; }
+        50% { width: 70%; }
+        100% { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    
+    <!-- Начальный экран загрузки -->
+    <div id="initial-loader">
+      <div class="content">
+        <h1>ЗАГРУЗКА ИГРЫ</h1>
+        <p>Запуск приложения</p>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="root"></div>
+    <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
+
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start`.
+      To create a production bundle, use `npm run build` or `yarn build`.
+    -->
+    <script>
+      // Выбираем случайный фон для начального загрузчика
+      window.addEventListener('DOMContentLoaded', function() {
+        var loader = document.getElementById('initial-loader');
+        if (loader) {
+          var randomBgNumber = Math.floor(Math.random() * 4) + 1;
+          loader.style.backgroundImage = `url('./assets/loading/loading_bg_${randomBgNumber}.jpg')`;
+        }
+      });
+      
+      // Скрываем начальный загрузчик, когда приложение React загрузилось
+      window.addEventListener('load', function() {
+        // Даем немного времени для рендеринга React
+        setTimeout(function() {
+          var loader = document.getElementById('initial-loader');
+          if (loader) {
+            loader.classList.add('loaded');
+            // Устанавливаем флаг, что начальный загрузчик был показан
+            sessionStorage.setItem('initialLoaderShown', 'true');
+            // Удаляем элемент после завершения анимации
+            setTimeout(function() {
+              if (loader && loader.parentNode) {
+                loader.parentNode.removeChild(loader);
+              }
+            }, 500);
+          }
+        }, 1000);
+      });
+    </script>
+  </body>
+</html>
