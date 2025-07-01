@@ -122,7 +122,7 @@ const AchievementToast: React.FC<AchievementToastProps> = ({ onClose }) => {
               <div className="w-28 h-28 mb-4 relative">
                 <div className="absolute inset-0 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-full opacity-20 animate-pulse"></div>
                 <img 
-                  src={currentCongratulation.image_path} 
+                  src={`/assets/${currentCongratulation.image_path}`} 
                   alt={currentCongratulation.achievement_name}
                   className="w-full h-full object-contain relative z-10"
                   onError={(e) => {
