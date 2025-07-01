@@ -100,7 +100,7 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
           
           // Для леса (локация 1) используем валюту "forest"
           if (location.id === 1) {
-            const currencyId = '1'; // ID для леса
+            const currencyId = '2'; // ID для леса (брёвна)
             
             try {
               // Получаем информацию о хранилище
@@ -143,11 +143,11 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
             
             // Карта соответствия типов валют и их ID
             const currencyMap: Record<string, string> = {
-              'forest': '1',
-              'garden': '2',
-              'winter': '3',
-              'mountain': '4',
-              'main': '5',
+              'forest': '2',
+              'garden': '3',
+              'winter': '4',
+              'mountain': '5',
+              'main': '1',
               'desert': '6',
               'lake': '7'
             };
