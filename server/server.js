@@ -2943,12 +2943,6 @@ app.post('/api/player/helpers/collect-income', async (req, res) => {
       return res.json({ collected: [] });
     }
     
-    // Получаем информацию о максимальной вместимости склада для каждой валюты
-    const storageCapacity = {
-      '1': 10000, // Лес - 10000 единиц
-      '5': 100000 // Основная валюта - 100000 единиц
-    };
-    
     try {
       const collectedResults = [];
       
@@ -2963,11 +2957,75 @@ app.post('/api/player/helpers/collect-income', async (req, res) => {
         `, [userId, currencyId]);
         
         const currentAmount = playerCurrency ? parseFloat(playerCurrency.amount) : 0;
-        const capacity = storageCapacity[currencyId] || 10000;
-        const availableSpace = Math.max(0, capacity - currentAmount);
+        
+        // Получаем лимит хранилища для этой валюты
+        let storageCapacity = 10000; // Значение по умолчанию
+        let storageIsFull = false;
+        
+        // Для основной валюты (монеты, id=1) не проверяем лимит хранилища
+        if (currencyId == 1) {
+          storageCapacity = Number.MAX_SAFE_INTEGER;
+        } else {
+          // Для валют локаций проверяем лимит хранилища
+          // Находим локацию, которой принадлежит эта валюта
+          const locationInfo = await db.get(`
+            SELECT id FROM locations WHERE currency_id = ?
+          `, [currencyId]);
+          
+          if (locationInfo) {
+            const locationId = locationInfo.id;
+            
+            // Получаем информацию о лимите хранилища
+            const storageInfo = await db.get(`
+              SELECT capacity FROM player_storage_limits
+              WHERE user_id = ? AND location_id = ? AND currency_id = ?
+            `, [userId, locationId, currencyId]);
+            
+            if (storageInfo) {
+              storageCapacity = storageInfo.capacity;
+            } else {
+              // Если нет информации о хранилище, получаем начальную емкость
+              const initialLevel = await db.get(`
+                SELECT capacity FROM storage_upgrade_levels
+                WHERE location_id = ? AND level = 1
+              `, [locationId]);
+              
+              if (initialLevel) {
+                storageCapacity = initialLevel.capacity;
+              }
+              
+              // Создаем запись о хранилище
+              await db.run(`
+                INSERT INTO player_storage_limits (user_id, location_id, currency_id, storage_level, capacity)
+                VALUES (?, ?, ?, 1, ?)
+              `, [userId, locationId, currencyId, storageCapacity]);
+            }
+          }
+        }
+        
+        console.log(`[COLLECT] Валюта ${currencyId}: текущее количество ${currentAmount}, лимит ${storageCapacity}, накоплено ${pendingAmount}`);
+        
+        // Проверяем, заполнено ли хранилище
+        if (currentAmount >= storageCapacity && currencyId != 1) {
+          console.log(`[COLLECT] Хранилище полностью заполнено для валюты ${currencyId}`);
+          storageIsFull = true;
+          
+          // Для валют локаций при полном хранилище не добавляем ресурсы
+          collectedResults.push({
+            currency_id: currencyId,
+            collected: 0,
+            remaining: pendingAmount,
+            storage_full: true
+          });
+          continue;
+        }
+        
+        const availableSpace = Math.max(0, storageCapacity - currentAmount);
         
         // Определяем, сколько можно собрать
         const amountToCollect = Math.min(pendingAmount, availableSpace);
+        
+        console.log(`[COLLECT] Доступное место: ${availableSpace}, можно собрать: ${amountToCollect}`);
         
         if (amountToCollect > 0) {
           // Обновляем количество валюты у игрока
@@ -3000,6 +3058,15 @@ app.post('/api/player/helpers/collect-income', async (req, res) => {
             `, [amountToCollect, userId, currencyId]);
           }
           
+          // Проверяем, что ресурсы действительно были добавлены
+          const newCurrencyAmount = await db.get(`
+            SELECT amount FROM player_currencies 
+            WHERE user_id = ? AND currency_id = ?
+          `, [userId, currencyId]);
+          
+          const newAmount = newCurrencyAmount ? parseFloat(newCurrencyAmount.amount) : 0;
+          console.log(`[COLLECT] После сбора: ${newAmount}, было: ${currentAmount}. Добавлено: ${newAmount - currentAmount}`);
+          
           collectedResults.push({
             currency_id: currencyId,
             collected: amountToCollect,
@@ -3022,16 +3089,14 @@ app.post('/api/player/helpers/collect-income', async (req, res) => {
       `, [userId]);
       console.log(`Обновлено время последнего входа для пользователя ${userId} при сборе прибыли`);
       
-      // Фиксируем транзакцию
       await db.run('COMMIT');
-      
-      res.json({ collected: collectedResults });
+      return res.json({ collected: collectedResults });
     } catch (error) {
       await db.run('ROLLBACK');
       throw error;
     }
   } catch (error) {
-    console.error('Ошибка при сборе накопленной прибыли:', error);
+    console.error('Ошибка при сборе прибыли от помощников:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
