@@ -109,7 +109,27 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
         <h3 className="text-white text-lg font-semibold mb-2">{task.description}</h3>
         
         <div className="text-gray-300 text-sm mb-3">
-          Цель: {task.progress || 0}/{task.targetValue} {task.taskType === 'taps' ? 'тапов' : task.taskType === 'resources' ? 'ресурсов' : 'единиц энергии'}
+          Цель: {task.progress || 0}/{task.targetValue} {
+            task.taskType === 'taps' || task.taskType === 'daily_taps' || task.taskType === 'tap' 
+              ? 'тапов' 
+              : task.taskType === 'resources' || task.taskType === 'daily_resources' || task.taskType === 'collect_currency' 
+                ? 'ресурсов' 
+                : task.taskType === 'energy' || task.taskType === 'daily_energy' || task.taskType === 'spend_energy'
+                  ? 'единиц энергии'
+                  : task.taskType === 'unlock_tool'
+                    ? 'инструментов'
+                    : task.taskType === 'upgrade_helpers'
+                      ? 'улучшений'
+                      : task.taskType === 'level_up'
+                        ? 'уровней'
+                        : task.taskType === 'unlock_location'
+                          ? 'локаций'
+                          : task.taskType === 'complete_dailies'
+                            ? 'заданий'
+                            : task.taskType === 'earn_exp_season'
+                              ? 'опыта'
+                              : 'единиц'
+          }
         </div>
         
         {/* Прогресс-бар */}

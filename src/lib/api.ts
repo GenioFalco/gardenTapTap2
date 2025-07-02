@@ -223,23 +223,24 @@ export const tap = async (locationId: number): Promise<{
   
   // Обновляем прогресс заданий (тапов)
   try {
+    // Обновляем прогресс заданий по тапам
     await fetchApi('/player/tasks/update-progress', {
       method: 'POST',
-      body: JSON.stringify({ taskType: 'taps', progress: 1 })
+      body: JSON.stringify({ taskType: 'tap', progress: 1 })
     });
     
     // Также обновляем прогресс по ресурсам, если получены ресурсы
     if (response.resourcesGained > 0) {
       await fetchApi('/player/tasks/update-progress', {
         method: 'POST',
-        body: JSON.stringify({ taskType: 'resources', progress: response.resourcesGained })
+        body: JSON.stringify({ taskType: 'collect_currency', progress: response.resourcesGained })
       });
     }
     
     // Обновляем прогресс по энергии, если была потрачена энергия
     await fetchApi('/player/tasks/update-progress', {
       method: 'POST',
-      body: JSON.stringify({ taskType: 'energy', progress: 1 })
+      body: JSON.stringify({ taskType: 'spend_energy', progress: 1 })
     });
   } catch (error) {
     console.error('Не удалось обновить прогресс заданий:', error);
