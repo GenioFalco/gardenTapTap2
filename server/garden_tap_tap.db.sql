@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS "currencies" (
 	"updated_at"	TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY("id")
 );
+CREATE TABLE IF NOT EXISTS "daily_tasks" (
+	"id"	INTEGER,
+	"task_type"	TEXT NOT NULL,
+	"description"	TEXT NOT NULL,
+	"target_value"	INTEGER NOT NULL,
+	"season_points"	INTEGER NOT NULL,
+	"exp"	INTEGER NOT NULL,
+	"main_coins"	INTEGER NOT NULL,
+	"activation_date"	DATE NOT NULL,
+	"end_activation_date"	DATE NOT NULL,
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
 CREATE TABLE IF NOT EXISTS "helper_levels" (
 	"helper_id"	INTEGER NOT NULL,
 	"level"	INTEGER NOT NULL,
@@ -103,6 +115,13 @@ CREATE TABLE IF NOT EXISTS "player_currencies" (
 	"amount"	REAL NOT NULL DEFAULT 0,
 	PRIMARY KEY("user_id","currency_id"),
 	FOREIGN KEY("currency_id") REFERENCES "currencies"("id")
+);
+CREATE TABLE IF NOT EXISTS "player_daily_task_progress" (
+	"user_id"	TEXT NOT NULL,
+	"task_id"	INTEGER NOT NULL,
+	"task_category"	TEXT NOT NULL CHECK("task_category" IN ('season', 'daily')),
+	"completed"	BOOLEAN NOT NULL DEFAULT FALSE,
+	PRIMARY KEY("user_id","task_id")
 );
 CREATE TABLE IF NOT EXISTS "player_equipped_tools" (
 	"user_id"	TEXT NOT NULL,
@@ -182,6 +201,7 @@ CREATE TABLE IF NOT EXISTS "player_season" (
 	"points"	INTEGER NOT NULL DEFAULT 0,
 	"rank_id"	INTEGER,
 	"highest_rank_id"	INTEGER,
+	"taps_total"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("user_id","season_id"),
 	FOREIGN KEY("highest_rank_id") REFERENCES "ranks"("id"),
 	FOREIGN KEY("rank_id") REFERENCES "ranks"("id"),
@@ -228,6 +248,18 @@ CREATE TABLE IF NOT EXISTS "rewards" (
 	PRIMARY KEY("id"),
 	FOREIGN KEY("currency_id") REFERENCES "currencies"("id"),
 	FOREIGN KEY("level_id") REFERENCES "levels"("level")
+);
+CREATE TABLE IF NOT EXISTS "season_tasks" (
+	"id"	INTEGER,
+	"season_id"	INTEGER NOT NULL,
+	"task_type"	TEXT NOT NULL,
+	"description"	TEXT NOT NULL,
+	"target_value"	INTEGER NOT NULL,
+	"season_points"	INTEGER NOT NULL,
+	"exp"	INTEGER NOT NULL,
+	"coins"	INTEGER NOT NULL,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("season_id") REFERENCES "seasons"("id")
 );
 CREATE TABLE IF NOT EXISTS "seasons" (
 	"id"	INTEGER,
@@ -279,6 +311,9 @@ INSERT INTO "character_appearances" VALUES (3,1,3,'/assets/characters/lumberjack
 INSERT INTO "characters" VALUES (1,'Лесоруб','gif','/assets/characters/lumberjack.png',NULL);
 INSERT INTO "currencies" VALUES (1,'Монеты','main','/assets/currencies/garden_coin.png','2025-06-28 15:42:53','2025-06-28 15:42:53');
 INSERT INTO "currencies" VALUES (2,'Брёвна','forest','/assets/currencies/wood.png','2025-06-28 15:42:54','2025-06-28 15:42:54');
+INSERT INTO "daily_tasks" VALUES (1,'daily_taps','Сделать 20 тапов за день',20,10,50,50,'2025-07-01','2025-07-31');
+INSERT INTO "daily_tasks" VALUES (2,'daily_resources','Собрать 100 единиц дерева за день',100,15,75,75,'2025-07-01','2025-07-31');
+INSERT INTO "daily_tasks" VALUES (3,'daily_energy','Потратить 10 единиц энергии за день',10,5,25,25,'2025-07-01','2025-07-31');
 INSERT INTO "helper_levels" VALUES (1,1,10.0,0,1);
 INSERT INTO "helper_levels" VALUES (1,2,25.0,1000,1);
 INSERT INTO "helper_levels" VALUES (1,3,60.0,2500,1);
@@ -310,12 +345,13 @@ INSERT INTO "player_achievements" VALUES (1,'test_user',1,'2025-07-01 11:42:44')
 INSERT INTO "player_achievements" VALUES (2,'test_user',2,'2025-07-01 11:42:44');
 INSERT INTO "player_achievements" VALUES (3,'test_user',3,'2025-07-01 11:42:45');
 INSERT INTO "player_achievements" VALUES (8,'test_user',4,'2025-07-01 14:13:30');
-INSERT INTO "player_currencies" VALUES ('test_user',2,5003.0);
-INSERT INTO "player_currencies" VALUES ('test_user',1,100.0);
+INSERT INTO "player_currencies" VALUES ('test_user',1,1013.0);
+INSERT INTO "player_currencies" VALUES ('test_user',2,5267.12);
 INSERT INTO "player_equipped_tools" VALUES ('test_user',1,1);
 INSERT INTO "player_helpers" VALUES ('test_user',1,3);
 INSERT INTO "player_locations" VALUES ('test_user',1);
 INSERT INTO "player_login_history" VALUES (1,'test_user','2025-07-01 11:42:44');
+INSERT INTO "player_login_history" VALUES (2,'test_user','2025-07-02 10:51:36');
 INSERT INTO "player_notifications" VALUES (1,'test_user','achievement','Новое достижение!','Вы получили достижение "Первый шаг"',1,'achievements/first_step.png',0,'2025-07-01 11:42:45',NULL);
 INSERT INTO "player_notifications" VALUES (2,'test_user','achievement','Новое достижение!','Вы получили достижение "Уверенный путь"',2,'achievements/level_5.png',0,'2025-07-01 11:42:45',NULL);
 INSERT INTO "player_notifications" VALUES (3,'test_user','achievement','Новое достижение!','Вы получили достижение "Полпути"',3,'achievements/level_10.png',0,'2025-07-01 11:42:45',NULL);
@@ -324,12 +360,11 @@ INSERT INTO "player_notifications" VALUES (5,'test_user','achievement','Ново
 INSERT INTO "player_notifications" VALUES (6,'test_user','achievement','Новое достижение!','Вы получили достижение "Почти легенда"',4,'achievements/almost_legend.png',0,'2025-07-01 14:01:44',NULL);
 INSERT INTO "player_notifications" VALUES (7,'test_user','achievement','Новое достижение!','Вы получили достижение "Почти легенда"',4,'achievements/almost_legend.png',0,'2025-07-01 14:03:14',NULL);
 INSERT INTO "player_notifications" VALUES (8,'test_user','achievement','Новое достижение!','Вы получили достижение "Почти легенда"',4,'achievements/almost_legend.png',0,'2025-07-01 14:13:30',NULL);
-INSERT INTO "player_pending_income" VALUES ('test_user',2,18.58);
 INSERT INTO "player_profile" VALUES ('test_user',1,1,NULL,4,'/assets/avatars/default.png',0);
-INSERT INTO "player_progress" VALUES ('test_user',16,87,110,110,'2025-07-01T18:35:46.051Z','2025-07-01 18:45:46');
-INSERT INTO "player_season" VALUES ('test_user',1,100,1,1);
-INSERT INTO "player_stats" VALUES ('test_user',57,114,57,'2025-07-01 18:33:29');
-INSERT INTO "player_storage_limits" VALUES ('test_user',1,2,3,5000);
+INSERT INTO "player_progress" VALUES ('test_user',16,262,110,110,'2025-07-01T21:03:38.675Z','2025-07-02 10:52:06');
+INSERT INTO "player_season" VALUES ('test_user',1,100,1,1,0);
+INSERT INTO "player_stats" VALUES ('test_user',155,201,155,'2025-07-01 21:02:19');
+INSERT INTO "player_storage_limits" VALUES ('test_user',1,2,4,10000);
 INSERT INTO "player_tools" VALUES ('test_user',1);
 INSERT INTO "player_tools" VALUES ('test_user',2);
 INSERT INTO "player_tools" VALUES ('test_user',3);
@@ -347,6 +382,9 @@ INSERT INTO "rewards" VALUES (2,2,'main_currency',1,200,NULL);
 INSERT INTO "rewards" VALUES (3,3,'main_currency',1,300,NULL);
 INSERT INTO "rewards" VALUES (4,4,'forest_currency',2,400,NULL);
 INSERT INTO "rewards" VALUES (5,5,'energy',NULL,10,'');
+INSERT INTO "season_tasks" VALUES (1,1,'taps','Сделать 100 тапов',100,50,200,100);
+INSERT INTO "season_tasks" VALUES (2,1,'resources','Собрать 500 единиц дерева',500,100,300,200);
+INSERT INTO "season_tasks" VALUES (3,1,'energy','Потратить 50 единиц энергии',50,75,150,150);
 INSERT INTO "seasons" VALUES (1,'Летний сезон','2025-06-01','2025-08-25','Жара, валка, прокачка!',1);
 INSERT INTO "storage_upgrade_levels" VALUES (1,1,1000,0,1);
 INSERT INTO "storage_upgrade_levels" VALUES (1,2,2500,500,1);
@@ -359,9 +397,18 @@ INSERT INTO "tools" VALUES (3,'Бензопила',1,10,10,1000,2,'/assets/tools
 CREATE INDEX IF NOT EXISTS "idx_achievement_congratulations_user_id" ON "achievement_congratulations" (
 	"user_id"
 );
+CREATE INDEX IF NOT EXISTS "idx_daily_tasks_activation_date" ON "daily_tasks" (
+	"activation_date"
+);
 CREATE INDEX IF NOT EXISTS "idx_player_currencies" ON "player_currencies" (
 	"user_id",
 	"currency_id"
+);
+CREATE INDEX IF NOT EXISTS "idx_player_daily_task_progress_task_category" ON "player_daily_task_progress" (
+	"task_category"
+);
+CREATE INDEX IF NOT EXISTS "idx_player_daily_task_progress_user_id" ON "player_daily_task_progress" (
+	"user_id"
 );
 CREATE INDEX IF NOT EXISTS "idx_player_helpers" ON "player_helpers" (
 	"user_id"
@@ -377,5 +424,8 @@ CREATE INDEX IF NOT EXISTS "idx_player_notifications_user_id" ON "player_notific
 );
 CREATE INDEX IF NOT EXISTS "idx_player_tools" ON "player_tools" (
 	"user_id"
+);
+CREATE INDEX IF NOT EXISTS "idx_season_tasks_season_id" ON "season_tasks" (
+	"season_id"
 );
 COMMIT;

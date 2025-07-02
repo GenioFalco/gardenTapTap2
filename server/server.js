@@ -91,8 +91,12 @@ async function ensureUserExists(userId) {
 
 // API endpoints
 
-// Маршруты для работы с валютами
+// Подключаем маршруты для отдельных функциональностей
+const tasksRoutes = require('./routes/tasks.routes');
+
+// Регистрируем маршрутизаторы
 app.use('/api/currencies', currencyRoutes);
+app.use('/api/player/tasks', tasksRoutes);
 
 // Получить все локации
 app.get('/api/locations', async (req, res) => {

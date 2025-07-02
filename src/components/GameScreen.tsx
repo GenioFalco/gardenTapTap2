@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Location, Tool, CurrencyType, Currency, Helper } from '../types';
 import * as api from '../lib/api';
 import OfficeModal from './OfficeModal';
+import TaskButton from './TaskButton';
+import TasksModal from './TasksModal';
 
 // Компонент модального окна улучшения инструментов
 const UpgradeModal = ({ 
@@ -260,6 +262,7 @@ interface GameScreenProps {
   gardenCoins?: number;
   unlockedTools?: number[]; // Добавляем список разблокированных инструментов
   updateResources?: (currencyId?: string | number, newAmount?: number) => Promise<void>; // Функция для обновления ресурсов
+  userId: string; // Добавляем userId для TasksModal
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({
@@ -279,7 +282,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
   characterImageUrl = '/assets/characters/lumberjack.png',
   gardenCoins = 0,
   unlockedTools = [], // По умолчанию пустой массив
-  updateResources
+  updateResources,
+  userId
 }) => {
   // Состояние для модального окна
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -312,6 +316,9 @@ const GameScreen: React.FC<GameScreenProps> = ({
   const lastAnimationTimeRef = useRef<number>(0);
   // Сохраняем статичное изображение персонажа
   const staticImageRef = useRef<string | null>(characterAppearance.imagePath);
+
+  const [activeTab, setActiveTab] = useState<string>("tap");
+  const [showTasksModal, setShowTasksModal] = useState(false);
 
   // Найти текущий и следующий доступный инструмент
   const currentTool = tools.find(tool => tool.id === equippedToolId);
@@ -787,7 +794,16 @@ const GameScreen: React.FC<GameScreenProps> = ({
         updateResources={updateResources}
       />
       
-
+      {/* Добавляем кнопку для открытия окна заданий */}
+      <TaskButton onClick={() => setShowTasksModal(true)} activeTab={activeTab} />
+      
+      {/* Добавляем модальное окно с заданиями */}
+      <TasksModal 
+        show={showTasksModal} 
+        onClose={() => setShowTasksModal(false)}
+        userId={userId}
+      />
+      
     </div>
   );
 };

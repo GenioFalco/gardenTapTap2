@@ -9,7 +9,7 @@ import { config } from '../config';
 const API_BASE_URL = `${config.apiUrl}/api`;
 
 // Функция для получения идентификатора пользователя из Telegram WebApp
-const getUserId = (): string => {
+export const getUserId = (): string => {
   if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe?.user?.id) {
     // Получаем ID пользователя из Telegram WebApp
     return window.Telegram.WebApp.initDataUnsafe.user.id.toString();
@@ -208,7 +208,7 @@ export const tap = async (locationId: number): Promise<{
   rewards: Reward[];
   energyLeft: number;
 }> => {
-  return await fetchApi<{
+  const response = await fetchApi<{
     resourcesGained: number;
     mainCurrencyGained: number;
     experienceGained: number;
@@ -220,6 +220,32 @@ export const tap = async (locationId: number): Promise<{
     method: 'POST',
     body: JSON.stringify({ locationId })
   });
+  
+  // Обновляем прогресс заданий (тапов)
+  try {
+    await fetchApi('/player/tasks/update-progress', {
+      method: 'POST',
+      body: JSON.stringify({ taskType: 'taps', progress: 1 })
+    });
+    
+    // Также обновляем прогресс по ресурсам, если получены ресурсы
+    if (response.resourcesGained > 0) {
+      await fetchApi('/player/tasks/update-progress', {
+        method: 'POST',
+        body: JSON.stringify({ taskType: 'resources', progress: response.resourcesGained })
+      });
+    }
+    
+    // Обновляем прогресс по энергии, если была потрачена энергия
+    await fetchApi('/player/tasks/update-progress', {
+      method: 'POST',
+      body: JSON.stringify({ taskType: 'energy', progress: 1 })
+    });
+  } catch (error) {
+    console.error('Не удалось обновить прогресс заданий:', error);
+  }
+  
+  return response;
 };
 
 // Улучшить инструмент (купить новый)
@@ -557,5 +583,62 @@ export const markAchievementCongratulationAsShown = async (congratulationId: num
     headers: {
       'Content-Type': 'application/json'
     }
+  });
+};
+
+// Получить сезонные задания
+export const getSeasonTasks = async (userId: string): Promise<{
+  success: boolean;
+  tasks: Array<{
+    id: number;
+    description: string;
+    taskType: string;
+    targetValue: number;
+    seasonPoints: number;
+    exp: number;
+    coins: number;
+    progress: number;
+    completed: boolean;
+    rewardClaimed: boolean;
+  }>;
+}> => {
+  return await fetchApi<any>('/player/tasks/season');
+};
+
+// Получить ежедневные задания
+export const getDailyTasks = async (userId: string): Promise<{
+  success: boolean;
+  tasks: Array<{
+    id: number;
+    description: string;
+    taskType: string;
+    targetValue: number;
+    seasonPoints: number;
+    exp: number;
+    coins: number;
+    progress: number;
+    completed: boolean;
+    rewardClaimed: boolean;
+  }>;
+}> => {
+  return await fetchApi<any>('/player/tasks/daily');
+};
+
+// Получить награду за выполненное задание
+export const claimTaskReward = async (
+  userId: string,
+  taskId: number,
+  taskType: 'season' | 'daily'
+): Promise<{
+  success: boolean;
+  rewards?: {
+    exp: number;
+    coins: number;
+    seasonPoints?: number;
+  };
+  error?: string;
+}> => {
+  return await fetchApi<any>(`/player/tasks/${taskType}/${taskId}/claim`, {
+    method: 'POST'
   });
 }; 

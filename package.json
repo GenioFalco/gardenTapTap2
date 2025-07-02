@@ -29,7 +29,8 @@
     "server": "cd server && npm run dev",
     "dev": "concurrently \"npm run start\" \"npm run server\"",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build",
+    "update-tasks": "node server/update_tasks.js"
   },
   "eslintConfig": {
     "extends": [

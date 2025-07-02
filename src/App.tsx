@@ -80,6 +80,9 @@ function App() {
     rewardValue?: number;
   } | null>(null);
   
+  // Получаем ID пользователя для передачи в компоненты
+  const [userId, setUserId] = useState<string>('test_user');
+  
   // Генерация случайного имени пользователя, если не удалось получить из Telegram
   const generateRandomUserName = () => {
     return `user${Math.floor(Math.random() * 100000)}`;
@@ -89,6 +92,10 @@ function App() {
   useEffect(() => {
     const initApp = async () => {
       try {
+        // Получаем ID пользователя
+        const user = api.getUserId();
+        setUserId(user);
+        
         // Получаем все локации
         const allLocations = await api.getLocations();
         const locationsWithPlaceholders = allLocations.map(location => ({
@@ -1144,7 +1151,7 @@ function App() {
           tools={tools}
           equippedToolId={equippedToolId}
           resourceAmount={resourceAmount}
-          currencyType={(currentLocation.currencyType || currentLocation.currency_type || 'FOREST') as CurrencyType}
+          currencyType={(currentLocation.currencyType || CurrencyType.FOREST) as CurrencyType}
           energy={playerProgress.energy}
           maxEnergy={playerProgress.maxEnergy}
           level={playerProgress.level}
@@ -1156,6 +1163,7 @@ function App() {
           gardenCoins={gardenCoins}
           unlockedTools={playerProgress.unlockedTools || []}
           updateResources={updateResources}
+          userId={userId}
         />
       )}
       
