@@ -432,6 +432,61 @@ router.post('/update-progress', async (req, res) => {
           seasonTasksUpdated.changes = activeSeasonTasks.length;
         }
       }
+      // Особая обработка для задания по накоплению опыта за сезон
+      else if (seasonTaskType === 'earn_exp_season') {
+        // Получаем текущий активный сезон
+        const currentSeason = await db.get(`
+          SELECT id FROM seasons WHERE is_active = 1 LIMIT 1
+        `);
+        
+        if (currentSeason) {
+          // Получаем текущий опыт игрока
+          const playerExperience = await db.get(`
+            SELECT experience FROM player_progress 
+            WHERE user_id = ?
+          `, [userId]);
+          
+          const currentExp = playerExperience ? playerExperience.experience : 0;
+          
+          // Обновляем прогресс для заданий типа earn_exp_season
+          const activeSeasonTasks = await db.all(`
+            SELECT st.id, st.target_value
+            FROM season_tasks st
+            WHERE st.task_type = 'earn_exp_season' AND st.season_id = ?
+          `, [currentSeason.id]);
+          
+          if (activeSeasonTasks.length > 0) {
+            for (const task of activeSeasonTasks) {
+              // Проверяем, есть ли запись о прогрессе
+              const progressRecord = await db.get(`
+                SELECT * FROM player_daily_task_progress
+                WHERE user_id = ? AND task_id = ? AND task_category = 'season'
+              `, [userId, task.id]);
+              
+              // Вычисляем, выполнено ли задание
+              const completed = currentExp >= task.target_value ? 1 : 0;
+              
+              if (!progressRecord) {
+                // Если записи нет, создаем ее
+                await db.run(`
+                  INSERT INTO player_daily_task_progress 
+                  (user_id, task_id, task_category, completed, progress, reward_claimed) 
+                  VALUES (?, ?, 'season', ?, ?, 0)
+                `, [userId, task.id, completed, currentExp]);
+              } else {
+                // Если запись есть, обновляем прогресс
+                await db.run(`
+                  UPDATE player_daily_task_progress
+                  SET progress = ?, completed = ?
+                  WHERE user_id = ? AND task_id = ? AND task_category = 'season'
+                `, [currentExp, completed, userId, task.id]);
+              }
+            }
+            
+            seasonTasksUpdated.changes = activeSeasonTasks.length;
+          }
+        }
+      }
       // Обычное обновление для стандартных типов
       else {
         // Проверяем наличие активных сезонных заданий этого типа
@@ -504,7 +559,7 @@ router.post('/check-all-progress', async (req, res) => {
     
     // Получаем необходимые данные о прогрессе игрока
     const playerProgress = await db.get(`
-      SELECT level FROM player_progress WHERE user_id = ?
+      SELECT level, experience FROM player_progress WHERE user_id = ?
     `, [userId]);
     
     const unlockedTools = await db.all(`
@@ -524,14 +579,7 @@ router.post('/check-all-progress', async (req, res) => {
       WHERE user_id = ? AND task_category = 'daily' AND completed = 1
     `, [userId]);
     
-    // Преобразуем результаты в числа
-    const currentLevel = playerProgress ? playerProgress.level : 1;
-    const toolsCount = unlockedTools[0].count || 0;
-    const helpersLevels = helpers[0].total_levels || 0;
-    const locationsCount = unlockedLocations[0].count || 0;
-    const dailiesCompleted = completedDailyTasks[0].count || 0;
-    
-    // Получаем все активные сезонные задания
+    // Получаем текущий активный сезон
     const currentSeason = await db.get(`
       SELECT id FROM seasons WHERE is_active = 1 LIMIT 1
     `);
@@ -540,6 +588,15 @@ router.post('/check-all-progress', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Активный сезон не найден' });
     }
     
+    // Преобразуем результаты в числа
+    const currentLevel = playerProgress ? playerProgress.level : 1;
+    const currentExp = playerProgress ? playerProgress.experience : 0;
+    const toolsCount = unlockedTools[0].count || 0;
+    const helpersLevels = helpers[0].total_levels || 0;
+    const locationsCount = unlockedLocations[0].count || 0;
+    const dailiesCompleted = completedDailyTasks[0].count || 0;
+    
+    // Получаем все активные сезонные задания
     const allSeasonTasks = await db.all(`
       SELECT * FROM season_tasks WHERE season_id = ?
     `, [currentSeason.id]);
@@ -566,6 +623,10 @@ router.post('/check-all-progress', async (req, res) => {
           break;
         case 'complete_dailies':
           currentProgress = dailiesCompleted;
+          break;
+        case 'earn_exp_season':
+          // Используем текущий опыт игрока для задания по опыту
+          currentProgress = currentExp;
           break;
         // Для остальных типов заданий оставляем текущий прогресс без изменений
         default:

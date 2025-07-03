@@ -42,9 +42,14 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
     try {
       setLoading(true);
       setError(null);
-
+      
       // Сначала проверяем и обновляем прогресс всех типов заданий
-      await api.checkAllTasksProgress(userId);
+      try {
+        await api.checkAllTasksProgress(userId);
+      } catch (checkError) {
+        console.error('Ошибка при проверке прогресса заданий:', checkError);
+        // Продолжаем загрузку заданий, даже если проверка не удалась
+      }
       
       // Получаем активные задания в зависимости от выбранной вкладки
       if (activeTab === 'season') {
@@ -65,6 +70,7 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
   // Функция для получения награды
   const claimReward = async (taskId: number, isSeasonTask: boolean) => {
     try {
+      setClaimingTaskId(taskId);
       const response = await api.claimTaskReward(userId, taskId, isSeasonTask ? 'season' : 'daily');
       
       if (response.success) {
@@ -90,6 +96,8 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
       console.error('Ошибка при получении награды:', err);
       setError('Произошла ошибка. Попробуйте позже.');
       setTimeout(() => setError(null), 3000);
+    } finally {
+      setClaimingTaskId(null);
     }
   };
 
@@ -167,20 +175,22 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
           
           {/* Статус или кнопка */}
           {task.completed && !task.rewardClaimed ? (
-            <button 
-              className="bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded text-sm"
+            <button
               onClick={() => claimReward(task.id, isSeasonTask)}
+              className="bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded text-sm"
+              disabled={claimingTaskId === task.id}
             >
-              Получить награду
+              {claimingTaskId === task.id ? 'Получение...' : 'Забрать'}
             </button>
           ) : (
-            <span className={`px-2 py-1 rounded text-xs ${
-              task.rewardClaimed 
-                ? 'bg-green-800 text-green-200'
-                : 'bg-yellow-600 text-yellow-200'
-            }`}>
-              {status}
-            </span>
+            task.rewardClaimed ? (
+              <div className="flex items-center text-green-400">
+                <img src="/assets/icons/galochka.png" alt="Получено" className="w-6 h-6 mr-1" />
+                <span>Получено</span>
+              </div>
+            ) : (
+              <span className="text-yellow-500 text-sm">{status}</span>
+            )
           )}
         </div>
       </div>
