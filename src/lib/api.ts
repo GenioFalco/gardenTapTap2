@@ -642,4 +642,43 @@ export const claimTaskReward = async (
   return await fetchApi<any>(`/player/tasks/${taskType}/${taskId}/claim`, {
     method: 'POST'
   });
+};
+
+// Обновить прогресс задания
+export const updateTaskProgress = async (
+  userId: string,
+  taskType: string,
+  progress: number
+): Promise<{
+  success: boolean;
+  dailyTasksUpdated: number;
+  seasonTasksUpdated: number;
+  taskType: string;
+}> => {
+  return await fetchApi<any>('/player/tasks/update-progress', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ taskType, progress }),
+  });
+};
+
+// Проверить и обновить прогресс всех типов заданий
+export const checkAllTasksProgress = async (
+  userId: string
+): Promise<{
+  success: boolean;
+  message: string;
+  updatedTasks: Array<{
+    id: number;
+    taskType: string;
+    progress: number;
+    targetValue: number;
+    completed: boolean;
+  }>;
+}> => {
+  return await fetchApi<any>('/player/tasks/check-all-progress', {
+    method: 'POST'
+  });
 }; 

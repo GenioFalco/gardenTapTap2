@@ -28,6 +28,7 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
   const [dailyTasks, setDailyTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [claimingTaskId, setClaimingTaskId] = useState<number | null>(null);
 
   // Загрузка заданий
   useEffect(() => {
@@ -42,6 +43,9 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
       setLoading(true);
       setError(null);
 
+      // Сначала проверяем и обновляем прогресс всех типов заданий
+      await api.checkAllTasksProgress(userId);
+      
       // Получаем активные задания в зависимости от выбранной вкладки
       if (activeTab === 'season') {
         const response = await api.getSeasonTasks(userId);
