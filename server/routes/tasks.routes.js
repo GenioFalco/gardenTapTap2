@@ -485,6 +485,83 @@ router.post('/update-progress', async (req, res) => {
           }
         }
       }
+      // Добавляем специальную обработку для ежедневных заданий upgrade_helper и spend_currency
+      else if (dailyTaskType === 'upgrade_helper' || dailyTaskType === 'spend_currency') {
+        let currentProgress = 0;
+        
+        if (dailyTaskType === 'upgrade_helper') {
+          // Получаем общий уровень всех помощников
+          const helpers = await db.all(`
+            SELECT SUM(level) as total_levels FROM player_helpers WHERE user_id = ?
+          `, [userId]);
+          currentProgress = helpers[0].total_levels || 0;
+        }
+        else if (dailyTaskType === 'spend_currency') {
+          // Здесь просто используем переданный прогресс
+          currentProgress = progress;
+        }
+        
+        // Обновляем прогресс для ежедневных заданий
+        const activeDailyTasks = await db.all(`
+          SELECT id, target_value FROM daily_tasks 
+          WHERE task_type = ? 
+          AND activation_date <= ? 
+          AND end_activation_date >= ?
+        `, [dailyTaskType, dateString, dateString]);
+        
+        if (activeDailyTasks.length > 0) {
+          for (const task of activeDailyTasks) {
+            // Проверяем, есть ли запись о прогрессе
+            const progressRecord = await db.get(`
+              SELECT * FROM player_daily_task_progress
+              WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+            `, [userId, task.id]);
+            
+            if (dailyTaskType === 'upgrade_helper') {
+              // Для улучшения помощников используем абсолютное значение
+              const completed = currentProgress >= task.target_value ? 1 : 0;
+              
+              if (!progressRecord) {
+                // Если записи нет, создаем ее
+                await db.run(`
+                  INSERT INTO player_daily_task_progress 
+                  (user_id, task_id, task_category, completed, progress, reward_claimed) 
+                  VALUES (?, ?, 'daily', ?, ?, 0)
+                `, [userId, task.id, completed, currentProgress]);
+              } else {
+                // Если запись есть, обновляем прогресс
+                await db.run(`
+                  UPDATE player_daily_task_progress
+                  SET progress = ?, completed = ?
+                  WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+                `, [currentProgress, completed, userId, task.id]);
+              }
+            } else {
+              // Для других типов накапливаем прогресс
+              let newProgress = progressRecord ? (progressRecord.progress + currentProgress) : currentProgress;
+              const completed = newProgress >= task.target_value ? 1 : 0;
+              
+              if (!progressRecord) {
+                // Если записи нет, создаем ее
+                await db.run(`
+                  INSERT INTO player_daily_task_progress 
+                  (user_id, task_id, task_category, completed, progress, reward_claimed) 
+                  VALUES (?, ?, 'daily', ?, ?, 0)
+                `, [userId, task.id, completed, newProgress]);
+              } else {
+                // Если запись есть, обновляем прогресс
+                await db.run(`
+                  UPDATE player_daily_task_progress
+                  SET progress = ?, completed = ?
+                  WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+                `, [newProgress, completed, userId, task.id]);
+              }
+            }
+          }
+          
+          dailyTasksUpdated.changes = activeDailyTasks.length;
+        }
+      }
       // Обычное обновление для стандартных типов
       else {
         // Проверяем наличие активных сезонных заданий этого типа
@@ -599,9 +676,74 @@ router.post('/check-all-progress', async (req, res) => {
       SELECT * FROM season_tasks WHERE season_id = ?
     `, [currentSeason.id]);
     
-    // Обновляем прогресс для каждого типа задания
-    const updatedTasks = [];
+    // Получаем текущую дату
+    const today = new Date();
+    const dateString = today.toISOString().split('T')[0]; // YYYY-MM-DD
     
+    // Получаем все активные ежедневные задания
+    const allDailyTasks = await db.all(`
+      SELECT * FROM daily_tasks 
+      WHERE activation_date <= ? AND end_activation_date >= ?
+    `, [dateString, dateString]);
+    
+    // Начинаем обновлять прогресс всех заданий
+    let updatedTasks = 0;
+    
+    // Обновление для ежедневных заданий
+    for (const task of allDailyTasks) {
+      let currentProgress = 0;
+      let completed = 0;
+      
+      // Определяем текущий прогресс в зависимости от типа задания
+      if (task.task_type === 'upgrade_helper') {
+        currentProgress = helpersLevels;
+        completed = currentProgress >= task.target_value ? 1 : 0;
+      }
+      else if (task.task_type === 'spend_currency') {
+        // Для spend_currency оставляем текущий прогресс
+        const progressRecord = await db.get(`
+          SELECT progress FROM player_daily_task_progress
+          WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+        `, [userId, task.id]);
+        
+        currentProgress = progressRecord ? progressRecord.progress : 0;
+        completed = currentProgress >= task.target_value ? 1 : 0;
+      }
+      else if (task.task_type === 'collect_currency') {
+        // Для collect_currency оставляем текущий прогресс
+        const progressRecord = await db.get(`
+          SELECT progress FROM player_daily_task_progress
+          WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+        `, [userId, task.id]);
+        
+        currentProgress = progressRecord ? progressRecord.progress : 0;
+        completed = currentProgress >= task.target_value ? 1 : 0;
+      }
+      
+      // Обновляем или создаем запись о прогрессе
+      const progressRecord = await db.get(`
+        SELECT * FROM player_daily_task_progress
+        WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+      `, [userId, task.id]);
+      
+      if (!progressRecord) {
+        await db.run(`
+          INSERT INTO player_daily_task_progress 
+          (user_id, task_id, task_category, completed, progress, reward_claimed) 
+          VALUES (?, ?, 'daily', ?, ?, 0)
+        `, [userId, task.id, completed, currentProgress]);
+      } else {
+        await db.run(`
+          UPDATE player_daily_task_progress
+          SET progress = ?, completed = ?
+          WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+        `, [currentProgress, completed, userId, task.id]);
+      }
+      
+      updatedTasks++;
+    }
+    
+    // Обновление для сезонных заданий
     for (const task of allSeasonTasks) {
       let currentProgress = 0;
       
@@ -665,19 +807,20 @@ router.post('/check-all-progress', async (req, res) => {
         }
       }
       
-      updatedTasks.push({
-        id: task.id,
-        taskType: task.task_type,
-        progress: currentProgress,
-        targetValue: task.target_value,
-        completed: completed
-      });
+      updatedTasks++;
     }
     
     return res.json({
       success: true,
-      message: 'Прогресс всех заданий обновлен',
-      updatedTasks
+      updatedTasks: updatedTasks,
+      currentState: {
+        level: currentLevel,
+        experience: currentExp,
+        toolsCount: toolsCount,
+        helpersLevels: helpersLevels,
+        locationsCount: locationsCount,
+        dailiesCompleted: dailiesCompleted
+      }
     });
     
   } catch (error) {
