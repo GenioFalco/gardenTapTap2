@@ -264,32 +264,30 @@ router.post('/update-progress', async (req, res) => {
     
     // Преобразуем типы заданий для совместимости
     if (taskType === 'daily_taps' || taskType === 'taps') {
-      dailyTaskType = 'daily_taps';
-      seasonTaskType = 'tap'; // Для сезонных заданий используем тип 'tap'
-    } 
-    else if (taskType === 'daily_resources' || taskType === 'resources') {
-      dailyTaskType = 'daily_resources';
-      seasonTaskType = 'collect_currency'; // Для сезонных заданий используем тип 'collect_currency'
-    } 
-    else if (taskType === 'daily_energy' || taskType === 'energy') {
-      dailyTaskType = 'daily_energy';
-      seasonTaskType = 'spend_energy'; // Для сезонных заданий используем тип 'spend_energy'
-    }
-    else if (taskType === 'season_taps' || taskType === 'tap') {
+      // Для ежедневных заданий тапы не используются
       seasonTaskType = 'tap';
-    }
-    else if (taskType === 'season_resources' || taskType === 'collect_currency') {
+    } 
+    else if (taskType === 'collect_currency' || taskType === 'daily_resources' || taskType === 'resources') {
+      dailyTaskType = 'collect_currency';
       seasonTaskType = 'collect_currency';
+    } 
+    else if (taskType === 'spend_currency') {
+      dailyTaskType = 'spend_currency';
+      // В сезонных нет типа spend_currency
     }
-    else if (taskType === 'season_energy' || taskType === 'spend_energy') {
+    else if (taskType === 'spend_energy' || taskType === 'daily_energy' || taskType === 'energy') {
+      // В ежедневных нет типа spend_energy
       seasonTaskType = 'spend_energy';
     }
-    // Для остальных типов заданий
+    else if (taskType === 'upgrade_helper' || taskType === 'upgrade_helpers') {
+      dailyTaskType = 'upgrade_helper';
+      seasonTaskType = 'upgrade_helpers';
+    }
+    else if (taskType === 'tap') {
+      seasonTaskType = 'tap';
+    }
     else if (taskType === 'unlock_tool') {
       seasonTaskType = 'unlock_tool';
-    }
-    else if (taskType === 'upgrade_helpers') {
-      seasonTaskType = 'upgrade_helpers';
     }
     else if (taskType === 'level_up') {
       seasonTaskType = 'level_up';

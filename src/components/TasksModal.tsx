@@ -128,9 +128,11 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
                 ? 'ресурсов' 
                 : task.taskType === 'energy' || task.taskType === 'daily_energy' || task.taskType === 'spend_energy'
                   ? 'единиц энергии'
+                  : task.taskType === 'spend_currency'
+                    ? 'монет'
                   : task.taskType === 'unlock_tool'
                     ? 'инструментов'
-                    : task.taskType === 'upgrade_helpers'
+                    : task.taskType === 'upgrade_helpers' || task.taskType === 'upgrade_helper'
                       ? 'улучшений'
                       : task.taskType === 'level_up'
                         ? 'уровней'
@@ -165,7 +167,8 @@ const TasksModal: React.FC<TasksModalProps> = ({ show, onClose, userId }) => {
               <span className="text-white">{task.exp}</span>
             </div>
             
-            {isSeasonTask && (
+            {/* Показываем сезонные очки для всех заданий, если они есть */}
+            {task.seasonPoints > 0 && (
               <div className="flex items-center">
                 <span className="text-purple-400 mr-1">Очки:</span>
                 <span className="text-white">{task.seasonPoints}</span>

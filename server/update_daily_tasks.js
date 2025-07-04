@@ -24,17 +24,7 @@ async function updateDailyTasks() {
     
     const tasks = [
       { 
-        task_type: 'daily_taps', 
-        description: 'Сделать 50 тапов', 
-        target_value: 50, 
-        season_points: 5, 
-        exp: 50, 
-        main_coins: 25, 
-        activation_date: startDate, 
-        end_activation_date: endDateString 
-      },
-      { 
-        task_type: 'daily_resources', 
+        task_type: 'collect_currency', 
         description: 'Собрать 100 ресурсов', 
         target_value: 100, 
         season_points: 10, 
@@ -44,12 +34,22 @@ async function updateDailyTasks() {
         end_activation_date: endDateString 
       },
       { 
-        task_type: 'daily_energy', 
-        description: 'Потратить 30 единиц энергии', 
-        target_value: 30, 
+        task_type: 'spend_currency', 
+        description: 'Потратить 50 монет', 
+        target_value: 50, 
         season_points: 8, 
         exp: 75, 
         main_coins: 35, 
+        activation_date: startDate, 
+        end_activation_date: endDateString 
+      },
+      { 
+        task_type: 'upgrade_helper', 
+        description: 'Улучшить помощников', 
+        target_value: 3, 
+        season_points: 15, 
+        exp: 150, 
+        main_coins: 75, 
         activation_date: startDate, 
         end_activation_date: endDateString 
       }
