@@ -124,12 +124,19 @@ app.get('/api/player/locations', async (req, res) => {
     
     const unlockedLocationIds = unlockedLocations.map(loc => loc.location_id);
     
-    // Получаем все доступные локации (разблокированные или доступные по уровню)
+    // Получаем профиль игрока для проверки ранга
+    const playerProfile = await db.get(`
+      SELECT current_rank_id FROM player_profile WHERE user_id = ?
+    `, [userId]);
+    
+    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    
+    // Получаем все доступные локации (разблокированные или доступные по рангу)
     const availableLocations = await db.all(`
       SELECT * FROM locations 
       WHERE id IN (${unlockedLocationIds.length > 0 ? unlockedLocationIds.join(',') : 0})
-      OR unlock_level <= ?
-    `, [playerProgress.level]);
+      OR unlock_rank <= ?
+    `, [playerRank]);
     
     res.json(availableLocations);
   } catch (error) {
@@ -275,13 +282,20 @@ app.get('/api/characters/:id/tools', async (req, res) => {
     
     console.log(`Валюты игрока: ${JSON.stringify(currencyMap)}`);
     
+    // Получаем профиль игрока для проверки ранга
+    const playerProfile = await db.get(`
+      SELECT current_rank_id FROM player_profile WHERE user_id = ?
+    `, [userId]);
+    
+    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    
     // Добавляем информацию о разблокировке и экипировке к инструментам
     const toolsWithInfo = characterTools.map(tool => {
       const isUnlocked = unlockedToolIds.includes(tool.id);
       const isEquipped = equippedToolId === tool.id;
       const canEquip = isUnlocked && !isEquipped;
       const hasEnoughResources = currencyMap[tool.currency_id] >= parseFloat(tool.unlock_cost);
-      const canUnlock = !isUnlocked && playerProgress.level >= tool.unlock_level && hasEnoughResources;
+      const canUnlock = !isUnlocked && playerRank >= tool.unlock_rank && hasEnoughResources;
       
       return {
         id: tool.id,
@@ -384,24 +398,31 @@ app.post('/api/player/equip-tool', async (req, res) => {
     // Получаем уровень игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
     
-    // Проверяем, разблокирован ли инструмент или доступен по уровню
+    // Проверяем, разблокирован ли инструмент или доступен по рангу
     const unlocked = await db.get(`
       SELECT 1 FROM player_tools 
       WHERE user_id = ? AND tool_id = ?
     `, [userId, toolId]);
     
-    // Инструмент можно экипировать, если он разблокирован или если уровень игрока достаточен
-    const canEquip = unlocked || (tool.unlock_level <= playerProgress.level);
+    // Получаем профиль игрока для проверки ранга
+    const playerProfile = await db.get(`
+      SELECT current_rank_id FROM player_profile WHERE user_id = ?
+    `, [userId]);
+    
+    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    
+    // Инструмент можно экипировать, если он разблокирован или если ранг игрока достаточен
+    const canEquip = unlocked || (tool.unlock_rank <= playerRank);
     
     if (!canEquip) {
       return res.status(403).json({ 
         error: 'Инструмент недоступен',
-        message: `Требуется уровень ${tool.unlock_level} или разблокировка инструмента`
+        message: `Требуется ранг ${tool.unlock_rank} или разблокировка инструмента`
       });
     }
     
-    // Если инструмент не разблокирован, но доступен по уровню, разблокируем его автоматически
-    if (!unlocked && tool.unlock_level <= playerProgress.level) {
+    // Если инструмент не разблокирован, но доступен по рангу, разблокируем его автоматически
+    if (!unlocked && tool.unlock_rank <= playerRank) {
       await db.run(`
         INSERT INTO player_tools (user_id, tool_id)
         VALUES (?, ?)
@@ -886,13 +907,20 @@ app.post('/api/player/upgrade-tool', async (req, res) => {
     // Получаем уровень игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
     
-    // Проверяем уровень
-    if (tool.unlockLevel > playerProgress.level) {
-      console.log(`Недостаточный уровень: требуется ${tool.unlockLevel}, текущий ${playerProgress.level}`);
+    // Получаем профиль игрока для проверки ранга
+    const playerProfile = await db.get(`
+      SELECT current_rank_id FROM player_profile WHERE user_id = ?
+    `, [userId]);
+    
+    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    
+    // Проверяем ранг
+    if (tool.unlockRank > playerRank) {
+      console.log(`Недостаточный ранг: требуется ${tool.unlockRank}, текущий ${playerRank}`);
       return res.status(403).json({ 
-        error: 'Недостаточный уровень',
-        requiredLevel: tool.unlockLevel,
-        currentLevel: playerProgress.level
+        error: 'Недостаточный ранг',
+        requiredRank: tool.unlockRank,
+        currentRank: playerRank
       });
     }
     
@@ -1044,6 +1072,14 @@ app.get('/api/helpers/location/:locationId', async (req, res) => {
     const playerProgress = await getOrCreatePlayerProgress(userId);
     console.log(`Уровень игрока: ${playerProgress.level}`);
     
+    // Получаем профиль игрока для проверки ранга
+    const playerProfile = await db.get(`
+      SELECT current_rank_id FROM player_profile WHERE user_id = ?
+    `, [userId]);
+    
+    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    console.log(`Ранг игрока: ${playerRank}`);
+    
     // Получаем информацию о валютах игрока
     const playerCurrencies = await db.all(`
       SELECT currency_id, amount FROM player_currencies WHERE user_id = ?
@@ -1065,11 +1101,14 @@ app.get('/api/helpers/location/:locationId', async (req, res) => {
       // Проверяем, достаточно ли у игрока ресурсов для покупки
       const hasEnoughResources = currencyMap[helper.currency_id] >= helper.unlock_cost;
       
-      // Проверяем, достаточно ли у игрока уровня для покупки
+      // Проверяем, достаточно ли у игрока ранга для покупки
+      const hasRequiredRank = playerRank >= helper.unlock_rank;
+      
+      // Для обратной совместимости
       const hasRequiredLevel = playerProgress.level >= helper.unlock_level;
       
       // Определяем, может ли игрок купить помощника
-      const canBuy = !isUnlocked && hasRequiredLevel && hasEnoughResources;
+      const canBuy = !isUnlocked && hasRequiredRank && hasEnoughResources;
       
       // Получаем доход в час для текущего или первого уровня
       let incomePerHour = 0;
@@ -1096,6 +1135,7 @@ app.get('/api/helpers/location/:locationId', async (req, res) => {
         name: helper.name,
         locationId: helper.location_id,
         unlockLevel: helper.unlock_level,
+        unlockRank: helper.unlock_rank,
         unlockCost: helper.unlock_cost,
         currencyId: helper.currency_id,
         currencyType: helper.currency_type,
@@ -1105,8 +1145,10 @@ app.get('/api/helpers/location/:locationId', async (req, res) => {
         level: level,
         incomePerHour: incomePerHour,
         hasRequiredLevel: hasRequiredLevel,
+        hasRequiredRank: hasRequiredRank,
         canBuy: canBuy,
-        playerLevel: playerProgress.level
+        playerLevel: playerProgress.level,
+        playerRank: playerRank
       };
     }));
     
@@ -1135,32 +1177,39 @@ app.post('/api/player/helpers/:helperId/buy', async (req, res) => {
       return res.status(404).json({ error: 'Помощник не найден' });
     }
     
-    // Получаем уровень игрока и проверяем, достаточен ли он
-    const playerProgress = await getOrCreatePlayerProgress(userId);
+    // Получаем профиль игрока для проверки ранга
+    const playerProfile = await db.get(`
+      SELECT current_rank_id FROM player_profile WHERE user_id = ?
+    `, [userId]);
     
-    if (playerProgress.level < helper.unlock_level) {
-      return res.status(400).json({ error: 'Недостаточный уровень' });
+    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    
+    // Проверяем, достаточен ли ранг игрока
+    if (playerRank < helper.unlock_rank) {
+      return res.status(400).json({ error: 'Недостаточный ранг' });
     }
     
-    // Проверяем, не куплен ли уже помощник
-    const isAlreadyUnlocked = await db.get(`
-      SELECT * FROM player_helpers WHERE user_id = ? AND helper_id = ?
-    `, [userId, helperId]);
-    
-    if (isAlreadyUnlocked) {
-      return res.status(400).json({ error: 'Помощник уже куплен' });
-    }
-    
-    // Проверяем наличие ресурсов
-    const playerCurrency = await db.get(`
-      SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
-    `, [userId, helper.currency_id]);
-    
-    if (!playerCurrency || playerCurrency.amount < helper.unlock_cost) {
-      return res.status(400).json({ 
-        error: `Недостаточно ресурсов. Необходимо ${helper.unlock_cost} ${helper.currency_id}` 
-      });
-    }
+          // Проверяем, не куплен ли уже помощник
+      const isAlreadyUnlocked = await db.get(`
+        SELECT * FROM player_helpers WHERE user_id = ? AND helper_id = ?
+      `, [userId, helperId]);
+      
+      if (isAlreadyUnlocked) {
+        return res.status(400).json({ error: 'Помощник уже куплен' });
+      }
+      
+
+      
+      // Проверяем наличие ресурсов
+      const playerCurrency = await db.get(`
+        SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?
+      `, [userId, helper.currency_id]);
+      
+      if (!playerCurrency || playerCurrency.amount < helper.unlock_cost) {
+        return res.status(400).json({ 
+          error: `Недостаточно ресурсов. Необходимо ${helper.unlock_cost} ${helper.currency_id}` 
+        });
+      }
     
     // Списываем ресурсы
     await db.run(`
@@ -1578,10 +1627,17 @@ app.post('/api/helpers/buy', async (req, res) => {
       return res.status(404).json({ error: 'Прогресс игрока не найден' });
     }
     
-    // Проверяем, достиг ли игрок необходимого уровня
-    if (playerProgress.level < helper.unlock_level) {
+    // Получаем профиль игрока для проверки ранга
+    const playerProfile = await db.get(`
+      SELECT current_rank_id FROM player_profile WHERE user_id = ?
+    `, [userId]);
+    
+    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    
+    // Проверяем, достиг ли игрок необходимого ранга
+    if (playerRank < helper.unlock_rank) {
       return res.status(400).json({ 
-        error: `Необходим уровень ${helper.unlock_level} для покупки этого помощника` 
+        error: `Необходим ранг ${helper.unlock_rank} для покупки этого помощника` 
       });
     }
     
