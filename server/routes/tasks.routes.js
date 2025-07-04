@@ -201,8 +201,8 @@ router.post('/:category/:taskId/claim', async (req, res) => {
         amount = amount + ?
       `, [userId, taskInfo.coins, taskInfo.coins]);
       
-      // Если это сезонное задание, добавляем очки сезона
-      if (category === 'season' && taskInfo.seasonPoints > 0) {
+      // Добавляем очки сезона, если они есть в задании (для обоих типов заданий)
+      if (taskInfo.seasonPoints > 0) {
         // Получаем текущий сезон
         const currentSeason = await db.get(`
           SELECT id FROM seasons WHERE is_active = 1 LIMIT 1
@@ -228,7 +228,7 @@ router.post('/:category/:taskId/claim', async (req, res) => {
         rewards: {
           exp: taskInfo.exp,
           coins: taskInfo.coins,
-          seasonPoints: category === 'season' ? taskInfo.seasonPoints : 0
+          seasonPoints: taskInfo.seasonPoints || 0
         }
       });
       
