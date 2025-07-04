@@ -681,4 +681,26 @@ export const checkAllTasksProgress = async (
   return await fetchApi<any>('/player/tasks/check-all-progress', {
     method: 'POST'
   });
+};
+
+// Получить рейтинг пользователей (таблица лидеров)
+export const getLeaderboard = async (limit: number = 20): Promise<Array<{
+  position: number;
+  userId: string;
+  username: string;
+  avatar: string;
+  level: number;
+  rank: {
+    id: number;
+    name: string;
+    imagePath: string;
+  };
+  seasonPoints: number;
+  totalPoints: number;
+  achievement: {
+    id: number;
+    name: string;
+  } | null;
+}>> => {
+  return await fetchApi(`/leaderboard?limit=${limit}`);
 }; 

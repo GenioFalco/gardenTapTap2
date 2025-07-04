@@ -4411,3 +4411,60 @@ async function updateProfileWithLatestAchievement(userId) {
     return false;
   }
 }
+
+// API-эндпоинт для получения рейтинга пользователей
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const { limit = 20 } = req.query;
+    
+    // Получаем список пользователей с их рангами, очками и уровнями
+    const leaderboard = await db.all(`
+      SELECT 
+        pp.user_id, 
+        pp.avatar_path,
+        pp.featured_achievement_id,
+        pp.total_points,
+        pr.level,
+        r.id as rank_id,
+        r.name as rank_name,
+        r.image_path as rank_image,
+        ps.points as season_points,
+        (SELECT name FROM achievements WHERE id = pp.featured_achievement_id) as achievement_name
+      FROM player_profile pp
+      JOIN player_progress pr ON pp.user_id = pr.user_id
+      JOIN ranks r ON pp.current_rank_id = r.id
+      LEFT JOIN player_season ps ON pp.user_id = ps.user_id AND ps.season_id = (
+        SELECT id FROM seasons WHERE is_active = 1 ORDER BY start_date DESC LIMIT 1
+      )
+      ORDER BY pp.current_rank_id DESC, ps.points DESC, pr.level DESC
+      LIMIT ?
+    `, [parseInt(limit)]);
+    
+    // Форматируем данные для фронтенда
+    const formattedLeaderboard = leaderboard.map((player, index) => {
+      return {
+        position: index + 1,
+        userId: player.user_id,
+        username: `Игрок ${player.user_id.substring(0, 6)}`,
+        avatar: player.avatar_path || '/assets/avatars/default.png',
+        level: player.level,
+        rank: {
+          id: player.rank_id,
+          name: player.rank_name,
+          imagePath: player.rank_image
+        },
+        seasonPoints: player.season_points || 0,
+        totalPoints: player.total_points || 0,
+        achievement: player.featured_achievement_id ? {
+          id: player.featured_achievement_id,
+          name: player.achievement_name
+        } : null
+      };
+    });
+    
+    res.json(formattedLeaderboard);
+  } catch (error) {
+    console.error('Ошибка при получении рейтинга пользователей:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
