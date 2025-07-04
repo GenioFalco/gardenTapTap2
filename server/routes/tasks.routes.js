@@ -275,8 +275,12 @@ router.post('/update-progress', async (req, res) => {
       dailyTaskType = 'spend_currency';
       // В сезонных нет типа spend_currency
     }
+    else if (taskType === 'spend_location_currency') {
+      dailyTaskType = 'spend_location_currency';
+      // Новый тип задания - трата ресурсов локации
+    }
     else if (taskType === 'spend_energy' || taskType === 'daily_energy' || taskType === 'energy') {
-      // В ежедневных нет типа spend_energy
+      dailyTaskType = 'spend_energy'; // Добавляем для ежедневных заданий
       seasonTaskType = 'spend_energy';
     }
     else if (taskType === 'upgrade_helper' || taskType === 'upgrade_helpers') {
@@ -486,7 +490,7 @@ router.post('/update-progress', async (req, res) => {
         }
       }
       // Добавляем специальную обработку для ежедневных заданий upgrade_helper и spend_currency
-      else if (dailyTaskType === 'upgrade_helper' || dailyTaskType === 'spend_currency') {
+      else if (dailyTaskType === 'upgrade_helper' || dailyTaskType === 'spend_currency' || dailyTaskType === 'spend_location_currency') {
         let currentProgress = 0;
         
         if (dailyTaskType === 'upgrade_helper') {
@@ -496,7 +500,7 @@ router.post('/update-progress', async (req, res) => {
           `, [userId]);
           currentProgress = helpers[0].total_levels || 0;
         }
-        else if (dailyTaskType === 'spend_currency') {
+        else if (dailyTaskType === 'spend_currency' || dailyTaskType === 'spend_location_currency') {
           // Здесь просто используем переданный прогресс
           currentProgress = progress;
         }
@@ -701,6 +705,26 @@ router.post('/check-all-progress', async (req, res) => {
       }
       else if (task.task_type === 'spend_currency') {
         // Для spend_currency оставляем текущий прогресс
+        const progressRecord = await db.get(`
+          SELECT progress FROM player_daily_task_progress
+          WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+        `, [userId, task.id]);
+        
+        currentProgress = progressRecord ? progressRecord.progress : 0;
+        completed = currentProgress >= task.target_value ? 1 : 0;
+      }
+      else if (task.task_type === 'spend_energy') {
+        // Для spend_energy оставляем текущий прогресс
+        const progressRecord = await db.get(`
+          SELECT progress FROM player_daily_task_progress
+          WHERE user_id = ? AND task_id = ? AND task_category = 'daily'
+        `, [userId, task.id]);
+        
+        currentProgress = progressRecord ? progressRecord.progress : 0;
+        completed = currentProgress >= task.target_value ? 1 : 0;
+      }
+      else if (task.task_type === 'spend_location_currency') {
+        // Для spend_location_currency оставляем текущий прогресс
         const progressRecord = await db.get(`
           SELECT progress FROM player_daily_task_progress
           WHERE user_id = ? AND task_id = ? AND task_category = 'daily'

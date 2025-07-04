@@ -34,9 +34,9 @@ async function updateDailyTasks() {
         end_activation_date: endDateString 
       },
       { 
-        task_type: 'spend_currency', 
-        description: 'Потратить 50 монет', 
-        target_value: 50, 
+        task_type: 'spend_energy', 
+        description: 'Потратить 20 энергии', 
+        target_value: 20, 
         season_points: 8, 
         exp: 75, 
         main_coins: 35, 
