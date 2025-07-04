@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../db');
+const { updatePlayerRank } = require('../rank_utils');
 
 // Получение сезонных заданий для игрока
 router.get('/season', async (req, res) => {
@@ -216,6 +217,18 @@ router.post('/:category/:taskId/claim', async (req, res) => {
             ON CONFLICT(user_id, season_id) DO UPDATE SET
             points = points + ?
           `, [userId, currentSeason.id, taskInfo.seasonPoints, taskInfo.seasonPoints]);
+          
+          // После добавления очков обновляем ранг
+          // Получаем текущие очки игрока в сезоне
+          const playerSeason = await db.get(`
+            SELECT points FROM player_season
+            WHERE user_id = ? AND season_id = ?
+          `, [userId, currentSeason.id]);
+          
+          if (playerSeason && playerSeason.points) {
+            // Вызываем функцию обновления ранга
+            await updatePlayerRank(userId, currentSeason.id, playerSeason.points);
+          }
         }
       }
       
