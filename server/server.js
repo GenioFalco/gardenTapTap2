@@ -3730,6 +3730,51 @@ app.post('/api/player/unlock-achievement', async (req, res) => {
   }
 });
 
+// API-эндпоинт для начисления награды за приглашение друга
+app.post('/api/player/reward/invitation', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Необходима авторизация',
+        coinsAdded: 0 
+      });
+    }
+    
+    // Сумма награды за приглашение (100 монет)
+    const rewardAmount = 100;
+    
+    // Получаем или создаем валюту игрока (ID 5 - сад-коины)
+    await getOrCreatePlayerCurrency(userId, 5);
+    
+    // Начисляем монеты игроку
+    await db.run(`
+      UPDATE player_currencies
+      SET amount = amount + ?
+      WHERE user_id = ? AND currency_id = 5
+    `, [rewardAmount, userId]);
+    
+    console.log(`Игрок ${userId} получил ${rewardAmount} монет за приглашение друга`);
+    
+    // Возвращаем информацию об успешном начислении
+    res.json({
+      success: true,
+      message: 'Вы получили награду за приглашение друга!',
+      coinsAdded: rewardAmount
+    });
+    
+  } catch (error) {
+    console.error('Ошибка при начислении награды за приглашение:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Ошибка сервера',
+      coinsAdded: 0 
+    });
+  }
+});
+
 // Функция для проверки и выдачи достижений игроку
 async function checkAndGrantAchievements(userId) {
   try {

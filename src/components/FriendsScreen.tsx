@@ -29,6 +29,9 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showInviteSuccess, setShowInviteSuccess] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState('Ссылка скопирована!');
+  const [isInviteLoading, setIsInviteLoading] = useState(false);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
@@ -48,6 +51,64 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
     fetchLeaderboard();
   }, []);
 
+  const handleInviteFriend = async () => {
+    try {
+      // Формируем ссылку на приглашение с параметром referral
+      const botLink = 'https://t.me/share/url?url=https://t.me/testbotmvpBot&text=Присоединяйся к игре Garden Tap Tap!';
+      
+      // Открываем Telegram для выбора чатов
+      window.open(botLink, '_blank');
+      
+      setIsInviteLoading(true);
+      
+      // Вызываем API для начисления монет за приглашение
+      try {
+        const reward = await api.rewardForInvitation();
+        if (reward.success) {
+          setInviteMessage(`Приглашение отправлено! +${reward.coinsAdded} монет`);
+        } else {
+          setInviteMessage('Приглашение отправлено!');
+        }
+      } catch (apiError) {
+        console.error('Ошибка при начислении награды:', apiError);
+        setInviteMessage('Приглашение отправлено!');
+      }
+      
+      setIsInviteLoading(false);
+      // Показываем уведомление об успехе
+      setShowInviteSuccess(true);
+      
+      // Скрываем уведомление через 3 секунды
+      setTimeout(() => {
+        setShowInviteSuccess(false);
+      }, 3000);
+    } catch (err) {
+      console.error('Ошибка при отправке приглашения:', err);
+      setIsInviteLoading(false);
+    }
+  };
+  
+  const handleCopyLink = async () => {
+    try {
+      // Сохраняем ссылку для копирования
+      const botLink = 'https://t.me/testbotmvpBot';
+      
+      // Копируем ссылку в буфер обмена
+      await navigator.clipboard.writeText(botLink);
+      
+      // Показываем уведомление об успешном копировании
+      setInviteMessage('Ссылка скопирована!');
+      setShowInviteSuccess(true);
+      
+      // Скрываем уведомление через 3 секунды
+      setTimeout(() => {
+        setShowInviteSuccess(false);
+      }, 3000);
+    } catch (err) {
+      console.error('Ошибка при копировании ссылки:', err);
+    }
+  };
+
   // Функция для определения цвета фона в зависимости от позиции
   const getPositionBackgroundColor = (position: number) => {
     switch (position) {
@@ -58,7 +119,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       case 3:
         return 'bg-gradient-to-r from-amber-600/60 to-amber-500/60'; // Бронза
       default:
-        return 'bg-gray-800/40'; // Обычный фон
+        return 'bg-gray-700/40'; // Обычный фон (светлее)
     }
   };
 
@@ -81,8 +142,62 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       <div className="absolute inset-0 z-0" 
            style={{backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
       
-      <div className="w-full max-w-md bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl relative z-10 overflow-hidden">
-        <div className="bg-gray-900/80 py-4 px-4 border-b border-gray-700/50">
+      {/* Панель приглашения друзей */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl mb-4 relative z-10 overflow-hidden"
+      >
+        <div className="p-4">
+          <h2 className="text-lg font-bold text-white mb-2">Пригласи друзей</h2>
+          <p className="text-white/80 text-sm mb-3">Получи 100 монет за каждое приглашение друга в игру!</p>
+          
+          <div className="flex flex-col">
+            <div className="flex items-center space-x-2">
+              {/* Кнопка приглашения через Telegram */}
+              <button 
+                onClick={handleInviteFriend}
+                disabled={isInviteLoading}
+                className={`bg-yellow-500/90 hover:bg-yellow-600 text-white font-medium py-1.5 px-4 rounded-lg shadow-md transition-all duration-200 flex items-center justify-center flex-1 ${isInviteLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+              >
+                {isInviteLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                ) : (
+                  <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.1 14.9l-3.2-3.2 1.4-1.4 1.8 1.8 5-5 1.4 1.4-6.4 6.4z" />
+                  </svg>
+                )}
+                Пригласить
+              </button>
+              
+              {/* Кнопка копирования ссылки */}
+              <button 
+                onClick={handleCopyLink}
+                className="bg-gray-700/90 hover:bg-gray-600 text-white p-2 rounded-lg shadow-md transition-all duration-200"
+                title="Скопировать ссылку"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+            
+            {showInviteSuccess && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-green-300 text-sm mt-2"
+              >
+                {inviteMessage}
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+      
+      <div className="w-full max-w-md bg-gray-800/60 backdrop-blur-sm rounded-lg shadow-xl relative z-10 overflow-hidden">
+        <div className="bg-gray-800/70 py-4 px-4 border-b border-gray-700/50">
           <h2 className="text-xl font-bold text-center text-white">Рейтинг игроков</h2>
         </div>
         
@@ -106,7 +221,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
         
         {!loading && !error && leaderboard.length > 0 && (
           <div className="overflow-y-auto max-h-[calc(100vh-250px)]">
-            <div className="flex items-center justify-between px-4 py-2 bg-gray-900/80 text-gray-400 text-sm">
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-800/70 text-gray-400 text-sm">
               <div className="w-8">#</div>
               <div className="flex-grow">Игрок</div>
               <div className="w-16 text-center">Ранг</div>
@@ -147,7 +262,28 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
                       alt={player.rank.name} 
                       className="w-6 h-6 object-contain"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/assets/ranks/bronze_1.png';
+                        // Запасной вариант, если путь из БД неверный
+                        const rankInfo = player.rank.name.toLowerCase().split(' ');
+                        let rankType = 'bronze';
+                        let rankNumber = '1';
+                        
+                        if (rankInfo.length >= 2) {
+                          // Определяем тип ранга (бронза, серебро, золото)
+                          if (rankInfo[0].includes('серебро')) {
+                            rankType = 'silver';
+                          } else if (rankInfo[0].includes('золото')) {
+                            rankType = 'gold';
+                          }
+                          
+                          // Извлекаем номер ранга
+                          if (rankInfo[1] && !isNaN(parseInt(rankInfo[1]))) {
+                            rankNumber = rankInfo[1];
+                          }
+                        }
+                        
+                        const fallbackImage = `/assets/ranks/${rankType}_${rankNumber}.png`;
+                        console.log(`Используем запасную иконку для ${player.rank.name}: ${fallbackImage}`);
+                        (e.target as HTMLImageElement).src = fallbackImage;
                       }}
                     />
                     <span className="text-xs text-gray-300 mt-1 truncate max-w-[60px] text-center">{player.rank.name}</span>
@@ -161,8 +297,9 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
                   
                   {/* Уровень */}
                   <div className="w-16 flex justify-center">
-                    <div className="bg-blue-500 text-white text-sm rounded-full w-7 h-7 flex items-center justify-center">
-                      {player.level}
+                    <div className="bg-gray-700/90 border border-blue-400 text-white text-xs rounded-md px-2 py-1 flex items-center">
+                      <span className="mr-0.5">ур.</span>
+                      <span className="font-bold">{player.level}</span>
                     </div>
                   </div>
                 </div>

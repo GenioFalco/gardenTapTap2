@@ -684,23 +684,21 @@ export const checkAllTasksProgress = async (
 };
 
 // Получить рейтинг пользователей (таблица лидеров)
-export const getLeaderboard = async (limit: number = 20): Promise<Array<{
-  position: number;
-  userId: string;
-  username: string;
-  avatar: string;
-  level: number;
-  rank: {
-    id: number;
-    name: string;
-    imagePath: string;
-  };
-  seasonPoints: number;
-  totalPoints: number;
-  achievement: {
-    id: number;
-    name: string;
-  } | null;
-}>> => {
-  return await fetchApi(`/leaderboard?limit=${limit}`);
+export const getLeaderboard = async (limit: number = 50): Promise<any[]> => {
+  return await fetchApi<any[]>(`/leaderboard?limit=${limit}`);
+};
+
+// Наградить игрока за приглашение друга
+export const rewardForInvitation = async (): Promise<{
+  success: boolean;
+  message: string;
+  coinsAdded: number;
+}> => {
+  return await fetchApi<{
+    success: boolean;
+    message: string;
+    coinsAdded: number;
+  }>('/player/reward/invitation', {
+    method: 'POST',
+  });
 }; 
