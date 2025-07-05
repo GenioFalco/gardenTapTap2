@@ -701,4 +701,57 @@ export const rewardForInvitation = async (): Promise<{
   }>('/player/reward/invitation', {
     method: 'POST',
   });
+};
+
+// Получить реферальный код пользователя
+export const getReferralCode = async (): Promise<{
+  success: boolean;
+  code: string;
+  link: string;
+}> => {
+  return await fetchApi<{
+    success: boolean;
+    code: string;
+    link: string;
+  }>('/player/referral/code');
+};
+
+// Получить статистику реферальной программы
+export const getReferralStats = async (): Promise<{
+  success: boolean;
+  referralsCount: number;
+  recentReferrals: Array<{
+    referred_id: string;
+    created_at: string;
+    level: number;
+  }>;
+}> => {
+  return await fetchApi<{
+    success: boolean;
+    referralsCount: number;
+    recentReferrals: Array<{
+      referred_id: string;
+      created_at: string;
+      level: number;
+    }>;
+  }>('/player/referral/stats');
+};
+
+// Проверить и получить награды за приглашенных друзей
+export const checkReferralRewards = async (): Promise<{
+  success: boolean;
+  newRewards: boolean;
+  referralsCount?: number;
+  coinsAdded?: number;
+  message: string;
+}> => {
+  return await fetchApi<{
+    success: boolean;
+    newRewards: boolean;
+    referralsCount?: number;
+    coinsAdded?: number;
+    message: string;
+  }>('/player/check/referral-rewards', {
+    method: 'POST',
+  });
 }; 

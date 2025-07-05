@@ -32,7 +32,7 @@ app.use((req, res, next) => {
   }
   
   // Проверяем, существует ли запись пользователя, и создаем, если нет
-  ensureUserExists(req.userId).catch(err => {
+  ensureUserExists(req.userId, req.query.ref).catch(err => {
     console.error(`Error ensuring user exists: ${err.message}`);
   });
   
@@ -40,13 +40,13 @@ app.use((req, res, next) => {
 });
 
 // Функция для проверки существования пользователя и создания при необходимости
-async function ensureUserExists(userId) {
+async function ensureUserExists(userId, referralCode) {
   try {
     // Проверяем, существует ли пользователь в БД
     const user = await db.get('SELECT user_id FROM player_progress WHERE user_id = ?', [userId]);
     
     if (!user) {
-      console.log(`Creating new user: ${userId}`);
+      console.log(`Creating new user: ${userId}, referral code: ${referralCode || 'none'}`);
       
       // Создаем прогресс для нового пользователя с начальными значениями
       await db.run(`
@@ -72,6 +72,14 @@ async function ensureUserExists(userId) {
         VALUES (?, 1, 1, 0)
       `, [userId]);
       
+      // Проверяем реферальный код, если он есть
+      if (referralCode) {
+        await processReferral(userId, referralCode);
+      }
+      
+      // Генерируем реферальный код для нового пользователя
+      await generateReferralCode(userId);
+      
       console.log(`User ${userId} initialized with starting values`);
     }
     
@@ -88,6 +96,244 @@ async function ensureUserExists(userId) {
     throw error;
   }
 }
+
+// Создаем таблицу для реферальных кодов, если она не существует
+async function ensureReferralCodesTable() {
+  try {
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS referral_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL UNIQUE,
+        code TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, code)
+      )
+    `);
+    
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS referrals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        referrer_id TEXT NOT NULL,
+        referred_id TEXT NOT NULL UNIQUE,
+        reward_claimed INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(referred_id)
+      )
+    `);
+    
+    console.log('Referral tables created or already exist');
+  } catch (error) {
+    console.error('Error creating referral tables:', error);
+    throw error;
+  }
+}
+
+// Функция для генерации уникального реферального кода
+async function generateReferralCode(userId) {
+  try {
+    // Генерируем уникальный код на основе ID пользователя и случайных символов
+    const randomPart = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const userIdPart = userId.toString().substring(0, 3);
+    const referralCode = `${userIdPart}${randomPart}`;
+    
+    // Сохраняем код в базе данных
+    await db.run(`
+      INSERT OR REPLACE INTO referral_codes (user_id, code)
+      VALUES (?, ?)
+    `, [userId, referralCode]);
+    
+    console.log(`Generated referral code ${referralCode} for user ${userId}`);
+    return referralCode;
+  } catch (error) {
+    console.error(`Error generating referral code for user ${userId}:`, error);
+    throw error;
+  }
+}
+
+// Функция для обработки реферальной ссылки при регистрации
+async function processReferral(newUserId, referralCode) {
+  try {
+    console.log(`Processing referral for new user ${newUserId} with code ${referralCode}`);
+    
+    // Ищем пользователя с таким реферальным кодом
+    const referrer = await db.get(`
+      SELECT user_id FROM referral_codes WHERE code = ?
+    `, [referralCode]);
+    
+    if (!referrer) {
+      console.log(`Referral code ${referralCode} not found`);
+      return false;
+    }
+    
+    const referrerId = referrer.user_id;
+    
+    // Проверяем, что пользователь не использует свой собственный код
+    if (referrerId === newUserId) {
+      console.log(`User ${newUserId} tried to use their own referral code`);
+      return false;
+    }
+    
+    // Сохраняем информацию о реферале
+    await db.run(`
+      INSERT OR IGNORE INTO referrals (referrer_id, referred_id)
+      VALUES (?, ?)
+    `, [referrerId, newUserId]);
+    
+    console.log(`Referral successfully recorded: ${referrerId} referred ${newUserId}`);
+    return true;
+  } catch (error) {
+    console.error(`Error processing referral for user ${newUserId}:`, error);
+    return false;
+  }
+}
+
+// Инициализируем таблицы для реферальных кодов
+ensureReferralCodesTable().catch(console.error);
+
+// API endpoint для получения реферального кода пользователя
+app.get('/api/player/referral/code', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем существующий реферальный код пользователя
+    let referralCode = await db.get(`
+      SELECT code FROM referral_codes WHERE user_id = ?
+    `, [userId]);
+    
+    // Если у пользователя нет кода, генерируем новый
+    if (!referralCode) {
+      const newCode = await generateReferralCode(userId);
+      referralCode = { code: newCode };
+    }
+    
+    // Формируем полную реферальную ссылку
+    const referralLink = `https://t.me/testbotmvpBot?start=${referralCode.code}`;
+    
+    res.json({
+      success: true,
+      code: referralCode.code,
+      link: referralLink
+    });
+  } catch (error) {
+    console.error('Error getting referral code:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API endpoint для получения количества приглашенных пользователей
+app.get('/api/player/referral/stats', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем количество приглашенных пользователей
+    const referralsCount = await db.get(`
+      SELECT COUNT(*) as count FROM referrals WHERE referrer_id = ?
+    `, [userId]);
+    
+    // Получаем последних приглашенных пользователей
+    const recentReferrals = await db.all(`
+      SELECT r.referred_id, r.created_at, pp.level 
+      FROM referrals r
+      JOIN player_progress pp ON r.referred_id = pp.user_id
+      WHERE r.referrer_id = ?
+      ORDER BY r.created_at DESC
+      LIMIT 5
+    `, [userId]);
+    
+    res.json({
+      success: true,
+      referralsCount: referralsCount.count,
+      recentReferrals
+    });
+  } catch (error) {
+    console.error('Error getting referral stats:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API endpoint для начисления награды за приглашение друга
+app.post('/api/player/reward/invitation', async (req, res) => {
+  try {
+    const { userId } = req;
+    const INVITATION_REWARD = 100; // 100 монет за приглашение
+    
+    // Получаем реферальный код пользователя
+    const referralCode = await db.get(`
+      SELECT code FROM referral_codes WHERE user_id = ?
+    `, [userId]);
+    
+    if (!referralCode) {
+      // Если у пользователя нет реферального кода, создаем его
+      await generateReferralCode(userId);
+    }
+    
+    // Начисляем монеты за копирование приглашения
+    await db.run(`
+      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
+      VALUES (?, 'main', COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 'main'), 0) + ?)
+    `, [userId, userId, INVITATION_REWARD]);
+    
+    res.json({
+      success: true,
+      message: 'Награда за приглашение друга успешно начислена',
+      coinsAdded: INVITATION_REWARD
+    });
+  } catch (error) {
+    console.error('Error rewarding for invitation:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API endpoint для проверки и начисления награды за приход приглашенного друга
+app.post('/api/player/check/referral-rewards', async (req, res) => {
+  try {
+    const { userId } = req;
+    const REFERRAL_REWARD = 500; // 500 монет за реально пришедшего друга
+    
+    // Получаем список приглашенных пользователей, за которых еще не получена награда
+    const pendingReferrals = await db.all(`
+      SELECT * FROM referrals 
+      WHERE referrer_id = ? AND reward_claimed = 0
+    `, [userId]);
+    
+    if (pendingReferrals.length === 0) {
+      return res.json({
+        success: true,
+        newRewards: false,
+        message: 'Нет новых наград за приглашения'
+      });
+    }
+    
+    let totalReward = 0;
+    
+    // Отмечаем все рефералы как обработанные
+    for (const referral of pendingReferrals) {
+      await db.run(`
+        UPDATE referrals SET reward_claimed = 1
+        WHERE referrer_id = ? AND referred_id = ?
+      `, [userId, referral.referred_id]);
+      
+      totalReward += REFERRAL_REWARD;
+    }
+    
+    // Начисляем монеты за приглашенных друзей
+    await db.run(`
+      INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
+      VALUES (?, 'main', COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 'main'), 0) + ?)
+    `, [userId, userId, totalReward]);
+    
+    res.json({
+      success: true,
+      newRewards: true,
+      referralsCount: pendingReferrals.length,
+      coinsAdded: totalReward,
+      message: `Вы получили ${totalReward} монет за ${pendingReferrals.length} приглашенных друзей`
+    });
+  } catch (error) {
+    console.error('Error checking referral rewards:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // API endpoints
 

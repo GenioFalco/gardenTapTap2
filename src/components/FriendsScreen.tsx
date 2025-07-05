@@ -21,6 +21,12 @@ interface LeaderboardPlayer {
   } | null;
 }
 
+interface ReferralData {
+  referred_id: string;
+  created_at: string;
+  level: number;
+}
+
 interface FriendsScreenProps {
   background: string;
 }
@@ -32,6 +38,11 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   const [showInviteSuccess, setShowInviteSuccess] = useState(false);
   const [inviteMessage, setInviteMessage] = useState('Ссылка скопирована!');
   const [isInviteLoading, setIsInviteLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
+  const [referralLink, setReferralLink] = useState('');
+  const [referralStats, setReferralStats] = useState<{ count: number, recent: ReferralData[] }>({ count: 0, recent: [] });
+  const [showReward, setShowReward] = useState(false);
+  const [rewardMessage, setRewardMessage] = useState('');
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
@@ -49,12 +60,58 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
     };
 
     fetchLeaderboard();
+    
+    // Получаем реферальный код пользователя при загрузке компонента
+    const fetchReferralCode = async () => {
+      try {
+        const response = await api.getReferralCode();
+        setReferralCode(response.code);
+        setReferralLink(response.link);
+      } catch (err) {
+        console.error('Ошибка при получении реферального кода:', err);
+      }
+    };
+    
+    // Получаем статистику реферальной программы
+    const fetchReferralStats = async () => {
+      try {
+        const response = await api.getReferralStats();
+        setReferralStats({
+          count: response.referralsCount,
+          recent: response.recentReferrals
+        });
+      } catch (err) {
+        console.error('Ошибка при получении статистики реферальной программы:', err);
+      }
+    };
+    
+    // Проверяем и начисляем награды за приглашенных пользователей
+    const checkReferralRewards = async () => {
+      try {
+        const response = await api.checkReferralRewards();
+        if (response.newRewards && response.coinsAdded) {
+          setRewardMessage(`Вы получили ${response.coinsAdded} монет за ${response.referralsCount} приглашенных друзей!`);
+          setShowReward(true);
+          
+          // Скрываем сообщение о награде через 5 секунд
+          setTimeout(() => {
+            setShowReward(false);
+          }, 5000);
+        }
+      } catch (err) {
+        console.error('Ошибка при проверке наград за рефералов:', err);
+      }
+    };
+    
+    fetchReferralCode();
+    fetchReferralStats();
+    checkReferralRewards();
   }, []);
 
   const handleInviteFriend = async () => {
     try {
       // Формируем ссылку на приглашение с параметром referral
-      const botLink = 'https://t.me/share/url?url=https://t.me/testbotmvpBot&text=Присоединяйся к игре Garden Tap Tap!';
+      const botLink = `https://t.me/share/url?url=${referralLink}&text=Присоединяйся к игре Garden Tap Tap!`;
       
       // Открываем Telegram для выбора чатов
       window.open(botLink, '_blank');
@@ -90,14 +147,11 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   
   const handleCopyLink = async () => {
     try {
-      // Сохраняем ссылку для копирования
-      const botLink = 'https://t.me/testbotmvpBot';
-      
-      // Копируем ссылку в буфер обмена
-      await navigator.clipboard.writeText(botLink);
+      // Копируем реферальную ссылку в буфер обмена
+      await navigator.clipboard.writeText(referralLink);
       
       // Показываем уведомление об успешном копировании
-      setInviteMessage('Ссылка скопирована!');
+      setInviteMessage('Реферальная ссылка скопирована!');
       setShowInviteSuccess(true);
       
       // Скрываем уведомление через 3 секунды
@@ -142,6 +196,28 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       <div className="absolute inset-0 z-0" 
            style={{backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
       
+      {/* Награда за приглашенных друзей */}
+      {showReward && (
+        <motion.div
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -50 }}
+          className="w-full max-w-md bg-yellow-500/80 backdrop-blur-sm rounded-lg shadow-xl mb-4 relative z-20 overflow-hidden"
+        >
+          <div className="p-4 flex items-center">
+            <div className="bg-yellow-600/70 rounded-full p-2 mr-3">
+              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.1 14.9l-3.2-3.2 1.4-1.4 1.8 1.8 5-5 1.4 1.4-6.4 6.4z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-white font-bold">Награда получена!</h3>
+              <p className="text-white/90 text-sm">{rewardMessage}</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+      
       {/* Панель приглашения друзей */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -150,7 +226,13 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       >
         <div className="p-4">
           <h2 className="text-lg font-bold text-white mb-2">Пригласи друзей</h2>
-          <p className="text-white/80 text-sm mb-3">Получи 100 монет за каждое приглашение друга в игру!</p>
+          <p className="text-white/80 text-sm mb-3">Получи 100 монет за приглашение и 500 монет, когда друг присоединится по твоей ссылке!</p>
+          
+          {referralStats.count > 0 && (
+            <div className="mb-3 bg-gray-800/50 rounded-lg p-2">
+              <p className="text-white/90 text-sm">Ты уже пригласил: <span className="font-bold text-yellow-400">{referralStats.count}</span> друзей</p>
+            </div>
+          )}
           
           <div className="flex flex-col">
             <div className="flex items-center space-x-2">
@@ -191,6 +273,13 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
               >
                 {inviteMessage}
               </motion.div>
+            )}
+            
+            {referralCode && (
+              <div className="mt-2 bg-gray-800/50 rounded-lg p-2 flex items-center justify-between">
+                <span className="text-white/70 text-xs">Твой код: </span>
+                <span className="font-mono text-yellow-400 font-bold text-sm">{referralCode}</span>
+              </div>
             )}
           </div>
         </div>
