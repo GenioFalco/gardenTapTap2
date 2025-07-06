@@ -727,16 +727,14 @@ export const getReferralStats = async (): Promise<{
   }>('/referral/stats');
 };
 
-// Отправить приглашение и получить награду
+// Отправить приглашение
 export const sendInvitation = async (): Promise<{ 
   success: boolean; 
-  message: string; 
-  coinsAdded: number 
+  message: string;
 }> => {
   return await fetchApi<{ 
     success: boolean; 
-    message: string; 
-    coinsAdded: number 
+    message: string;
   }>('/referral/send-invitation', {
     method: 'POST'
   });

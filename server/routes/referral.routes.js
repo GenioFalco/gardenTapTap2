@@ -9,6 +9,32 @@ function generateReferralCode() {
   return uuidv4().substring(0, 8).toUpperCase();
 }
 
+// Функция для проверки и создания записи валюты, если она не существует
+async function getOrCreatePlayerCurrency(userId, currencyId) {
+  try {
+    // Проверяем, существует ли запись о валюте
+    const currency = await db.get(
+      'SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?',
+      [userId, currencyId]
+    );
+    
+    // Если записи нет, создаем её
+    if (!currency) {
+      console.log(`Создаем запись о валюте ${currencyId} для пользователя ${userId}`);
+      await db.run(
+        'INSERT INTO player_currencies (user_id, currency_id, amount) VALUES (?, ?, 0)',
+        [userId, currencyId]
+      );
+      return { amount: 0 };
+    }
+    
+    return currency;
+  } catch (error) {
+    console.error(`Ошибка при проверке/создании валюты: ${error.message}`);
+    throw error;
+  }
+}
+
 // Получить реферальный код пользователя
 router.get('/code', async (req, res) => {
   try {
@@ -90,7 +116,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// Отправить приглашение (и получить награду за отправку)
+// Отправить приглашение (без награды за отправку)
 router.post('/send-invitation', async (req, res) => {
   try {
     const { userId } = req;
@@ -98,42 +124,29 @@ router.post('/send-invitation', async (req, res) => {
     if (!userId) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Необходима авторизация',
-        coinsAdded: 0 
+        message: 'Необходима авторизация'
       });
     }
-    
-    // Сумма награды за отправку приглашения (100 монет)
-    const rewardAmount = 100;
-    
-    // Начисляем монеты игроку
-    await db.run(`
-      UPDATE player_currencies
-      SET amount = amount + ?
-      WHERE user_id = ? AND currency_id = 5
-    `, [rewardAmount, userId]);
     
     // Добавляем запись об отправленном приглашении
     await db.run(`
       INSERT INTO referral_invitations (referrer_id, coins_rewarded, sent_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
-    `, [userId, rewardAmount]);
+    `, [userId, 0]); // 0 монет за отправку
     
-    console.log(`Игрок ${userId} получил ${rewardAmount} монет за отправку приглашения`);
+    console.log(`Игрок ${userId} отправил приглашение`);
     
-    // Возвращаем информацию об успешном начислении
+    // Возвращаем информацию об успешной отправке
     res.json({
       success: true,
-      message: 'Вы получили награду за отправку приглашения!',
-      coinsAdded: rewardAmount
+      message: 'Приглашение отправлено!',
+      coinsAdded: 0
     });
-    
   } catch (error) {
     console.error('Ошибка при отправке приглашения:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Ошибка сервера',
-      coinsAdded: 0 
+      message: 'Ошибка сервера'
     });
   }
 });
@@ -198,12 +211,29 @@ router.post('/apply-code', async (req, res) => {
         LIMIT 1
       `, [userId, referralCode.user_id]);
       
+      // Проверяем и создаем запись о валюте для пригласившего игрока, если её нет
+      await getOrCreatePlayerCurrency(referralCode.user_id, 5); // ID 5 - сад-коины
+      
+      // Получаем текущий баланс пригласившего игрока до начисления
+      const beforeBalance = await db.get(
+        'SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 5',
+        [referralCode.user_id]
+      );
+      console.log(`Баланс игрока ${referralCode.user_id} ДО начисления награды за приглашение: ${beforeBalance ? beforeBalance.amount : 0}`);
+      
       // Начисляем награду пригласившему игроку
       await db.run(`
         UPDATE player_currencies
         SET amount = amount + ?
         WHERE user_id = ? AND currency_id = 5
       `, [rewardAmount, referralCode.user_id]);
+      
+      // Получаем обновленный баланс пригласившего игрока
+      const afterBalance = await db.get(
+        'SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 5',
+        [referralCode.user_id]
+      );
+      console.log(`Баланс игрока ${referralCode.user_id} ПОСЛЕ начисления награды за приглашение: ${afterBalance ? afterBalance.amount : rewardAmount}`);
       
       // Обновляем сумму полученных монет в записи о приглашении
       await db.run(`
