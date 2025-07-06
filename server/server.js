@@ -1,9 +1,10 @@
 const express = require('express');
 const cors = require('cors');
-const { db, initDatabase, CurrencyType, RewardType } = require('./db');
-const currencyRoutes = require('./routes/currency.routes');
-
-// Инициализируем Express приложение
+  const { db, initDatabase, CurrencyType, RewardType } = require('./db');
+  const currencyRoutes = require('./routes/currency.routes');
+  const referralRoutes = require('./routes/referral.routes');
+  
+  // Инициализируем Express приложение
 const app = express();
 const port = process.env.PORT || 3002;
 
@@ -94,11 +95,12 @@ async function ensureUserExists(userId) {
 // Подключаем маршруты для отдельных функциональностей
 const tasksRoutes = require('./routes/tasks.routes');
 
-// Регистрируем маршрутизаторы
-app.use('/api/currencies', currencyRoutes);
-app.use('/api/player/tasks', tasksRoutes);
-
-// Получить все локации
+  // Регистрируем маршрутизаторы
+  app.use('/api/currencies', currencyRoutes);
+  app.use('/api/player/tasks', tasksRoutes);
+  app.use('/api/referral', referralRoutes); // Добавляем маршруты для рефералов
+  
+  // Получить все локации
 app.get('/api/locations', async (req, res) => {
   try {
     const locations = await db.all('SELECT * FROM locations');

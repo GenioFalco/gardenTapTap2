@@ -298,41 +298,59 @@ const seedDatabase = () => {
   });
 };
 
+// Инициализация реферальной системы
+const initReferralSystem = () => {
+  return new Promise((resolve, reject) => {
+    // Загружаем SQL-скрипт для реферальной системы
+    const referralSqlPath = path.join(__dirname, 'referral_system.sql');
+    if (fs.existsSync(referralSqlPath)) {
+      const referralSql = fs.readFileSync(referralSqlPath, 'utf8');
+      
+      // Выполняем SQL-скрипт
+      dbInstance.exec(referralSql, (err) => {
+        if (err) {
+          console.error('Ошибка при инициализации реферальной системы:', err);
+          return reject(err);
+        }
+        console.log('Реферальная система инициализирована успешно');
+        resolve();
+      });
+    } else {
+      console.warn('Файл SQL для реферальной системы не найден:', referralSqlPath);
+      resolve(); // Продолжаем даже если файла нет
+    }
+  });
+};
+
 // Инициализация базы данных
 const initDatabase = () => {
   return new Promise((resolve, reject) => {
-    // Проверяем, существует ли файл базы данных
-    const fileExists = fs.existsSync(dbPath);
-    
-    // Открываем или создаем базу данных
+    // Создаем директорию, если она не существует
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
+    // Создаем подключение к базе данных
     dbInstance = new sqlite3.Database(dbPath, (err) => {
       if (err) {
-        console.error('Ошибка при открытии базы данных:', err.message);
+        console.error('Ошибка при подключении к базе данных:', err.message);
         return reject(err);
       }
-      
-      // Устанавливаем режим для обеспечения целостности данных
-      dbInstance.run('PRAGMA foreign_keys = ON', (err) => {
-        if (err) {
-          console.error('Ошибка при установке PRAGMA:', err.message);
-          return reject(err);
-        }
-        
-        // Создаем таблицы, если нужно
-        createTables()
-          .then(() => {
-            // Заполняем базу начальными данными, если нужно
-            return seedDatabase();
-          })
-          .then(() => {
-            console.log('База данных инициализирована успешно');
-            resolve();
-          })
-          .catch((err) => {
-            console.error('Ошибка при инициализации базы данных:', err);
-            reject(err);
-          });
-      });
+      console.log('Подключение к базе данных SQLite успешно установлено');
+
+      // Создаем таблицы и заполняем начальными данными
+      createTables()
+        .then(() => seedDatabase())
+        .then(() => initReferralSystem()) // Инициализируем реферальную систему
+        .then(() => {
+          console.log('База данных инициализирована успешно');
+          resolve(db);
+        })
+        .catch((err) => {
+          console.error('Ошибка при инициализации базы данных:', err);
+          reject(err);
+        });
     });
   });
 };

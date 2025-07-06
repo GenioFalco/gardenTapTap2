@@ -21,6 +21,12 @@ interface LeaderboardPlayer {
   } | null;
 }
 
+interface ReferralStats {
+  sent: number;
+  accepted: number;
+  totalCoins: number;
+}
+
 interface FriendsScreenProps {
   background: string;
 }
@@ -32,6 +38,14 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   const [showInviteSuccess, setShowInviteSuccess] = useState(false);
   const [inviteMessage, setInviteMessage] = useState('Ссылка скопирована!');
   const [isInviteLoading, setIsInviteLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [referralStats, setReferralStats] = useState<ReferralStats>({ sent: 0, accepted: 0, totalCoins: 0 });
+  const [isLoadingReferral, setIsLoadingReferral] = useState(false);
+  const [showApplyCodeForm, setShowApplyCodeForm] = useState(false);
+  const [applyCodeInput, setApplyCodeInput] = useState('');
+  const [applyCodeLoading, setApplyCodeLoading] = useState(false);
+  const [applyCodeMessage, setApplyCodeMessage] = useState('');
+  const [applyCodeSuccess, setApplyCodeSuccess] = useState(false);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
@@ -49,12 +63,35 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
     };
 
     fetchLeaderboard();
+    fetchReferralData();
   }, []);
+
+  const fetchReferralData = async () => {
+    try {
+      setIsLoadingReferral(true);
+      
+      // Получаем реферальный код пользователя
+      const codeResponse = await api.getReferralCode();
+      if (codeResponse.success) {
+        setReferralCode(codeResponse.code);
+      }
+      
+      // Получаем статистику приглашений
+      const statsResponse = await api.getReferralStats();
+      if (statsResponse.success) {
+        setReferralStats(statsResponse.stats);
+      }
+    } catch (err) {
+      console.error('Ошибка при загрузке реферальных данных:', err);
+    } finally {
+      setIsLoadingReferral(false);
+    }
+  };
 
   const handleInviteFriend = async () => {
     try {
       // Формируем ссылку на приглашение с параметром referral
-      const botLink = 'https://t.me/share/url?url=https://t.me/testbotmvpBot&text=Присоединяйся к игре Garden Tap Tap!';
+      const botLink = `https://t.me/share/url?url=https://t.me/testbotmvpBot?start=ref_${referralCode}&text=Присоединяйся к игре Garden Tap Tap! Используй мой код: ${referralCode}`;
       
       // Открываем Telegram для выбора чатов
       window.open(botLink, '_blank');
@@ -63,9 +100,16 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       
       // Вызываем API для начисления монет за приглашение
       try {
-        const reward = await api.rewardForInvitation();
+        const reward = await api.sendInvitation();
         if (reward.success) {
           setInviteMessage(`Приглашение отправлено! +${reward.coinsAdded} монет`);
+          
+          // Обновляем статистику
+          setReferralStats(prev => ({
+            ...prev,
+            sent: prev.sent + 1,
+            totalCoins: prev.totalCoins + reward.coinsAdded
+          }));
         } else {
           setInviteMessage('Приглашение отправлено!');
         }
@@ -90,8 +134,8 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   
   const handleCopyLink = async () => {
     try {
-      // Сохраняем ссылку для копирования
-      const botLink = 'https://t.me/testbotmvpBot';
+      // Сохраняем ссылку для копирования с реферальным кодом
+      const botLink = `https://t.me/testbotmvpBot?start=ref_${referralCode}`;
       
       // Копируем ссылку в буфер обмена
       await navigator.clipboard.writeText(botLink);
@@ -106,6 +150,57 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       }, 3000);
     } catch (err) {
       console.error('Ошибка при копировании ссылки:', err);
+    }
+  };
+  
+  const handleCopyCode = async () => {
+    try {
+      // Копируем код в буфер обмена
+      await navigator.clipboard.writeText(referralCode);
+      
+      // Показываем уведомление об успешном копировании
+      setInviteMessage('Код скопирован!');
+      setShowInviteSuccess(true);
+      
+      // Скрываем уведомление через 3 секунды
+      setTimeout(() => {
+        setShowInviteSuccess(false);
+      }, 3000);
+    } catch (err) {
+      console.error('Ошибка при копировании кода:', err);
+    }
+  };
+  
+  const handleApplyCode = async () => {
+    if (!applyCodeInput.trim()) {
+      setApplyCodeMessage('Введите код');
+      setApplyCodeSuccess(false);
+      return;
+    }
+    
+    try {
+      setApplyCodeLoading(true);
+      const response = await api.applyReferralCode(applyCodeInput.trim());
+      
+      if (response.success) {
+        setApplyCodeMessage(response.message);
+        setApplyCodeSuccess(true);
+        setApplyCodeInput('');
+        // Скрываем форму через 3 секунды
+        setTimeout(() => {
+          setShowApplyCodeForm(false);
+          setApplyCodeMessage('');
+        }, 3000);
+      } else {
+        setApplyCodeMessage(response.message || 'Ошибка при применении кода');
+        setApplyCodeSuccess(false);
+      }
+    } catch (err: any) {
+      console.error('Ошибка при применении кода:', err);
+      setApplyCodeMessage(err.message || 'Ошибка при применении кода');
+      setApplyCodeSuccess(false);
+    } finally {
+      setApplyCodeLoading(false);
     }
   };
 
@@ -150,49 +245,141 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       >
         <div className="p-4">
           <h2 className="text-lg font-bold text-white mb-2">Пригласи друзей</h2>
-          <p className="text-white/80 text-sm mb-3">Получи 100 монет за каждое приглашение друга в игру!</p>
+          <p className="text-white/80 text-sm mb-3">Получи 100 монет за каждое приглашение и 500 монет, когда друг присоединится!</p>
           
-          <div className="flex flex-col">
-            <div className="flex items-center space-x-2">
-              {/* Кнопка приглашения через Telegram */}
-              <button 
-                onClick={handleInviteFriend}
-                disabled={isInviteLoading}
-                className={`bg-yellow-500/90 hover:bg-yellow-600 text-white font-medium py-1.5 px-4 rounded-lg shadow-md transition-all duration-200 flex items-center justify-center flex-1 ${isInviteLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
-              >
-                {isInviteLoading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                ) : (
-                  <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.1 14.9l-3.2-3.2 1.4-1.4 1.8 1.8 5-5 1.4 1.4-6.4 6.4z" />
-                  </svg>
-                )}
-                Пригласить
-              </button>
-              
-              {/* Кнопка копирования ссылки */}
-              <button 
-                onClick={handleCopyLink}
-                className="bg-gray-700/90 hover:bg-gray-600 text-white p-2 rounded-lg shadow-md transition-all duration-200"
-                title="Скопировать ссылку"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
+          {isLoadingReferral ? (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-yellow-500"></div>
             </div>
-            
-            {showInviteSuccess && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-green-300 text-sm mt-2"
-              >
-                {inviteMessage}
-              </motion.div>
-            )}
-          </div>
+          ) : (
+            <>
+              {/* Реферальный код */}
+              <div className="bg-gray-800/80 rounded-lg p-3 mb-3 flex justify-between items-center">
+                <div>
+                  <div className="text-xs text-gray-400">Ваш реферальный код:</div>
+                  <div className="text-lg font-bold text-yellow-400">{referralCode}</div>
+                </div>
+                <button 
+                  onClick={handleCopyCode}
+                  className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg"
+                  title="Скопировать код"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              </div>
+              
+              {/* Статистика приглашений */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="bg-gray-800/80 rounded-lg p-2 text-center">
+                  <div className="text-xs text-gray-400">Отправлено</div>
+                  <div className="text-lg font-bold text-white">{referralStats.sent}</div>
+                </div>
+                <div className="bg-gray-800/80 rounded-lg p-2 text-center">
+                  <div className="text-xs text-gray-400">Принято</div>
+                  <div className="text-lg font-bold text-white">{referralStats.accepted}</div>
+                </div>
+                <div className="bg-gray-800/80 rounded-lg p-2 text-center">
+                  <div className="text-xs text-gray-400">Монеты</div>
+                  <div className="text-lg font-bold text-yellow-400">{referralStats.totalCoins}</div>
+                </div>
+              </div>
+              
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center space-x-2">
+                  {/* Кнопка приглашения через Telegram */}
+                  <button 
+                    onClick={handleInviteFriend}
+                    disabled={isInviteLoading}
+                    className={`bg-yellow-500/90 hover:bg-yellow-600 text-white font-medium py-1.5 px-4 rounded-lg shadow-md transition-all duration-200 flex items-center justify-center flex-1 ${isInviteLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  >
+                    {isInviteLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    ) : (
+                      <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.1 14.9l-3.2-3.2 1.4-1.4 1.8 1.8 5-5 1.4 1.4-6.4 6.4z" />
+                      </svg>
+                    )}
+                    Пригласить
+                  </button>
+                  
+                  {/* Кнопка копирования ссылки */}
+                  <button 
+                    onClick={handleCopyLink}
+                    className="bg-gray-700/90 hover:bg-gray-600 text-white p-2 rounded-lg shadow-md transition-all duration-200"
+                    title="Скопировать ссылку"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                </div>
+                
+                {/* Кнопка применения реферального кода */}
+                {!showApplyCodeForm ? (
+                  <button 
+                    onClick={() => setShowApplyCodeForm(true)}
+                    className="bg-blue-600/90 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded-lg shadow-md transition-all duration-200 flex items-center justify-center"
+                  >
+                    <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                    </svg>
+                    Ввести код друга
+                  </button>
+                ) : (
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input 
+                        type="text" 
+                        value={applyCodeInput}
+                        onChange={(e) => setApplyCodeInput(e.target.value)}
+                        placeholder="Введите код друга"
+                        className="flex-1 bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button 
+                        onClick={handleApplyCode}
+                        disabled={applyCodeLoading}
+                        className={`bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded-lg shadow-md transition-all duration-200 ${applyCodeLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      >
+                        {applyCodeLoading ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          'OK'
+                        )}
+                      </button>
+                      <button 
+                        onClick={() => setShowApplyCodeForm(false)}
+                        className="bg-gray-700 hover:bg-gray-600 text-white p-1.5 rounded-lg shadow-md transition-all duration-200"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    </div>
+                    {applyCodeMessage && (
+                      <div className={`text-sm ${applyCodeSuccess ? 'text-green-400' : 'text-red-400'}`}>
+                        {applyCodeMessage}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          
+          {showInviteSuccess && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-green-300 text-sm mt-2"
+            >
+              {inviteMessage}
+            </motion.div>
+          )}
         </div>
       </motion.div>
       
@@ -248,59 +435,24 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
                     <div>
                       <div className="font-medium text-white">{player.username}</div>
                       {player.achievement && (
-                        <div className="text-xs text-gray-300 truncate max-w-[120px]">
-                          {player.achievement.name}
-                        </div>
+                        <div className="text-xs text-yellow-400">{player.achievement.name}</div>
                       )}
                     </div>
                   </div>
                   
                   {/* Ранг */}
-                  <div className="w-16 flex flex-col items-center">
-                    <img 
-                      src={player.rank.imagePath} 
-                      alt={player.rank.name} 
-                      className="w-6 h-6 object-contain"
-                      onError={(e) => {
-                        // Запасной вариант, если путь из БД неверный
-                        const rankInfo = player.rank.name.toLowerCase().split(' ');
-                        let rankType = 'bronze';
-                        let rankNumber = '1';
-                        
-                        if (rankInfo.length >= 2) {
-                          // Определяем тип ранга (бронза, серебро, золото)
-                          if (rankInfo[0].includes('серебро')) {
-                            rankType = 'silver';
-                          } else if (rankInfo[0].includes('золото')) {
-                            rankType = 'gold';
-                          }
-                          
-                          // Извлекаем номер ранга
-                          if (rankInfo[1] && !isNaN(parseInt(rankInfo[1]))) {
-                            rankNumber = rankInfo[1];
-                          }
-                        }
-                        
-                        const fallbackImage = `/assets/ranks/${rankType}_${rankNumber}.png`;
-                        console.log(`Используем запасную иконку для ${player.rank.name}: ${fallbackImage}`);
-                        (e.target as HTMLImageElement).src = fallbackImage;
-                      }}
-                    />
-                    <span className="text-xs text-gray-300 mt-1 truncate max-w-[60px] text-center">{player.rank.name}</span>
+                  <div className="w-16 text-center">
+                    <div className="text-sm font-medium text-white">{player.rank.name}</div>
                   </div>
                   
-                  {/* Очки сезона */}
+                  {/* Очки */}
                   <div className="w-16 text-center">
-                    <div className="text-white font-medium text-sm">{player.seasonPoints}</div>
-                    <div className="text-xs text-gray-400">сезон</div>
+                    <div className="text-sm font-medium text-white">{player.seasonPoints}</div>
                   </div>
                   
                   {/* Уровень */}
-                  <div className="w-16 flex justify-center">
-                    <div className="bg-gray-700/90 border border-blue-400 text-white text-xs rounded-md px-2 py-1 flex items-center">
-                      <span className="mr-0.5">ур.</span>
-                      <span className="font-bold">{player.level}</span>
-                    </div>
+                  <div className="w-16 text-center">
+                    <div className="text-sm font-medium text-white">Ур. {player.level}</div>
                   </div>
                 </div>
               </motion.div>
