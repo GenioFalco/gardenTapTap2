@@ -10,11 +10,27 @@ interface EnergyPackage {
   price: number;
 }
 
+// Интерфейс для валюты локации
+interface LocationCurrency {
+  id: string;
+  name: string;
+  icon: string;
+  exchangeRate: number; // Курс обмена на главную валюту
+}
+
 // Фиксированные пакеты энергии
 const ENERGY_PACKAGES: EnergyPackage[] = [
   { id: 1, name: 'Маленький пакет', energy_amount: 10, price: 50 },
   { id: 2, name: 'Средний пакет', energy_amount: 25, price: 100 },
   { id: 3, name: 'Большой пакет', energy_amount: 50, price: 180 }
+];
+
+// Фиксированные валюты локаций (в реальном приложении должны загружаться с сервера)
+const LOCATION_CURRENCIES: LocationCurrency[] = [
+  { id: 'forest', name: 'Древесина', icon: '🌳', exchangeRate: 0.5 },
+  { id: 'mountain', name: 'Камень', icon: '⛰️', exchangeRate: 0.7 },
+  { id: 'desert', name: 'Песок', icon: '🏜️', exchangeRate: 0.3 },
+  { id: 'farm', name: 'Зерно', icon: '🌾', exchangeRate: 0.4 }
 ];
 
 const ExchangeScreen: React.FC = () => {
@@ -23,6 +39,12 @@ const ExchangeScreen: React.FC = () => {
   const [maxEnergy, setMaxEnergy] = useState<number>(100);
   const [buying, setBuying] = useState<boolean>(false);
   const [message, setMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
+  
+  // Состояния для обмена валют
+  const [selectedCurrency, setSelectedCurrency] = useState<LocationCurrency | null>(null);
+  const [exchangeAmount, setExchangeAmount] = useState<string>('');
+  const [currencyBalances, setCurrencyBalances] = useState<Record<string, number>>({});
+  const [exchanging, setExchanging] = useState<boolean>(false);
 
   // Загрузка данных игрока при монтировании компонента
   useEffect(() => {
@@ -42,6 +64,24 @@ const ExchangeScreen: React.FC = () => {
       console.log('Текущий прогресс игрока:', progress);
       setEnergy(progress.energy);
       setMaxEnergy(progress.maxEnergy);
+      
+      // Загружаем балансы валют локаций
+      const balances: Record<string, number> = {};
+      for (const currency of LOCATION_CURRENCIES) {
+        try {
+          const amount = await api.getResourceAmount(currency.id);
+          balances[currency.id] = amount;
+        } catch (error) {
+          console.error(`Ошибка при загрузке баланса валюты ${currency.id}:`, error);
+          balances[currency.id] = 0;
+        }
+      }
+      setCurrencyBalances(balances);
+      
+      // Устанавливаем первую валюту по умолчанию
+      if (LOCATION_CURRENCIES.length > 0 && !selectedCurrency) {
+        setSelectedCurrency(LOCATION_CURRENCIES[0]);
+      }
     } catch (error) {
       console.error('Ошибка при загрузке данных игрока:', error);
       showMessage('Не удалось загрузить данные. Попробуйте позже.', 'error');
@@ -99,15 +139,86 @@ const ExchangeScreen: React.FC = () => {
       setBuying(false);
     }
   };
+  
+  // Функция для обмена валюты локации на главную валюту
+  const exchangeCurrency = async () => {
+    if (!selectedCurrency) {
+      showMessage('Выберите валюту для обмена', 'error');
+      return;
+    }
+    
+    const amount = parseInt(exchangeAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showMessage('Введите корректную сумму для обмена', 'error');
+      return;
+    }
+    
+    const currencyBalance = currencyBalances[selectedCurrency.id] || 0;
+    if (currencyBalance < amount) {
+      showMessage(`Недостаточно ${selectedCurrency.name} для обмена`, 'error');
+      return;
+    }
+    
+    setExchanging(true);
+    try {
+      // Рассчитываем сколько монет получит игрок
+      const mainCoinsToReceive = Math.floor(amount * selectedCurrency.exchangeRate);
+      
+      // Обновляем балансы
+      const newCurrencyBalance = currencyBalance - amount;
+      const newMainCoins = coins + mainCoinsToReceive;
+      
+      // Обновляем состояние
+      setCurrencyBalances(prev => ({
+        ...prev,
+        [selectedCurrency.id]: newCurrencyBalance
+      }));
+      setCoins(newMainCoins);
+      
+      // Отправляем события обновления ресурсов
+      emit(AppEvent.RESOURCES_UPDATED, {
+        currencyId: 'main',
+        amount: newMainCoins
+      });
+      
+      emit(AppEvent.RESOURCES_UPDATED, {
+        currencyId: selectedCurrency.id,
+        amount: newCurrencyBalance
+      });
+      
+      // Сбрасываем поле ввода
+      setExchangeAmount('');
+      
+      // Показываем сообщение об успехе
+      showMessage(`Обмен успешно выполнен: +${mainCoinsToReceive} монет`, 'success');
+      console.log(`Обмен успешен: ${amount} ${selectedCurrency.name} на ${mainCoinsToReceive} монет`);
+    } catch (error: any) {
+      console.error('Ошибка при обмене валюты:', error);
+      showMessage(`Ошибка: ${error.message || 'Что-то пошло не так'}`, 'error');
+      
+      // Перезагружаем данные игрока
+      await loadPlayerData();
+    } finally {
+      setExchanging(false);
+    }
+  };
 
   // Функция для отображения сообщений
   const showMessage = (text: string, type: 'success' | 'error') => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), 3000);
   };
+  
+  // Рассчитываем, сколько монет получит игрок при обмене
+  const calculateExchangeResult = () => {
+    if (!selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount))) {
+      return 0;
+    }
+    return Math.floor(parseInt(exchangeAmount) * selectedCurrency.exchangeRate);
+  };
 
   return (
-    <div className="w-full max-w-md mx-auto flex flex-col items-center justify-center -mt-80">
+    <div className="w-full max-w-md mx-auto flex flex-col items-center justify-center -mt-0">
       {/* Сообщения */}
       {message && (
         <div className={`p-2 rounded-lg mb-2 text-center absolute top-28 left-1/2 transform -translate-x-1/2 z-20 ${
@@ -120,7 +231,7 @@ const ExchangeScreen: React.FC = () => {
       )}
       
       {/* Блок покупки энергии */}
-      <div className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700">
+      <div className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-4">
         <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
           <h2 className="text-lg font-bold text-yellow-400 text-center">Пополнить энергию</h2>
         </div>
@@ -177,6 +288,80 @@ const ExchangeScreen: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+      
+      {/* Блок обмена валюты локации на главную */}
+      <div className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full">
+        <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
+          <h2 className="text-lg font-bold text-yellow-400 text-center">Обмен ресурсов на монеты</h2>
+        </div>
+        
+        <div className="p-3">
+          {/* Выбор валюты */}
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-gray-300 mb-1">Выберите ресурс для обмена</label>
+            <select 
+              value={selectedCurrency?.id || ''}
+              onChange={(e) => {
+                const currency = LOCATION_CURRENCIES.find(c => c.id === e.target.value);
+                setSelectedCurrency(currency || null);
+              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
+            >
+              {LOCATION_CURRENCIES.map(currency => (
+                <option key={currency.id} value={currency.id}>
+                  {currency.icon} {currency.name} - Баланс: {currencyBalances[currency.id] || 0}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Курс обмена */}
+          {selectedCurrency && (
+            <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
+              <div className="text-sm text-gray-300">Курс обмена:</div>
+              <div className="flex items-center justify-center">
+                <span className="text-white font-bold">1 {selectedCurrency.icon}</span>
+                <span className="text-gray-400 mx-2">→</span>
+                <span className="text-yellow-400 font-bold">{selectedCurrency.exchangeRate} 🪙</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Ввод суммы для обмена */}
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-gray-300 mb-1">Количество для обмена</label>
+            <input
+              type="number"
+              value={exchangeAmount}
+              onChange={(e) => setExchangeAmount(e.target.value)}
+              placeholder="Введите количество"
+              min="1"
+              className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
+            />
+          </div>
+          
+          {/* Результат обмена */}
+          <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
+            <div className="text-sm text-gray-300">Вы получите:</div>
+            <div className="flex items-center justify-center">
+              <span className="text-yellow-400 font-bold text-xl">{calculateExchangeResult()} 🪙</span>
+            </div>
+          </div>
+          
+          {/* Кнопка обмена */}
+          <button
+            onClick={exchangeCurrency}
+            disabled={exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)}
+            className={`w-full py-2 px-4 rounded-md text-center font-medium transition ${
+              exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+            }`}
+          >
+            {exchanging ? 'Обмен...' : 'Обменять'}
+          </button>
         </div>
       </div>
     </div>
