@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../lib/api';
+import { AppEvent, emit } from '../lib/events';
 
 // Интерфейс для пакетов энергии
 interface EnergyPackage {
@@ -33,10 +34,12 @@ const ExchangeScreen: React.FC = () => {
     try {
       // Загружаем количество монет
       const userCoins = await api.getResourceAmount('main');
+      console.log('Текущее количество монет:', userCoins);
       setCoins(userCoins);
       
       // Загружаем текущий прогресс игрока для получения энергии
       const progress = await api.getPlayerProgress();
+      console.log('Текущий прогресс игрока:', progress);
       setEnergy(progress.energy);
       setMaxEnergy(progress.maxEnergy);
     } catch (error) {
@@ -61,23 +64,31 @@ const ExchangeScreen: React.FC = () => {
     
     setBuying(true);
     try {
-      // 1. Списываем монеты
-      const spendResult = await api.spendResources('main', pack.price);
-      if (!spendResult) {
-        showMessage('Ошибка при списании монет', 'error');
-        setBuying(false);
-        return;
-      }
+      console.log(`Покупка пакета энергии: ${pack.name}, цена: ${pack.price}, энергия: +${pack.energy_amount}`);
       
-      // 2. Обновляем энергию
+      // Обновляем локальное состояние монет и энергии
+      const newCoins = coins - pack.price;
       const newEnergy = Math.min(energy + pack.energy_amount, maxEnergy);
-      await api.updatePlayerEnergy(newEnergy);
       
-      // 3. Обновляем данные игрока
-      await loadPlayerData();
+      // Обновляем состояние
+      setCoins(newCoins);
+      setEnergy(newEnergy);
       
-      // 4. Показываем сообщение об успехе
+      // Отправляем событие обновления ресурсов для App.tsx
+      emit(AppEvent.RESOURCES_UPDATED, {
+        currencyId: 'main',
+        amount: newCoins
+      });
+      
+      // Отправляем событие обновления энергии для App.tsx
+      emit(AppEvent.ENERGY_UPDATED, {
+        energy: newEnergy,
+        maxEnergy: maxEnergy
+      });
+      
+      // Показываем сообщение об успехе
       showMessage(`+${pack.energy_amount} энергии успешно добавлено!`, 'success');
+      console.log(`Покупка успешна: монеты=${newCoins}, энергия=${newEnergy}/${maxEnergy}`);
     } catch (error: any) {
       console.error('Ошибка при покупке энергии:', error);
       showMessage(`Ошибка: ${error.message || 'Что-то пошло не так'}`, 'error');

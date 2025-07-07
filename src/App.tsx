@@ -1039,6 +1039,59 @@ function App() {
     };
   }, []);
   
+  // Обработчик события обновления ресурсов
+  useEffect(() => {
+    const handleResourcesUpdated = (data?: {currencyId: string, amount: number}) => {
+      if (!data) return;
+      
+      console.log('Получено событие обновления ресурсов:', data);
+      
+      if (data.currencyId === 'main') {
+        setGardenCoins(data.amount);
+      } else if (currentLocation && 
+                (data.currencyId === currentLocation.currencyId?.toLowerCase() || 
+                 data.currencyId === currentLocation.currency_type?.toLowerCase())) {
+        setResourceAmount(data.amount);
+      }
+    };
+    
+    // Подписываемся на событие
+    subscribe(AppEvent.RESOURCES_UPDATED, handleResourcesUpdated);
+    
+    return () => {
+      // Отписываемся при размонтировании
+      unsubscribe(AppEvent.RESOURCES_UPDATED, handleResourcesUpdated);
+    };
+  }, [currentLocation]);
+  
+  // Обработчик события обновления энергии
+  useEffect(() => {
+    const handleEnergyUpdated = (data?: {energy: number, maxEnergy: number}) => {
+      if (!data) return;
+      
+      console.log('Получено событие обновления энергии:', data);
+      
+      if (playerProgress) {
+        setPlayerProgress(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            energy: data.energy,
+            maxEnergy: data.maxEnergy
+          };
+        });
+      }
+    };
+    
+    // Подписываемся на событие
+    subscribe(AppEvent.ENERGY_UPDATED, handleEnergyUpdated);
+    
+    return () => {
+      // Отписываемся при размонтировании
+      unsubscribe(AppEvent.ENERGY_UPDATED, handleEnergyUpdated);
+    };
+  }, [playerProgress]);
+  
   if (!initialized || !playerProgress || !currentLocation) {
     return <div className="loading">Загрузка...</div>;
   }
