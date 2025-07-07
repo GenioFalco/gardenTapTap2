@@ -218,10 +218,10 @@ const ExchangeScreen: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto flex flex-col items-center justify-center -mt-0">
+    <div className="w-full max-w-md mx-auto flex flex-col items-center pb-16">
       {/* Сообщения */}
       {message && (
-        <div className={`p-2 rounded-lg mb-2 text-center absolute top-28 left-1/2 transform -translate-x-1/2 z-20 ${
+        <div className={`p-2 rounded-lg mb-2 text-center fixed top-28 left-1/2 transform -translate-x-1/2 z-20 ${
           message.type === 'success' 
             ? 'bg-green-100 text-green-800 border border-green-300' 
             : 'bg-red-100 text-red-800 border border-red-300'

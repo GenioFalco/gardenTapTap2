@@ -1382,7 +1382,7 @@ function App() {
       
       {/* Экран обмена */}
       {activeTab === "exchange" && (
-        <div className="h-screen w-full pt-36 mt-1 px-4 flex items-center justify-center overflow-hidden relative">
+        <div className="h-screen w-full pt-36 mt-1 px-4 overflow-y-auto relative">
           <div className="absolute inset-0 z-0" 
                style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
           <ExchangeScreen />
