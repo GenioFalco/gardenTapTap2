@@ -107,7 +107,7 @@ const ExchangeScreen: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-md mx-auto flex flex-col items-center justify-center -mt-80">
       {/* Сообщения */}
       {message && (
         <div className={`p-2 rounded-lg mb-2 text-center absolute top-28 left-1/2 transform -translate-x-1/2 z-20 ${
