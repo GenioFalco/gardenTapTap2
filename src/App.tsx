@@ -12,6 +12,7 @@ import RankUpModal from './components/RankUpModal';
 import AchievementModal from './components/AchievementModal';
 import AchievementToast from './components/AchievementToast';
 import FriendsScreen from './components/FriendsScreen';
+import ExchangeScreen from './components/ExchangeScreen';
 import * as api from './lib/api';
 import { config } from './config';
 import { Location, Tool, PlayerProgress, CurrencyType, RewardType } from './types';
@@ -1331,10 +1332,7 @@ function App() {
         <div className="h-screen w-full pt-36 mt-1 px-4 flex items-center justify-center overflow-hidden relative">
           <div className="absolute inset-0 z-0" 
                style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
-          <div className="text-center p-8 bg-gray-800 bg-opacity-80 rounded-lg relative z-10">
-            <h2 className="text-xl font-bold text-white mb-4">Обмен</h2>
-            <p className="text-white">Функция "Обмен" находится в разработке.</p>
-          </div>
+          <ExchangeScreen />
         </div>
       )}
       
