@@ -4515,3 +4515,218 @@ app.get('/api/leaderboard', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+// Купить энергию за монеты
+app.post('/api/player/buy-energy', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { energyAmount, price } = req.body;
+    
+    if (!energyAmount || !price) {
+      return res.status(400).json({ error: 'Необходимо указать количество энергии и цену' });
+    }
+    
+    console.log(`Покупка энергии: ${energyAmount} за ${price} монет для пользователя ${userId}`);
+    
+    // Получаем текущий прогресс игрока
+    const progress = await db.get('SELECT * FROM player_progress WHERE user_id = ?', [userId]);
+    if (!progress) {
+      return res.status(404).json({ error: 'Профиль игрока не найден' });
+    }
+    
+    // Получаем баланс монет
+    const mainCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 1', [userId]);
+    const coinAmount = mainCurrency ? parseFloat(mainCurrency.amount) : 0;
+    
+    if (coinAmount < price) {
+      console.log(`Недостаточно монет для покупки энергии: ${coinAmount} < ${price}`);
+      return res.status(400).json({ 
+        error: 'Недостаточно монет для покупки', 
+        currentCoins: coinAmount
+      });
+    }
+    
+    // Начинаем транзакцию
+    await db.run('BEGIN TRANSACTION');
+    
+    try {
+      // Тратим монеты
+      await db.run(`
+        UPDATE player_currencies
+        SET amount = amount - ?
+        WHERE user_id = ? AND currency_id = 1
+      `, [price, userId]);
+      
+      // Вычисляем новое количество энергии (не превышая максимум)
+      const newEnergy = Math.min(progress.energy + energyAmount, progress.max_energy);
+      
+      // Обновляем энергию
+      await db.run(`
+        UPDATE player_progress
+        SET energy = ?,
+            last_energy_refill_time = CURRENT_TIMESTAMP
+        WHERE user_id = ?
+      `, [newEnergy, userId]);
+      
+      // Фиксируем транзакцию
+      await db.run('COMMIT');
+      
+      // Возвращаем обновленные данные
+      const updatedProgress = await db.get('SELECT energy, max_energy, last_energy_refill_time FROM player_progress WHERE user_id = ?', [userId]);
+      const updatedCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 1', [userId]);
+      const updatedCoins = updatedCurrency ? parseFloat(updatedCurrency.amount) : 0;
+      
+      console.log(`Энергия успешно куплена: ${progress.energy} -> ${updatedProgress.energy}, монеты: ${coinAmount} -> ${updatedCoins}`);
+      
+      res.json({
+        success: true,
+        energy: updatedProgress.energy,
+        maxEnergy: updatedProgress.max_energy,
+        lastEnergyRefillTime: updatedProgress.last_energy_refill_time,
+        coins: updatedCoins
+      });
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Ошибка при покупке энергии:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Добавить ресурсы игроку
+app.post('/api/player/resources/add', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { currencyId, amount } = req.body;
+    
+    if (!currencyId || !amount) {
+      return res.status(400).json({ error: 'Необходимо указать валюту и количество' });
+    }
+    
+    console.log(`Добавление ресурсов: ${amount} валюты ${currencyId} для пользователя ${userId}`);
+    
+    // Определяем ID валюты (число или строковый код)
+    let actualCurrencyId = currencyId;
+    
+    if (isNaN(currencyId)) {
+      // Если передан код валюты, ищем его ID
+      const currency = await db.get(`
+        SELECT id FROM currencies WHERE code = ? COLLATE NOCASE
+      `, [currencyId]);
+      
+      if (!currency) {
+        console.log(`Валюта с кодом ${currencyId} не найдена`);
+        return res.status(404).json({ error: 'Валюта не найдена' });
+      }
+      
+      actualCurrencyId = currency.id;
+    }
+    
+    // Проверяем, существует ли запись о валюте игрока
+    const playerCurrency = await db.get(`
+      SELECT 1 FROM player_currencies WHERE user_id = ? AND currency_id = ?
+    `, [userId, actualCurrencyId]);
+    
+    if (playerCurrency) {
+      // Обновляем существующую запись
+      await db.run(`
+        UPDATE player_currencies
+        SET amount = amount + ?
+        WHERE user_id = ? AND currency_id = ?
+      `, [parseFloat(amount), userId, actualCurrencyId]);
+    } else {
+      // Создаем новую запись
+      await db.run(`
+        INSERT INTO player_currencies (user_id, currency_id, amount)
+        VALUES (?, ?, ?)
+      `, [userId, actualCurrencyId, parseFloat(amount)]);
+    }
+    
+    // Получаем обновленный баланс
+    const result = await db.get(`
+      SELECT amount FROM player_currencies
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, actualCurrencyId]);
+    
+    const newAmount = result ? parseFloat(result.amount) : 0;
+    
+    res.json({
+      success: true,
+      currencyId: currencyId,
+      amount: newAmount
+    });
+  } catch (error) {
+    console.error('Ошибка при добавлении ресурсов:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Потратить ресурсы игрока
+app.post('/api/player/resources/spend', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { currencyId, amount } = req.body;
+    
+    if (!currencyId || !amount) {
+      return res.status(400).json({ error: 'Необходимо указать валюту и количество' });
+    }
+    
+    console.log(`Трата ресурсов: ${amount} валюты ${currencyId} для пользователя ${userId}`);
+    
+    // Определяем ID валюты (число или строковый код)
+    let actualCurrencyId = currencyId;
+    
+    if (isNaN(currencyId)) {
+      // Если передан код валюты, ищем его ID
+      const currency = await db.get(`
+        SELECT id FROM currencies WHERE code = ? COLLATE NOCASE
+      `, [currencyId]);
+      
+      if (!currency) {
+        console.log(`Валюта с кодом ${currencyId} не найдена`);
+        return res.status(404).json({ error: 'Валюта не найдена' });
+      }
+      
+      actualCurrencyId = currency.id;
+    }
+    
+    // Проверяем, достаточно ли ресурсов
+    const currentCurrency = await db.get(`
+      SELECT amount FROM player_currencies
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, actualCurrencyId]);
+    
+    const currentAmount = currentCurrency ? parseFloat(currentCurrency.amount) : 0;
+    
+    if (currentAmount < amount) {
+      console.log(`Недостаточно ресурсов: ${currentAmount} < ${amount}`);
+      return res.status(400).json({ error: 'Недостаточно ресурсов' });
+    }
+    
+    // Тратим ресурсы
+    await db.run(`
+      UPDATE player_currencies
+      SET amount = amount - ?
+      WHERE user_id = ? AND currency_id = ?
+    `, [parseFloat(amount), userId, actualCurrencyId]);
+    
+    // Получаем обновленный баланс
+    const result = await db.get(`
+      SELECT amount FROM player_currencies
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, actualCurrencyId]);
+    
+    const newAmount = result ? parseFloat(result.amount) : 0;
+    
+    res.json({
+      success: true,
+      currencyId: currencyId,
+      amount: newAmount
+    });
+  } catch (error) {
+    console.error('Ошибка при трате ресурсов:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});

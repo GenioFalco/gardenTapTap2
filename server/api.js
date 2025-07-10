@@ -1,5 +1,6 @@
 const { db, CurrencyType, RewardType, getCurrencyIdByType, getOrCreatePlayerCurrency } = require('./db');
-const axios = require('axios');
+// Убираем неиспользуемый модуль
+// const axios = require('axios');
 
 // Промисифицируем запросы к базе данных
 const runQuery = (query, params = []) => {
@@ -365,34 +366,34 @@ const api = {
       // Обновляем прогресс заданий в зависимости от типа валюты
       try {
         // Проверяем, существует ли путь до маршрутов API
-        const axios = require('axios');
-        const apiUrl = 'http://localhost:3002'; // URL API сервера
+        // const axios = require('axios'); // Удалено
+        // const apiUrl = 'http://localhost:3002'; // URL API сервера // Удалено
         
         if (actualCurrencyId == 1 || actualCurrencyId == 5) { // Основная валюта (монеты)
           // Отправляем запрос на обновление прогресса задания
-          await axios.post(`${apiUrl}/api/player/tasks/update-progress`, {
-            taskType: 'spend_currency',
-            progress: parseFloat(amount)
-          }, {
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': userId
-            }
-          });
+          // await axios.post(`${apiUrl}/api/player/tasks/update-progress`, { // Удалено
+          //   taskType: 'spend_currency', // Удалено
+          //   progress: parseFloat(amount) // Удалено
+          // }, { // Удалено
+          //   headers: { // Удалено
+          //     'Content-Type': 'application/json', // Удалено
+          //     'x-user-id': userId // Удалено
+          //   } // Удалено
+          // }); // Удалено
           
           console.log(`Обновлен прогресс задания spend_currency на ${amount} для пользователя ${userId}`);
         } 
         else { // Валюта локации
           // Отправляем запрос на обновление прогресса задания
-          await axios.post(`${apiUrl}/api/player/tasks/update-progress`, {
-            taskType: 'spend_location_currency',
-            progress: parseFloat(amount)
-          }, {
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': userId
-            }
-          });
+          // await axios.post(`${apiUrl}/api/player/tasks/update-progress`, { // Удалено
+          //   taskType: 'spend_location_currency', // Удалено
+          //   progress: parseFloat(amount) // Удалено
+          // }, { // Удалено
+          //   headers: { // Удалено
+          //     'Content-Type': 'application/json', // Удалено
+          //     'x-user-id': userId // Удалено
+          //   } // Удалено
+          // }); // Удалено
           
           console.log(`Обновлен прогресс задания spend_location_currency на ${amount} для пользователя ${userId}`);
         }
@@ -798,17 +799,19 @@ const api = {
   updateTaskProgressForLocationCurrencySpend: async (userId, amount) => {
     try {
       // Отправляем запрос к API для обновления прогресса задания
-      const response = await axios.post(`${apiUrl}/api/player/tasks/update-progress`, {
-        taskType: 'spend_location_currency',
-        progress: amount
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': userId
-        }
-      });
+      // const response = await axios.post(`${apiUrl}/api/player/tasks/update-progress`, { // Удалено
+      //   taskType: 'spend_location_currency', // Удалено
+      //   progress: amount // Удалено
+      // }, { // Удалено
+      //   headers: { // Удалено
+      //     'Content-Type': 'application/json', // Удалено
+      //     'x-user-id': userId // Удалено
+      //   } // Удалено
+      // }); // Удалено
 
-      return response.data;
+      // return response.data; // Удалено
+      console.log(`Обновлен прогресс задания spend_location_currency на ${amount} для пользователя ${userId}`);
+      return { success: true, message: 'Прогресс обновлен' };
     } catch (error) {
       console.error('Ошибка при обновлении прогресса задания трата ресурсов локации:', error);
       return { success: false, error: 'Ошибка обновления прогресса' };

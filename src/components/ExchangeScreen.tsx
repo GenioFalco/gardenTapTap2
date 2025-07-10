@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../lib/api';
 import { AppEvent, emit } from '../lib/events';
+import { config } from '../config'; // Исправляем импорт config
 
 // Интерфейс для пакетов энергии
 interface EnergyPackage {
@@ -106,29 +107,46 @@ const ExchangeScreen: React.FC = () => {
     try {
       console.log(`Покупка пакета энергии: ${pack.name}, цена: ${pack.price}, энергия: +${pack.energy_amount}`);
       
-      // Обновляем локальное состояние монет и энергии
-      const newCoins = coins - pack.price;
-      const newEnergy = Math.min(energy + pack.energy_amount, maxEnergy);
+      // Отправляем прямой запрос к API для покупки энергии
+      const response = await fetch(`${config.apiUrl}/api/player/buy-energy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': api.getUserId() // Идентификатор пользователя
+        },
+        body: JSON.stringify({
+          energyAmount: pack.energy_amount,
+          price: pack.price
+        })
+      });
       
-      // Обновляем состояние
-      setCoins(newCoins);
-      setEnergy(newEnergy);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Не удалось купить энергию');
+      }
+      
+      const data = await response.json();
+      console.log('Ответ сервера:', data);
+      
+      // Обновляем состояние на основе ответа сервера
+      setCoins(data.coins);
+      setEnergy(data.energy);
       
       // Отправляем событие обновления ресурсов для App.tsx
       emit(AppEvent.RESOURCES_UPDATED, {
         currencyId: 'main',
-        amount: newCoins
+        amount: data.coins
       });
       
       // Отправляем событие обновления энергии для App.tsx
       emit(AppEvent.ENERGY_UPDATED, {
-        energy: newEnergy,
-        maxEnergy: maxEnergy
+        energy: data.energy,
+        maxEnergy: data.maxEnergy
       });
       
       // Показываем сообщение об успехе
       showMessage(`+${pack.energy_amount} энергии успешно добавлено!`, 'success');
-      console.log(`Покупка успешна: монеты=${newCoins}, энергия=${newEnergy}/${maxEnergy}`);
+      console.log(`Покупка успешна: монеты=${data.coins}, энергия=${data.energy}/${data.maxEnergy}`);
     } catch (error: any) {
       console.error('Ошибка при покупке энергии:', error);
       showMessage(`Ошибка: ${error.message || 'Что-то пошло не так'}`, 'error');
@@ -164,26 +182,66 @@ const ExchangeScreen: React.FC = () => {
       // Рассчитываем сколько монет получит игрок
       const mainCoinsToReceive = Math.floor(amount * selectedCurrency.exchangeRate);
       
-      // Обновляем балансы
-      const newCurrencyBalance = currencyBalance - amount;
-      const newMainCoins = coins + mainCoinsToReceive;
+      console.log(`Начало обмена: ${amount} ${selectedCurrency.name} на ${mainCoinsToReceive} монет`);
       
-      // Обновляем состояние
+      // 1. Сначала тратим ресурсы локации
+      const spendResponse = await fetch(`${config.apiUrl}/api/player/resources/spend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': api.getUserId()
+        },
+        body: JSON.stringify({
+          currencyId: selectedCurrency.id,
+          amount: amount
+        })
+      });
+      
+      if (!spendResponse.ok) {
+        const errorData = await spendResponse.json();
+        throw new Error(errorData.error || 'Не удалось потратить ресурсы');
+      }
+      
+      const spendData = await spendResponse.json();
+      console.log('Ответ сервера (трата ресурсов):', spendData);
+      
+      // 2. Затем добавляем монеты
+      const addResponse = await fetch(`${config.apiUrl}/api/player/resources/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': api.getUserId()
+        },
+        body: JSON.stringify({
+          currencyId: 'main',
+          amount: mainCoinsToReceive
+        })
+      });
+      
+      if (!addResponse.ok) {
+        const errorData = await addResponse.json();
+        throw new Error(errorData.error || 'Не удалось добавить монеты');
+      }
+      
+      const addData = await addResponse.json();
+      console.log('Ответ сервера (добавление монет):', addData);
+      
+      // Обновляем состояния на основе ответов сервера
       setCurrencyBalances(prev => ({
         ...prev,
-        [selectedCurrency.id]: newCurrencyBalance
+        [selectedCurrency.id]: spendData.amount
       }));
-      setCoins(newMainCoins);
+      setCoins(addData.amount);
       
       // Отправляем события обновления ресурсов
       emit(AppEvent.RESOURCES_UPDATED, {
         currencyId: 'main',
-        amount: newMainCoins
+        amount: addData.amount
       });
       
       emit(AppEvent.RESOURCES_UPDATED, {
         currencyId: selectedCurrency.id,
-        amount: newCurrencyBalance
+        amount: spendData.amount
       });
       
       // Сбрасываем поле ввода
