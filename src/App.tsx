@@ -362,6 +362,8 @@ function App() {
   
   // Восстановление энергии при старте и каждую минуту
   useEffect(() => {
+    // Временно отключаем автоматическое восстановление энергии
+    /*
     if (!playerProgress) return;
     
     // Получаем время последнего обновления энергии из базы данных
@@ -453,6 +455,10 @@ function App() {
     }, msUntilNextRefill);
     
     return () => clearTimeout(initialRefillTimer);
+    */
+    
+    // Просто возвращаем пустую функцию очистки
+    return () => {};
   }, [playerProgress, updateEnergy]);
   
   // Эффект для подписки на событие обновления валюты

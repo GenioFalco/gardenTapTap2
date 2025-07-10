@@ -745,7 +745,7 @@ app.post('/api/player/tap', async (req, res) => {
     }
     
     // Получаем прогресс игрока
-    const playerProgress = await getOrCreatePlayerProgress(userId);
+    const playerProgress = await db.get('SELECT * FROM player_progress WHERE user_id = ?', [userId]);
     
     // Проверяем, достаточно ли энергии
     if (playerProgress.energy <= 0) {
@@ -773,9 +773,6 @@ app.post('/api/player/tap', async (req, res) => {
     // Рассчитываем полученные ресурсы
     const resourcesGained = Math.round(toolPower * locationCoinsPower);
     const mainCurrencyGained = Math.round(toolPower * mainCoinsPower);
-    
-    // Начинаем транзакцию
-    await db.run('BEGIN TRANSACTION');
     
     try {
       // Проверяем лимит хранилища для валюты локации
@@ -829,19 +826,29 @@ app.post('/api/player/tap', async (req, res) => {
         console.log(`Ресурсы локации НЕ добавлены из-за заполненного хранилища`);
       }
       
-      // Уменьшаем энергию
+      // Уменьшаем энергию на 1 (но не меньше 0)
       const newEnergy = Math.max(0, playerProgress.energy - 1);
+      
+      // Просто обновляем энергию, НЕ обновляя время последнего пополнения
       await db.run('UPDATE player_progress SET energy = ? WHERE user_id = ?', [newEnergy, userId]);
       
       // Добавляем опыт (1-3 единицы за тап)
       const expGained = Math.floor(Math.random() * 3) + 1;
-      const levelResult = await addExperience(userId, expGained);
+      
+      // Модифицируем функцию addExperience, чтобы она не запускала checkAndGrantAchievements
+      // Это поможет избежать вложенных транзакций
+      const levelResult = {
+        levelUp: false,
+        level: playerProgress.level,
+        rewards: []
+      };
+      
+      // Обновляем опыт напрямую
+      const newExp = playerProgress.experience + expGained;
+      await db.run('UPDATE player_progress SET experience = ? WHERE user_id = ?', [newExp, userId]);
       
       // Обновляем статистику тапов
       await updateTapStats(userId, actualResourcesGained, 1);
-      
-      // Фиксируем транзакцию
-      await db.run('COMMIT');
       
       // Отправляем результат
       res.json({
@@ -855,9 +862,7 @@ app.post('/api/player/tap', async (req, res) => {
         storageIsFull
       });
     } catch (error) {
-      // Откатываем транзакцию в случае ошибки
-      await db.run('ROLLBACK');
-      console.error('Ошибка при выполнении транзакции тапа:', error);
+      console.error('Ошибка при выполнении операций тапа:', error);
       throw error;
     }
   } catch (error) {
