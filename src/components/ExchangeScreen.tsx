@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as api from '../lib/api';
 import { AppEvent, emit } from '../lib/events';
 import { config } from '../config'; // Исправляем импорт config
@@ -46,6 +46,10 @@ const ExchangeScreen: React.FC = () => {
   const [exchangeAmount, setExchangeAmount] = useState<string>('');
   const [currencyBalances, setCurrencyBalances] = useState<Record<string, number>>({});
   const [exchanging, setExchanging] = useState<boolean>(false);
+  
+  // Состояние для вертикального слайдера
+  const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(0);
+  const sliderRef = useRef<HTMLDivElement>(null);
 
   // Загрузка данных игрока при монтировании компонента
   useEffect(() => {
@@ -278,9 +282,176 @@ const ExchangeScreen: React.FC = () => {
     }
     return Math.floor(parseInt(exchangeAmount) * selectedCurrency.exchangeRate);
   };
+  
+  // Функция для смены текущего блока
+  const goToBlock = (index: number) => {
+    setCurrentBlockIndex(index);
+    
+    if (sliderRef.current) {
+      // Используем фиксированную высоту для скролла вместо динамического расчета
+      const blockHeight = 500; // примерная высота блока в пикселях
+      sliderRef.current.scrollTo({
+        top: index * blockHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+  
+  // Массив блоков для слайдера
+  const blocks = [
+    // Блок покупки энергии
+    <div key="energy" className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-6">
+      <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
+        <h2 className="text-lg font-bold text-yellow-400 text-center">Пополнить энергию</h2>
+      </div>
+      
+      <div className="p-3">
+        {/* Статус энергии и монет */}
+        <div className="flex justify-between mb-3">
+          <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
+            <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
+              ⚡
+            </div>
+            <div>
+              <div className="text-xs text-gray-400">Энергия</div>
+              <div className="font-bold text-white">{energy} / {maxEnergy}</div>
+            </div>
+          </div>
+          
+          <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
+            <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
+              🪙
+            </div>
+            <div>
+              <div className="text-xs text-gray-400">Монеты</div>
+              <div className="font-bold text-white">{coins}</div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Пакеты энергии */}
+        <div className="grid grid-cols-3 gap-2">
+          {ENERGY_PACKAGES.map((pack) => (
+            <div key={pack.id} className="border border-gray-700 rounded-lg p-2 hover:shadow-md transition-shadow bg-gray-800 bg-opacity-90">
+              <div className="flex items-center justify-center mb-1">
+                <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-yellow-400 text-xl">
+                  ⚡
+                </div>
+              </div>
+              <h3 className="text-sm font-medium text-center text-white">{pack.name}</h3>
+              <div className="text-yellow-400 font-bold text-center my-1">+{pack.energy_amount}</div>
+              <div className="text-center text-yellow-500 font-bold mb-2 flex items-center justify-center">
+                {pack.price} <span className="ml-1">🪙</span>
+              </div>
+              <button
+                onClick={() => buyEnergy(pack)}
+                disabled={buying || coins < pack.price || energy >= maxEnergy}
+                className={`w-full py-1 px-2 rounded-md text-center text-sm transition ${
+                  buying || coins < pack.price || energy >= maxEnergy
+                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+                }`}
+              >
+                {buying ? 'Покупка...' : 'Купить'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    
+    // Блок обмена валюты локации на главную
+    <div key="exchange" className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-6">
+      <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
+        <h2 className="text-lg font-bold text-yellow-400 text-center">Обмен ресурсов на монеты</h2>
+      </div>
+      
+      <div className="p-3">
+        {/* Выбор валюты */}
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-300 mb-1">Выберите ресурс для обмена</label>
+          <select 
+            value={selectedCurrency?.id || ''}
+            onChange={(e) => {
+              const currency = LOCATION_CURRENCIES.find(c => c.id === e.target.value);
+              setSelectedCurrency(currency || null);
+            }}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
+          >
+            {LOCATION_CURRENCIES.map(currency => (
+              <option key={currency.id} value={currency.id}>
+                {currency.icon} {currency.name} - Баланс: {currencyBalances[currency.id] || 0}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {/* Курс обмена */}
+        {selectedCurrency && (
+          <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
+            <div className="text-sm text-gray-300">Курс обмена:</div>
+            <div className="flex items-center justify-center">
+              <span className="text-white font-bold">1 {selectedCurrency.icon}</span>
+              <span className="text-gray-400 mx-2">→</span>
+              <span className="text-yellow-400 font-bold">{selectedCurrency.exchangeRate} 🪙</span>
+            </div>
+          </div>
+        )}
+        
+        {/* Ввод суммы для обмена */}
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-300 mb-1">Количество для обмена</label>
+          <input
+            type="number"
+            value={exchangeAmount}
+            onChange={(e) => setExchangeAmount(e.target.value)}
+            placeholder="Введите количество"
+            min="1"
+            className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
+          />
+        </div>
+        
+        {/* Результат обмена */}
+        <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
+          <div className="text-sm text-gray-300">Вы получите:</div>
+          <div className="flex items-center justify-center">
+            <span className="text-yellow-400 font-bold text-xl">{calculateExchangeResult()} 🪙</span>
+          </div>
+        </div>
+        
+        {/* Кнопка обмена */}
+        <button
+          onClick={exchangeCurrency}
+          disabled={exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)}
+          className={`w-full py-2 px-4 rounded-md text-center font-medium transition ${
+            exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)
+              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+          }`}
+        >
+          {exchanging ? 'Обмен...' : 'Обменять'}
+        </button>
+      </div>
+    </div>,
+    
+    // Пустой блок для будущего расширения (третий блок)
+    <div key="future" className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-6">
+      <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
+        <h2 className="text-lg font-bold text-yellow-400 text-center">Скоро будет доступно</h2>
+      </div>
+      
+      <div className="p-3 flex flex-col items-center justify-center h-64">
+        <div className="text-white text-center">
+          <div className="text-5xl mb-4">🔜</div>
+          <h3 className="text-xl font-bold mb-2">Новые возможности</h3>
+          <p className="text-gray-400">Этот раздел пока в разработке</p>
+        </div>
+      </div>
+    </div>
+  ];
 
   return (
-    <div className="w-full max-w-md mx-auto flex flex-col items-center pb-16">
+    <div className="w-full max-w-md mx-auto flex flex-col items-center pb-16 bg-gray-900">
       {/* Сообщения */}
       {message && (
         <div className={`p-2 rounded-lg mb-2 text-center fixed top-28 left-1/2 transform -translate-x-1/2 z-20 ${
@@ -292,142 +463,23 @@ const ExchangeScreen: React.FC = () => {
         </div>
       )}
       
-      {/* Блок покупки энергии */}
-      <div className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-4">
-        <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
-          <h2 className="text-lg font-bold text-yellow-400 text-center">Пополнить энергию</h2>
-        </div>
-        
-        <div className="p-3">
-          {/* Статус энергии и монет */}
-          <div className="flex justify-between mb-3">
-            <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
-              <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
-                ⚡
-              </div>
-              <div>
-                <div className="text-xs text-gray-400">Энергия</div>
-                <div className="font-bold text-white">{energy} / {maxEnergy}</div>
-              </div>
-            </div>
-            
-            <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
-              <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
-                🪙
-              </div>
-              <div>
-                <div className="text-xs text-gray-400">Монеты</div>
-                <div className="font-bold text-white">{coins}</div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Пакеты энергии */}
-          <div className="grid grid-cols-3 gap-2">
-            {ENERGY_PACKAGES.map((pack) => (
-              <div key={pack.id} className="border border-gray-700 rounded-lg p-2 hover:shadow-md transition-shadow bg-gray-800 bg-opacity-90">
-                <div className="flex items-center justify-center mb-1">
-                  <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-yellow-400 text-xl">
-                    ⚡
-                  </div>
-                </div>
-                <h3 className="text-sm font-medium text-center text-white">{pack.name}</h3>
-                <div className="text-yellow-400 font-bold text-center my-1">+{pack.energy_amount}</div>
-                <div className="text-center text-yellow-500 font-bold mb-2 flex items-center justify-center">
-                  {pack.price} <span className="ml-1">🪙</span>
-                </div>
-                <button
-                  onClick={() => buyEnergy(pack)}
-                  disabled={buying || coins < pack.price || energy >= maxEnergy}
-                  className={`w-full py-1 px-2 rounded-md text-center text-sm transition ${
-                    buying || coins < pack.price || energy >= maxEnergy
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
-                  }`}
-                >
-                  {buying ? 'Покупка...' : 'Купить'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      {/* Блок обмена валюты локации на главную */}
-      <div className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full">
-        <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
-          <h2 className="text-lg font-bold text-yellow-400 text-center">Обмен ресурсов на монеты</h2>
-        </div>
-        
-        <div className="p-3">
-          {/* Выбор валюты */}
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-300 mb-1">Выберите ресурс для обмена</label>
-            <select 
-              value={selectedCurrency?.id || ''}
-              onChange={(e) => {
-                const currency = LOCATION_CURRENCIES.find(c => c.id === e.target.value);
-                setSelectedCurrency(currency || null);
-              }}
-              className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
-            >
-              {LOCATION_CURRENCIES.map(currency => (
-                <option key={currency.id} value={currency.id}>
-                  {currency.icon} {currency.name} - Баланс: {currencyBalances[currency.id] || 0}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          {/* Курс обмена */}
-          {selectedCurrency && (
-            <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
-              <div className="text-sm text-gray-300">Курс обмена:</div>
-              <div className="flex items-center justify-center">
-                <span className="text-white font-bold">1 {selectedCurrency.icon}</span>
-                <span className="text-gray-400 mx-2">→</span>
-                <span className="text-yellow-400 font-bold">{selectedCurrency.exchangeRate} 🪙</span>
-              </div>
-            </div>
-          )}
-          
-          {/* Ввод суммы для обмена */}
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-300 mb-1">Количество для обмена</label>
-            <input
-              type="number"
-              value={exchangeAmount}
-              onChange={(e) => setExchangeAmount(e.target.value)}
-              placeholder="Введите количество"
-              min="1"
-              className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
-            />
-          </div>
-          
-          {/* Результат обмена */}
-          <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
-            <div className="text-sm text-gray-300">Вы получите:</div>
-            <div className="flex items-center justify-center">
-              <span className="text-yellow-400 font-bold text-xl">{calculateExchangeResult()} 🪙</span>
-            </div>
-          </div>
-          
-          {/* Кнопка обмена */}
-          <button
-            onClick={exchangeCurrency}
-            disabled={exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)}
-            className={`w-full py-2 px-4 rounded-md text-center font-medium transition ${
-              exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
-            }`}
-          >
-            {exchanging ? 'Обмен...' : 'Обменять'}
-          </button>
+      {/* Контейнер для вертикального слайдера */}
+      <div 
+        ref={sliderRef}
+        className="w-full max-h-[600px] overflow-y-auto scroll-smooth bg-gray-900 rounded-xl overscroll-none"
+        style={{ 
+          scrollbarWidth: 'none', 
+          msOverflowStyle: 'none',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain'
+        }}
+      >
+        <div className="flex flex-col pb-4">
+          {blocks}
         </div>
       </div>
     </div>
   );
 };
 
-export default ExchangeScreen; 
+export default ExchangeScreen;
