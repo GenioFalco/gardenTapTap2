@@ -571,10 +571,12 @@ function App() {
       
       console.log('Tapping with location:', currentLocation);
       console.log('Currency ID for tap:', currencyId);
+      console.log('Энергия до тапа:', playerProgress.energy);
       
       // Вызываем функцию тапа
       const tapResult = await api.tap(currentLocation.id);
       console.log('Tap result:', tapResult);
+      console.log('Энергия после тапа (из ответа API):', tapResult.energyLeft);
       
       // Обновляем количество ресурсов локации
       const newResourceAmount = await api.getResourceAmount(currencyId);
@@ -595,28 +597,31 @@ function App() {
       }
       
       // Отображаем заработанный опыт (всегда 1)
-      console.log(`Заработано 1 опыта`);
+      console.log(`Заработано ${tapResult.experienceGained} опыта`);
       
-      // Обновляем прогресс, но сохраняем энергию из результата тапа
-      const progress = await api.getPlayerProgress();
-      
-      // Обновляем состояние игрока, но используем энергию из результата тапа
-      setPlayerProgress({
-        ...progress,
-        energy: tapResult.energyLeft // Используем энергию из результата тапа
+      // Обновляем прогресс, но НЕ запрашиваем новый прогресс с сервера, чтобы избежать дублирования энергии
+      // Вместо этого напрямую обновляем состояние энергии из результата тапа
+      setPlayerProgress(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          energy: tapResult.energyLeft // Используем энергию из результата тапа
+        };
       });
+      
+      console.log('Энергия установлена в:', tapResult.energyLeft);
       
       // Если уровень повысился, обновляем данные о следующем уровне и показываем модальное окно
       if (tapResult.levelUp) {
-        const nextLevel = await api.getLevelInfo(progress.level + 1);
+        const nextLevel = await api.getLevelInfo(tapResult.level + 1);
         setNextLevelExp(nextLevel.requiredExp);
         
         // Подготовка данных для модального окна
-        setCurrentLevel(progress.level);
+        setCurrentLevel(tapResult.level);
         
         // Копируем награды из результата тапа и преобразуем их в формат ModalReward
         let allRewards = tapResult.rewards.map(reward => convertToModalReward(reward));
-        const newLevel = progress.level;
+        const newLevel = tapResult.level;
         
         // Проверяем, есть ли инструменты, доступные на новом уровне
         try {
@@ -1073,20 +1078,28 @@ function App() {
   // Обработчик события обновления энергии
   useEffect(() => {
     const handleEnergyUpdated = (data?: {energy: number, maxEnergy: number}) => {
+      console.log('Событие обновления энергии:', data);
+      
       if (!data) return;
       
-      console.log('Получено событие обновления энергии:', data);
-      
-      if (playerProgress) {
-        setPlayerProgress(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            energy: data.energy,
-            maxEnergy: data.maxEnergy
-          };
-        });
+      // Проверяем, не дублируется ли обновление энергии
+      if (playerProgress && data.energy === playerProgress.energy) {
+        console.log('Пропускаем дублирующее обновление энергии');
+        return;
       }
+      
+      console.log(`Обновление энергии: ${playerProgress?.energy} -> ${data.energy}`);
+      
+      // Обновляем состояние энергии
+      setPlayerProgress(prev => {
+        if (!prev) return prev;
+        
+        return {
+          ...prev,
+          energy: data.energy,
+          maxEnergy: data.maxEnergy || prev.maxEnergy
+        };
+      });
     };
     
     // Подписываемся на событие

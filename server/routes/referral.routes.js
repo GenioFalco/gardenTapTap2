@@ -198,7 +198,7 @@ router.post('/apply-code', async (req, res) => {
     
     try {
       // Добавляем запись о применении кода
-      await db.run(
+    await db.run(
         'INSERT INTO referral_applications (user_id, referrer_id, code, applied_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
         [userId, referralCode.user_id, code]
       );

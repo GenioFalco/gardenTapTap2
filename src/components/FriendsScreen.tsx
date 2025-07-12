@@ -82,12 +82,12 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       if (statsResponse.success) {
         setReferralStats(statsResponse.stats);
       }
-    } catch (err) {
-      console.error('Ошибка при загрузке реферальных данных:', err);
+      } catch (err) {
+        console.error('Ошибка при загрузке реферальных данных:', err);
     } finally {
       setIsLoadingReferral(false);
-    }
-  };
+      }
+    };
 
   const handleInviteFriend = async () => {
     try {
@@ -131,7 +131,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
       setIsInviteLoading(false);
     }
   };
-  
+
   const handleCopyLink = async () => {
     try {
       // Сохраняем ссылку для копирования с реферальным кодом
@@ -239,7 +239,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   return (
     <div className="h-screen w-full pt-36 mt-1 px-4 flex flex-col items-center overflow-hidden relative">
       <div className="absolute inset-0 z-0" 
-           style={{backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
+        style={{backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
       
       {/* Панель приглашения друзей */}
       <motion.div 
@@ -292,36 +292,36 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
               </div>
               
               <div className="flex flex-col space-y-2">
-                <div className="flex items-center space-x-2">
-                  {/* Кнопка приглашения через Telegram */}
-                  <button 
-                    onClick={handleInviteFriend}
-                    disabled={isInviteLoading}
+            <div className="flex items-center space-x-2">
+              {/* Кнопка приглашения через Telegram */}
+              <button 
+                onClick={handleInviteFriend} 
+                disabled={isInviteLoading}
                     className={`bg-yellow-500/90 hover:bg-yellow-600 text-white font-medium py-1 px-3 text-sm rounded-lg shadow-md transition-all duration-200 flex items-center justify-center flex-1 ${isInviteLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  >
-                    {isInviteLoading ? (
+              >
+                {isInviteLoading ? (
                       <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
-                    ) : (
+                ) : (
                       <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.1 14.9l-3.2-3.2 1.4-1.4 1.8 1.8 5-5 1.4 1.4-6.4 6.4z" />
-                      </svg>
-                    )}
-                    Пригласить
-                  </button>
-                  
-                  {/* Кнопка копирования ссылки */}
-                  <button 
-                    onClick={handleCopyLink}
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.1 14.9l-3.2-3.2 1.4-1.4 1.8 1.8 5-5 1.4 1.4-6.4 6.4z" />
+                  </svg>
+                )}
+                Пригласить
+              </button>
+              
+              {/* Кнопка копирования ссылки */}
+              <button 
+                onClick={handleCopyLink}
                     className="bg-gray-700/90 hover:bg-gray-600 text-white p-1.5 rounded-lg shadow-md transition-all duration-200"
-                    title="Скопировать ссылку"
-                  >
+                title="Скопировать ссылку"
+              >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                  </button>
-                </div>
-                
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+            
                 {/* Кнопка применения реферального кода */}
                 {!showApplyCodeForm ? (
                   <button 
@@ -363,27 +363,27 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
                           <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                       </button>
-                    </div>
+              </div>
                     {applyCodeMessage && (
                       <div className={`text-xs ${applyCodeSuccess ? 'text-green-400' : 'text-red-400'}`}>
                         {applyCodeMessage}
-                      </div>
+              </div>
                     )}
-                  </div>
+            </div>
                 )}
               </div>
             </>
-          )}
-          
-          {showInviteSuccess && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
+            )}
+            
+            {showInviteSuccess && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
               className="text-green-300 text-xs mt-1"
-            >
-              {inviteMessage}
-            </motion.div>
-          )}
+              >
+                {inviteMessage}
+              </motion.div>
+            )}
         </div>
       </motion.div>
       

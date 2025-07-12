@@ -1,10 +1,10 @@
 const express = require('express');
 const cors = require('cors');
-  const { db, initDatabase, CurrencyType, RewardType } = require('./db');
-  const currencyRoutes = require('./routes/currency.routes');
+const { db, initDatabase, CurrencyType, RewardType } = require('./db');
+const currencyRoutes = require('./routes/currency.routes');
   const referralRoutes = require('./routes/referral.routes');
-  
-  // Инициализируем Express приложение
+
+// Инициализируем Express приложение
 const app = express();
 const port = process.env.PORT || 3002;
 
@@ -95,12 +95,12 @@ async function ensureUserExists(userId) {
 // Подключаем маршруты для отдельных функциональностей
 const tasksRoutes = require('./routes/tasks.routes');
 
-  // Регистрируем маршрутизаторы
-  app.use('/api/currencies', currencyRoutes);
-  app.use('/api/player/tasks', tasksRoutes);
+// Регистрируем маршрутизаторы
+app.use('/api/currencies', currencyRoutes);
+app.use('/api/player/tasks', tasksRoutes);
   app.use('/api/referral', referralRoutes); // Добавляем маршруты для рефералов
-  
-  // Получить все локации
+
+// Получить все локации
 app.get('/api/locations', async (req, res) => {
   try {
     const locations = await db.all('SELECT * FROM locations');
@@ -532,7 +532,7 @@ app.get('/api/player/progress', async (req, res) => {
 app.post('/api/player/update-energy', async (req, res) => {
   try {
     const { userId } = req;
-    const { energy } = req.body;
+    const { energy, fromPurchase } = req.body;
     
     if (energy === undefined) {
       return res.status(400).json({ error: 'Отсутствует параметр energy' });
@@ -559,10 +559,10 @@ app.post('/api/player/update-energy', async (req, res) => {
     console.log(`Текущее время: ${new Date(currentTime).toLocaleTimeString()}`);
     console.log(`Прошло миллисекунд: ${timeDifference}, минут: ${minutesPassed}`);
     
-    // Если запрашивается увеличение энергии, проверяем, прошла ли минута
+    // Если запрашивается увеличение энергии, проверяем, прошла ли минута или это покупка энергии
     if (energy > playerProgress.energy) {
-      // Если это восстановление энергии и не прошла минута, возвращаем ошибку
-      if (minutesPassed < 1 && timeDifference < 60000) {
+      // Если это восстановление энергии и не прошла минута, и это не покупка, возвращаем ошибку
+      if (minutesPassed < 1 && timeDifference < 60000 && !fromPurchase) {
         console.log('Попытка восстановить энергию слишком рано, отклонено');
         return res.status(403).json({ 
           error: 'Слишком рано для восстановления энергии',
@@ -570,7 +570,7 @@ app.post('/api/player/update-energy', async (req, res) => {
         });
       }
       
-      // Если прошла минута, обновляем время последнего восстановления
+      // Если прошла минута или это покупка, обновляем время последнего восстановления
       const newRefillTime = new Date().toISOString();
       console.log(`Разрешено обновление энергии, новое время: ${newRefillTime}`);
       
@@ -828,6 +828,7 @@ app.post('/api/player/tap', async (req, res) => {
       
       // Уменьшаем энергию на 1 (но не меньше 0)
       const newEnergy = Math.max(0, playerProgress.energy - 1);
+      console.log(`[TAP] Уменьшение энергии: ${playerProgress.energy} -> ${newEnergy}`);
       
       // Просто обновляем энергию, НЕ обновляя время последнего пополнения
       await db.run('UPDATE player_progress SET energy = ? WHERE user_id = ?', [newEnergy, userId]);
@@ -4539,6 +4540,8 @@ app.post('/api/player/buy-energy', async (req, res) => {
       return res.status(404).json({ error: 'Профиль игрока не найден' });
     }
     
+    console.log(`Текущая энергия игрока: ${progress.energy}/${progress.max_energy}`);
+    
     // Получаем баланс монет
     const mainCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 1', [userId]);
     const coinAmount = mainCurrency ? parseFloat(mainCurrency.amount) : 0;
@@ -4564,30 +4567,41 @@ app.post('/api/player/buy-energy', async (req, res) => {
       
       // Вычисляем новое количество энергии (не превышая максимум)
       const newEnergy = Math.min(progress.energy + energyAmount, progress.max_energy);
+      console.log(`Расчет новой энергии: ${progress.energy} + ${energyAmount} = ${newEnergy} (макс: ${progress.max_energy})`);
       
-      // Обновляем энергию
-      await db.run(`
-        UPDATE player_progress
-        SET energy = ?,
-            last_energy_refill_time = CURRENT_TIMESTAMP
-        WHERE user_id = ?
-      `, [newEnergy, userId]);
+      // Отправляем запрос на обновление энергии с параметром fromPurchase
+      const updateResponse = await fetch(`${req.protocol}://${req.get('host')}/api/player/update-energy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId
+        },
+        body: JSON.stringify({ 
+          energy: newEnergy,
+          fromPurchase: true
+        })
+      });
+      
+      if (!updateResponse.ok) {
+        throw new Error('Не удалось обновить энергию при покупке');
+      }
+      
+      const updatedEnergy = await updateResponse.json();
       
       // Фиксируем транзакцию
       await db.run('COMMIT');
       
-      // Возвращаем обновленные данные
-      const updatedProgress = await db.get('SELECT energy, max_energy, last_energy_refill_time FROM player_progress WHERE user_id = ?', [userId]);
+      // Получаем обновленные данные о монетах
       const updatedCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 1', [userId]);
       const updatedCoins = updatedCurrency ? parseFloat(updatedCurrency.amount) : 0;
       
-      console.log(`Энергия успешно куплена: ${progress.energy} -> ${updatedProgress.energy}, монеты: ${coinAmount} -> ${updatedCoins}`);
+      console.log(`Энергия успешно куплена: ${progress.energy} -> ${updatedEnergy.energy}, монеты: ${coinAmount} -> ${updatedCoins}`);
       
       res.json({
         success: true,
-        energy: updatedProgress.energy,
-        maxEnergy: updatedProgress.max_energy,
-        lastEnergyRefillTime: updatedProgress.last_energy_refill_time,
+        energy: updatedEnergy.energy,
+        maxEnergy: updatedEnergy.maxEnergy,
+        lastEnergyRefillTime: updatedEnergy.lastEnergyRefillTime,
         coins: updatedCoins
       });
     } catch (error) {

@@ -131,11 +131,11 @@ export const getPlayerProgress = async (): Promise<PlayerProgress> => {
 };
 
 // Обновить энергию игрока
-export const updatePlayerEnergy = async (energy: number): Promise<{ success: boolean; energy: number; maxEnergy: number; lastEnergyRefillTime: string; timeUntilRefill?: number }> => {
+export const updatePlayerEnergy = async (energy: number, fromPurchase: boolean = false): Promise<{ success: boolean; energy: number; maxEnergy: number; lastEnergyRefillTime: string; timeUntilRefill?: number }> => {
   try {
     return await fetchApi<{ success: boolean; energy: number; maxEnergy: number; lastEnergyRefillTime: string; timeUntilRefill?: number }>('/player/update-energy', {
       method: 'POST',
-      body: JSON.stringify({ energy })
+      body: JSON.stringify({ energy, fromPurchase })
     });
   } catch (error: any) {
     // Проверяем, не связана ли ошибка с преждевременным восстановлением энергии
@@ -208,6 +208,8 @@ export const tap = async (locationId: number): Promise<{
   rewards: Reward[];
   energyLeft: number;
 }> => {
+  console.log(`[API] Отправка запроса тапа для локации ${locationId}`);
+  
   const response = await fetchApi<{
     resourcesGained: number;
     mainCurrencyGained: number;
@@ -220,6 +222,8 @@ export const tap = async (locationId: number): Promise<{
     method: 'POST',
     body: JSON.stringify({ locationId })
   });
+  
+  console.log(`[API] Получен ответ тапа: энергия=${response.energyLeft}`);
   
   // Обновляем прогресс заданий (тапов)
   try {

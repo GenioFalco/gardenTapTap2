@@ -106,8 +106,9 @@ const ExchangeScreen: React.FC = () => {
     setBuying(true);
     try {
       console.log(`Покупка пакета энергии: ${pack.name}, цена: ${pack.price}, энергия: +${pack.energy_amount}`);
+      console.log(`Текущая энергия перед покупкой: ${energy}/${maxEnergy}`);
       
-      // Отправляем прямой запрос к API для покупки энергии
+      // Отправляем запрос на сервер для покупки энергии через API
       const response = await fetch(`${config.apiUrl}/api/player/buy-energy`, {
         method: 'POST',
         headers: {
@@ -127,6 +128,7 @@ const ExchangeScreen: React.FC = () => {
       
       const data = await response.json();
       console.log('Ответ сервера:', data);
+      console.log(`Энергия после покупки (из ответа сервера): ${data.energy}/${data.maxEnergy}`);
       
       // Обновляем состояние на основе ответа сервера
       setCoins(data.coins);
@@ -139,9 +141,11 @@ const ExchangeScreen: React.FC = () => {
       });
       
       // Отправляем событие обновления энергии для App.tsx
+      console.log(`Отправляем событие обновления энергии: ${data.energy}/${data.maxEnergy}`);
       emit(AppEvent.ENERGY_UPDATED, {
         energy: data.energy,
-        maxEnergy: data.maxEnergy
+        maxEnergy: data.maxEnergy,
+        lastEnergyRefillTime: data.lastEnergyRefillTime
       });
       
       // Показываем сообщение об успехе
