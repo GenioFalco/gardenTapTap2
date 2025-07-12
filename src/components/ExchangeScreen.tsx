@@ -19,6 +19,18 @@ interface LocationCurrency {
   exchangeRate: number; // Курс обмена на главную валюту
 }
 
+// Интерфейс для услуги
+interface Service {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  currency_id: string;
+  status: string;
+  image_path: string;
+  contact_info: string;
+}
+
 // Фиксированные пакеты энергии
 const ENERGY_PACKAGES: EnergyPackage[] = [
   { id: 1, name: 'Маленький пакет', energy_amount: 10, price: 50 },
@@ -47,6 +59,13 @@ const ExchangeScreen: React.FC = () => {
   const [currencyBalances, setCurrencyBalances] = useState<Record<string, number>>({});
   const [exchanging, setExchanging] = useState<boolean>(false);
   
+  // Состояния для услуг
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [contactInfo, setContactInfo] = useState<string>('');
+  const [orderNotes, setOrderNotes] = useState<string>('');
+  const [isOrdering, setIsOrdering] = useState<boolean>(false);
+  
   // Состояние для вертикального слайдера
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number>(0);
   const sliderRef = useRef<HTMLDivElement>(null);
@@ -54,6 +73,7 @@ const ExchangeScreen: React.FC = () => {
   // Загрузка данных игрока при монтировании компонента
   useEffect(() => {
     loadPlayerData();
+    loadServices();
   }, []);
 
   // Функция для загрузки данных игрока
@@ -90,6 +110,32 @@ const ExchangeScreen: React.FC = () => {
     } catch (error) {
       console.error('Ошибка при загрузке данных игрока:', error);
       showMessage('Не удалось загрузить данные. Попробуйте позже.', 'error');
+    }
+  };
+
+  // Функция для загрузки доступных услуг
+  const loadServices = async () => {
+    try {
+      const response = await fetch(`${config.apiUrl}/api/services`, {
+        headers: {
+          'x-user-id': api.getUserId()
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Не удалось загрузить список услуг');
+      }
+      
+      const servicesData = await response.json();
+      setServices(servicesData);
+      
+      // Если есть услуги, устанавливаем первую по умолчанию
+      if (servicesData.length > 0) {
+        setSelectedService(servicesData[0]);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке услуг:', error);
+      showMessage('Не удалось загрузить список услуг', 'error');
     }
   };
 
@@ -269,6 +315,67 @@ const ExchangeScreen: React.FC = () => {
     }
   };
 
+  // Функция для заказа услуги
+  const orderService = async () => {
+    if (!selectedService) {
+      showMessage('Выберите услугу для заказа', 'error');
+      return;
+    }
+    
+    if (!contactInfo.trim()) {
+      showMessage('Укажите контактную информацию', 'error');
+      return;
+    }
+    
+    if (coins < selectedService.price) {
+      showMessage('Недостаточно монет для заказа услуги', 'error');
+      return;
+    }
+    
+    setIsOrdering(true);
+    try {
+      const response = await fetch(`${config.apiUrl}/api/services/order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': api.getUserId()
+        },
+        body: JSON.stringify({
+          serviceId: selectedService.id,
+          contactInfo,
+          notes: orderNotes
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Не удалось оформить заказ');
+      }
+      
+      const data = await response.json();
+      
+      // Обновляем баланс монет
+      setCoins(data.balance);
+      
+      // Отправляем событие обновления ресурсов
+      emit(AppEvent.RESOURCES_UPDATED, {
+        currencyId: 'main',
+        amount: data.balance
+      });
+      
+      // Сбрасываем форму
+      setContactInfo('');
+      setOrderNotes('');
+      
+      showMessage(`Заказ успешно оформлен! ID заказа: ${data.orderId}`, 'success');
+    } catch (error: any) {
+      console.error('Ошибка при заказе услуги:', error);
+      showMessage(`Ошибка: ${error.message || 'Что-то пошло не так'}`, 'error');
+    } finally {
+      setIsOrdering(false);
+    }
+  };
+
   // Функция для отображения сообщений
   const showMessage = (text: string, type: 'success' | 'error') => {
     setMessage({ text, type });
@@ -296,7 +403,7 @@ const ExchangeScreen: React.FC = () => {
       });
     }
   };
-  
+
   // Массив блоков для слайдера
   const blocks = [
     // Блок покупки энергии
@@ -434,18 +541,89 @@ const ExchangeScreen: React.FC = () => {
       </div>
     </div>,
     
-    // Пустой блок для будущего расширения (третий блок)
-    <div key="future" className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-6">
+    // Блок заказа услуг за монеты
+    <div key="services" className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-6">
       <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
-        <h2 className="text-lg font-bold text-yellow-400 text-center">Скоро будет доступно</h2>
+        <h2 className="text-lg font-bold text-yellow-400 text-center">Услуги за монеты</h2>
       </div>
       
-      <div className="p-3 flex flex-col items-center justify-center h-64">
-        <div className="text-white text-center">
-          <div className="text-5xl mb-4">🔜</div>
-          <h3 className="text-xl font-bold mb-2">Новые возможности</h3>
-          <p className="text-gray-400">Этот раздел пока в разработке</p>
+      <div className="p-3">
+        {/* Информация о балансе */}
+        <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700 flex items-center justify-center">
+          <div className="flex items-center">
+            <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-2">
+              🪙
+            </div>
+            <div>
+              <div className="text-xs text-gray-400">Ваш баланс:</div>
+              <div className="font-bold text-white">{coins} монет</div>
+            </div>
+          </div>
         </div>
+        
+        {/* Выбор услуги */}
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-300 mb-1">Выберите услугу</label>
+          <select 
+            value={selectedService?.id || ''}
+            onChange={(e) => {
+              const serviceId = parseInt(e.target.value);
+              const service = services.find(s => s.id === serviceId);
+              setSelectedService(service || null);
+            }}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
+          >
+            {services.map(service => (
+              <option key={service.id} value={service.id}>
+                {service.name} - {service.price} 🪙
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {/* Информация об услуге */}
+        {selectedService && (
+          <div className="mb-3 bg-gray-800 p-3 rounded-md border border-gray-700">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-md font-bold text-white">{selectedService.name}</h3>
+              <div className="text-yellow-400 font-bold">{selectedService.price} 🪙</div>
+            </div>
+            <p className="text-sm text-gray-300 mb-2">{selectedService.description}</p>
+          </div>
+        )}
+        
+        {/* Форма заказа */}
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-300 mb-1">Контактная информация *</label>
+          <input
+            type="text"
+            value={contactInfo}
+            onChange={(e) => setContactInfo(e.target.value)}
+            placeholder="Email, телефон или другой способ связи"
+            className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500 mb-2"
+          />
+          
+          <label className="block text-sm font-medium text-gray-300 mb-1">Примечание к заказу</label>
+          <textarea
+            value={orderNotes}
+            onChange={(e) => setOrderNotes(e.target.value)}
+            placeholder="Дополнительная информация по заказу (необязательно)"
+            className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500 h-20"
+          />
+        </div>
+        
+        {/* Кнопка заказа */}
+        <button
+          onClick={orderService}
+          disabled={isOrdering || !selectedService || !contactInfo.trim() || coins < (selectedService?.price || 0)}
+          className={`w-full py-2 px-4 rounded-md text-center font-medium transition ${
+            isOrdering || !selectedService || !contactInfo.trim() || coins < (selectedService?.price || 0)
+              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+          }`}
+        >
+          {isOrdering ? 'Оформление...' : 'Заказать услугу'}
+        </button>
       </div>
     </div>
   ];

@@ -4749,3 +4749,202 @@ app.post('/api/player/resources/spend', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+// API для услуг
+app.get('/api/services', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем список активных услуг
+    const services = await db.all(`
+      SELECT * FROM services 
+      WHERE status = 'active' 
+      ORDER BY price ASC
+    `);
+    
+    res.json(services);
+  } catch (error) {
+    console.error('Ошибка при получении списка услуг:', error);
+    res.status(500).json({ error: 'Ошибка при получении списка услуг' });
+  }
+});
+
+app.get('/api/services/:id', async (req, res) => {
+  try {
+    const { userId } = req;
+    const serviceId = parseInt(req.params.id);
+    
+    if (isNaN(serviceId)) {
+      return res.status(400).json({ error: 'Некорректный ID услуги' });
+    }
+    
+    // Получаем информацию об услуге
+    const service = await db.get(`
+      SELECT * FROM services 
+      WHERE id = ? AND status = 'active'
+    `, [serviceId]);
+    
+    if (!service) {
+      return res.status(404).json({ error: 'Услуга не найдена' });
+    }
+    
+    res.json(service);
+  } catch (error) {
+    console.error('Ошибка при получении информации об услуге:', error);
+    res.status(500).json({ error: 'Ошибка при получении информации об услуге' });
+  }
+});
+
+app.post('/api/services/order', async (req, res) => {
+  try {
+    const { userId } = req;
+    const { serviceId, contactInfo, notes } = req.body;
+    
+    if (!serviceId || !contactInfo) {
+      return res.status(400).json({ error: 'Отсутствуют обязательные параметры' });
+    }
+    
+    // Проверяем существование услуги
+    const service = await db.get(`
+      SELECT * FROM services 
+      WHERE id = ? AND status = 'active'
+    `, [serviceId]);
+    
+    if (!service) {
+      return res.status(404).json({ error: 'Услуга не найдена или недоступна' });
+    }
+    
+    // Проверяем и создаем таблицу player_currency, если она не существует
+    const tableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='player_currency'"
+    );
+    
+    if (!tableExists) {
+      console.log('Создаем таблицу player_currency');
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS player_currency (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          currency_id TEXT NOT NULL,
+          amount INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(user_id, currency_id)
+        )
+      `);
+      console.log('Таблица player_currency успешно создана');
+      
+      // Добавляем запись для пользователя с начальным балансом
+      await db.run(`
+        INSERT OR IGNORE INTO player_currency (user_id, currency_id, amount)
+        VALUES (?, ?, 1000)
+      `, [userId, service.currency_id]);
+    }
+    
+    // Проверяем достаточно ли монет у пользователя
+    const userCurrency = await db.get(`
+      SELECT amount FROM player_currency 
+      WHERE user_id = ? AND currency_id = ?
+    `, [userId, service.currency_id]);
+    
+    // Если записи о валюте нет, создаем её с начальным балансом
+    if (!userCurrency) {
+      await db.run(`
+        INSERT INTO player_currency (user_id, currency_id, amount)
+        VALUES (?, ?, 1000)
+      `, [userId, service.currency_id]);
+      
+      // Получаем созданную запись
+      const newUserCurrency = await db.get(`
+        SELECT amount FROM player_currency 
+        WHERE user_id = ? AND currency_id = ?
+      `, [userId, service.currency_id]);
+      
+      if (newUserCurrency.amount < service.price) {
+        return res.status(400).json({ error: 'Недостаточно монет для заказа услуги' });
+      }
+    } else if (userCurrency.amount < service.price) {
+      return res.status(400).json({ error: 'Недостаточно монет для заказа услуги' });
+    }
+    
+    // Проверяем и создаем таблицу service_orders, если она не существует
+    const ordersTableExists = await db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='service_orders'"
+    );
+    
+    if (!ordersTableExists) {
+      console.log('Создаем таблицу service_orders');
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS service_orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          service_id INTEGER NOT NULL,
+          status TEXT DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          contact_info TEXT,
+          notes TEXT
+        )
+      `);
+      console.log('Таблица service_orders успешно создана');
+    }
+    
+    // Начинаем транзакцию
+    await db.run('BEGIN TRANSACTION');
+    
+    try {
+      // Списываем монеты
+      await db.run(`
+        UPDATE player_currency 
+        SET amount = amount - ? 
+        WHERE user_id = ? AND currency_id = ?
+      `, [service.price, userId, service.currency_id]);
+      
+      // Создаем заказ
+      const result = await db.run(`
+        INSERT INTO service_orders (user_id, service_id, status, contact_info, notes)
+        VALUES (?, ?, 'pending', ?, ?)
+      `, [userId, serviceId, contactInfo, notes || '']);
+      
+      // Получаем обновленный баланс
+      const updatedCurrency = await db.get(`
+        SELECT amount FROM player_currency 
+        WHERE user_id = ? AND currency_id = ?
+      `, [userId, service.currency_id]);
+      
+      // Завершаем транзакцию
+      await db.run('COMMIT');
+      
+      res.json({
+        success: true,
+        orderId: result.lastID,
+        balance: updatedCurrency ? updatedCurrency.amount : 0
+      });
+    } catch (error) {
+      // Откатываем транзакцию в случае ошибки
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Ошибка при создании заказа услуги:', error);
+    res.status(500).json({ error: 'Ошибка при создании заказа услуги' });
+  }
+});
+
+app.get('/api/services/orders', async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    // Получаем историю заказов пользователя
+    const orders = await db.all(`
+      SELECT o.*, s.name as service_name, s.price 
+      FROM service_orders o
+      JOIN services s ON o.service_id = s.id
+      WHERE o.user_id = ?
+      ORDER BY o.created_at DESC
+    `, [userId]);
+    
+    res.json(orders);
+  } catch (error) {
+    console.error('Ошибка при получении истории заказов:', error);
+    res.status(500).json({ error: 'Ошибка при получении истории заказов' });
+  }
+});

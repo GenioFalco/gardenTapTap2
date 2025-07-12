@@ -759,3 +759,76 @@ export const applyReferralCode = async (code: string): Promise<{
     body: JSON.stringify({ code })
   });
 }; 
+
+// Интерфейс для услуги
+export interface Service {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  currency_id: string;
+  status: string;
+  image_path: string;
+  contact_info: string;
+}
+
+// Интерфейс для заказа услуги
+export interface ServiceOrder {
+  id: number;
+  user_id: string;
+  service_id: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  contact_info: string;
+  notes: string;
+}
+
+// Получить список доступных услуг
+export const getServices = async (): Promise<Service[]> => {
+  return await fetchApi<Service[]>('/services');
+};
+
+// Получить детали конкретной услуги
+export const getServiceById = async (serviceId: number): Promise<Service> => {
+  return await fetchApi<Service>(`/services/${serviceId}`);
+};
+
+// Заказать услугу
+export const orderService = async (
+  serviceId: number, 
+  contactInfo: string, 
+  notes: string = ''
+): Promise<{ 
+  success: boolean; 
+  orderId?: number; 
+  error?: string;
+}> => {
+  try {
+    const result = await fetchApi<{ 
+      success: boolean; 
+      orderId?: number; 
+      error?: string;
+    }>('/services/order', {
+      method: 'POST',
+      body: JSON.stringify({
+        serviceId,
+        contactInfo,
+        notes
+      })
+    });
+    
+    return result;
+  } catch (error: any) {
+    console.error('Ошибка при заказе услуги:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Произошла ошибка при заказе услуги' 
+    };
+  }
+};
+
+// Получить историю заказов пользователя
+export const getUserServiceOrders = async (): Promise<ServiceOrder[]> => {
+  return await fetchApi<ServiceOrder[]>('/services/orders');
+}; 
