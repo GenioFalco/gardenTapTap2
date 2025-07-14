@@ -128,18 +128,36 @@ app.get('/api/player/locations', async (req, res) => {
     const unlockedLocationIds = unlockedLocations.map(loc => loc.location_id);
     
     // Получаем профиль игрока для проверки ранга
-    const playerProfile = await db.get(`
+    let playerProfile = await db.get(`
       SELECT current_rank_id FROM player_profile WHERE user_id = ?
     `, [userId]);
     
-    const playerRank = playerProfile ? playerProfile.current_rank_id : 1;
+    // Если профиль не найден, создаем его с рангом 1 по умолчанию
+    if (!playerProfile) {
+      await db.run(`
+        INSERT INTO player_profile 
+          (user_id, current_rank_id, highest_rank_id, last_rank_id, total_points)
+        VALUES (?, 1, 1, 1, 0)
+      `, [userId]);
+      playerProfile = { current_rank_id: 1 };
+    }
+    
+    const playerRank = playerProfile.current_rank_id;
     
     // Получаем все доступные локации (разблокированные или доступные по рангу)
-    const availableLocations = await db.all(`
-      SELECT * FROM locations 
-      WHERE id IN (${unlockedLocationIds.length > 0 ? unlockedLocationIds.join(',') : 0})
-      OR unlock_rank <= ?
-    `, [playerRank]);
+    let availableLocations;
+    if (unlockedLocationIds.length > 0) {
+      availableLocations = await db.all(`
+        SELECT * FROM locations 
+        WHERE id IN (${unlockedLocationIds.join(',')})
+        OR unlock_rank <= ?
+      `, [playerRank]);
+    } else {
+      availableLocations = await db.all(`
+        SELECT * FROM locations 
+        WHERE unlock_rank <= ?
+      `, [playerRank]);
+    }
     
     res.json(availableLocations);
   } catch (error) {
@@ -1960,6 +1978,13 @@ async function getOrCreatePlayerProgress(userId) {
       INSERT INTO player_progress 
         (user_id, level, experience, energy, max_energy, last_energy_refill_time, last_login)
       VALUES (?, 1, 0, 100, 100, datetime('now'), datetime('now'))
+    `, [userId]);
+    
+    // Создаем запись в player_profile с рангом 1 по умолчанию
+    await db.run(`
+      INSERT OR IGNORE INTO player_profile 
+        (user_id, current_rank_id, highest_rank_id, last_rank_id, total_points)
+      VALUES (?, 1, 1, 1, 0)
     `, [userId]);
     
     // Создаем запись основной валюты (сад-коины)

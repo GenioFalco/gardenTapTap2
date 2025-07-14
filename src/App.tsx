@@ -98,23 +98,40 @@ function App() {
         const user = api.getUserId();
         setUserId(user);
         
-        // Получаем все локации
-        const allLocations = await api.getLocations();
-        const locationsWithPlaceholders = allLocations.map(location => ({
-          ...location,
-          // Нормализуем поля для поддержки как camelCase, так и snake_case
-          characterId: location.characterId || location.character_id || 1, // По умолчанию 1
-          currencyType: (location.currencyType || location.currency_type || CurrencyType.FOREST).toUpperCase() as CurrencyType,
-          currencyId: (location.currencyId || location.currency_type || 'forest').toLowerCase(),
-          // Другие поля с значениями по умолчанию
-          description: location.description || 'Без описания',
-          unlockLevel: location.unlockLevel || 1,
-          resourceName: location.resourceName || 'Ресурсы',
-          // Используем путь из базы данных или значение по умолчанию
-          background: location.background || '/assets/backgrounds/forest.jpg',
-        }));
+        // Получаем разблокированные локации с сервера (они уже фильтруются по рангу)
+        const unlockedLocations = await api.getUnlockedLocations();
         
-        console.log('Normalized locations:', locationsWithPlaceholders);
+        // Функция для преобразования currency_id в тип валюты
+        const getCurrencyTypeFromId = (currencyId: number): string => {
+          switch (currencyId) {
+            case 1: return 'main';
+            case 2: return 'forest';
+            case 3: return 'dirt';
+            case 4: return 'weed';
+            case 5: return 'farm';
+            default: return 'forest';
+          }
+        };
+        
+        const locationsWithPlaceholders = unlockedLocations.map(location => {
+          const currencyId = (location as any).currency_id || 2; // По умолчанию forest (ID=2)
+          const currencyType = getCurrencyTypeFromId(currencyId);
+          return {
+            ...location,
+            // Нормализуем поля для поддержки как camelCase, так и snake_case
+            characterId: location.characterId || (location as any).character_id || 1, // По умолчанию 1
+            currencyType: currencyType.toUpperCase() as CurrencyType,
+            currencyId: currencyType.toLowerCase(),
+            // Другие поля с значениями по умолчанию
+            description: location.description || 'Без описания',
+            unlockLevel: location.unlockLevel || (location as any).unlock_level || 1,
+            resourceName: location.resourceName || 'Ресурсы',
+            // Используем путь из базы данных или значение по умолчанию
+            background: location.background || '/assets/backgrounds/forest.jpg',
+          };
+        });
+        
+        console.log('Unlocked locations from server:', locationsWithPlaceholders);
         setLocations(locationsWithPlaceholders as Location[]);
         
         // Получаем прогресс игрока
@@ -1128,16 +1145,10 @@ function App() {
     switch (currencyType.toLowerCase()) {
       case 'forest':
         return 'Дерево';
-      case 'garden':
-        return 'Овощи';
-      case 'winter':
-        return 'Снежинки';
-      case 'mountain':
-        return 'Камень';
-      case 'desert':
-        return 'Песок';
-      case 'lake':
-        return 'Вода';
+      case 'dirt':
+        return 'Грязь';
+      case 'weed':
+        return 'Сорняки';
       case 'main':
         return 'Сад-коины';
       default:
@@ -1152,42 +1163,16 @@ function App() {
         return '/assets/currencies/garden_coin.png';
       case 'forest':
         return '/assets/currencies/wood.png';
-      case 'garden':
-        return '/assets/currencies/vegetable.png';
-      case 'winter':
-        return '/assets/currencies/snowflake.png';
-      case 'mountain':
-        return '/assets/currencies/stone.png';
-      case 'desert':
-        return '/assets/currencies/sand.png';
-      case 'lake':
-        return '/assets/currencies/water.png';
+      case 'dirt':
+        return '/assets/currencies/dirt.png';
+      case 'weed':
+        return '/assets/currencies/weed.png';
       default:
         return '/assets/currencies/garden_coin.png'; // Используем монету по умолчанию
     }
   };
   
-  // Функция для получения эмодзи для валюты
-  const getCurrencyEmoji = (currencyType: string): string => {
-    switch (currencyType.toLowerCase()) {
-      case 'main':
-        return '🪙';
-      case 'forest':
-        return '🪵';
-      case 'garden':
-        return '🥕';
-      case 'winter':
-        return '❄️';
-      case 'mountain':
-        return '🪨';
-      case 'desert':
-        return '🏜️';
-      case 'lake':
-        return '💧';
-      default:
-        return '💎';
-    }
-  };
+
   
   // Определяем тип валюты для текущей локации
   const locationCurrencyType = (currentLocation.currencyType || 
@@ -1255,18 +1240,16 @@ function App() {
           
           <div className="grid grid-cols-1 gap-4 max-h-[calc(100vh-220px)] overflow-y-auto relative z-10">
             {locations.map((location) => {
-              const isUnlocked = playerProgress.unlockedLocations.includes(location.id);
+              const isUnlocked = true; // Все локации в массиве уже разблокированы (фильтруются сервером)
               const isActive = location.id === currentLocationId;
               
               // Определяем цвет градиента в зависимости от типа локации
               let gradientColors = "from-blue-700 to-blue-900";
               const currencyType = String(location.currencyType || '').toUpperCase();
               if (currencyType === "FOREST") gradientColors = "from-green-700 to-green-900";
-              if (currencyType === "GARDEN") gradientColors = "from-emerald-700 to-emerald-900";
-              if (currencyType === "DESERT") gradientColors = "from-amber-700 to-amber-900";
-              if (currencyType === "WINTER") gradientColors = "from-cyan-700 to-cyan-900";
-              if (currencyType === "MOUNTAIN") gradientColors = "from-stone-700 to-stone-900";
-              if (currencyType === "LAKE") gradientColors = "from-blue-700 to-blue-900";
+              if (currencyType === "DIRT") gradientColors = "from-amber-700 to-amber-900";
+              if (currencyType === "WEED") gradientColors = "from-lime-700 to-lime-900";
+        
               
               return (
                 <div 
@@ -1295,14 +1278,14 @@ function App() {
                     </div>
                     
                     {/* Информация о локации */}
-                                         <div className="w-2/3 p-4 flex flex-col justify-between">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-2xl font-bold text-white">{location.name}</h3>
+                    <div className="w-2/3 p-4 flex flex-col justify-between">
+                      <div className="flex justify-between items-start">
+                        <h3 className="text-lg font-bold text-white leading-tight pr-2 flex-1">{location.name}</h3>
                       </div>
                       
-                      <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center justify-between mt-2">
                         {/* Информация о ресурсах локации */}
-                        <div className="flex items-center max-w-[60%] overflow-hidden">
+                        <div className="flex items-center max-w-[50%] overflow-hidden">
                           {isUnlocked ? (
                             <div className="flex items-center bg-yellow-500 px-2 py-1 rounded shadow-sm mr-2 overflow-hidden">
                               <div className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center flex-shrink-0">
@@ -1311,11 +1294,9 @@ function App() {
                                   alt={location.resourceName || "Ресурс"}
                                   className="w-4 h-4 object-contain"
                                   onError={(e) => {
-                                    // Если изображение не загрузилось, заменяем на эмодзи
+                                    // Если изображение не загрузилось, заменяем на резервное изображение
                                     const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    const currencyType = String(location.currencyType || '').toLowerCase();
-                                    target.parentElement!.innerHTML = getCurrencyEmoji(currencyType);
+                                    target.src = '/assets/currencies/garden_coin.png';
                                   }}
                                 />
                               </div>
@@ -1336,10 +1317,9 @@ function App() {
                                   alt={location.resourceName || "Ресурс"}
                                   className="w-4 h-4 object-contain opacity-70"
                                   onError={(e) => {
+                                    // Если изображение не загрузилось, заменяем на резервное изображение
                                     const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    const currencyType = String(location.currencyType || '').toLowerCase();
-                                    target.parentElement!.innerHTML = getCurrencyEmoji(currencyType);
+                                    target.src = '/assets/currencies/garden_coin.png';
                                   }}
                                 />
                               </div>
@@ -1351,28 +1331,30 @@ function App() {
                         </div>
                         
                         {/* Кнопка выбора или информация о разблокировке */}
-                                                  {isUnlocked ? (
-                      <button 
-                            className={`px-4 py-1.5 rounded bg-yellow-500 text-white text-sm font-medium
-                              hover:bg-yellow-600 transition-all duration-200`}
-                        onClick={() => {
-                          handleLocationChange(location.id);
-                          setActiveTab("tap");
-                        }}
-                      >
-                            {isActive ? 'Играть' : 'Выбрать'}
-                      </button>
-                        ) : (
-                          <div className="bg-gray-700 bg-opacity-70 px-3 py-2 rounded">
-                            <div className="flex items-center">
-                              <svg className="w-5 h-5 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-white">Уровень {location.unlockLevel || 1}</span>
+                        <div className="ml-2 flex-shrink-0">
+                          {isUnlocked ? (
+                            <button 
+                              className={`px-3 py-1.5 rounded bg-yellow-500 text-white text-xs font-medium
+                                hover:bg-yellow-600 transition-all duration-200 whitespace-nowrap`}
+                              onClick={() => {
+                                handleLocationChange(location.id);
+                                setActiveTab("tap");
+                              }}
+                            >
+                              {isActive ? 'Играть' : 'Выбрать'}
+                            </button>
+                          ) : (
+                            <div className="bg-gray-700 bg-opacity-70 px-2 py-1.5 rounded">
+                              <div className="flex items-center">
+                                <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-white text-xs">Ур. {location.unlockLevel || 1}</span>
+                              </div>
                             </div>
-                          </div>
-                    )}
-                  </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                   

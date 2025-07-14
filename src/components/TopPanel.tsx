@@ -37,12 +37,10 @@ const TopPanel: React.FC<TopPanelProps> = ({
     switch (type) {
       case CurrencyType.FOREST:
         return '/assets/currencies/wood.png'; // Дрова для леса
-      case CurrencyType.MOUNTAIN:
-        return '/assets/currencies/stone.png'; // Камень для гор
-      case CurrencyType.DESERT:
-        return '/assets/currencies/sand.png'; // Песок для пустыни
-      case CurrencyType.LAKE:
-        return '/assets/currencies/water.png'; // Вода для озера
+      case CurrencyType.DIRT:
+        return '/assets/currencies/dirt.png'; // Грязь
+      case CurrencyType.WEED:
+        return '/assets/currencies/weed.png'; // Сорняки
       case CurrencyType.MAIN:
         return '/assets/currencies/garden_coin.png'; // Сад-коин
       default:

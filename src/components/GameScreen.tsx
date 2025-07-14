@@ -55,13 +55,10 @@ const UpgradeModal = ({
     
     // Карта соответствия ID валют и их названий
     const currencyMap: Record<string, string> = {
-      '1': 'forest',
-      '2': 'garden',
-      '3': 'winter',
-      '4': 'mountain',
-      '5': 'main',
-      '6': 'desert',
-      '7': 'lake'
+      '1': 'main',
+      '2': 'forest',
+      '3': 'dirt',
+              '4': 'weed'
     };
     
     // Если это число или строковое представление числа, пробуем найти в карте

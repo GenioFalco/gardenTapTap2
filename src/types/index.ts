@@ -53,10 +53,10 @@ export enum RewardType {
 
 // Типы валют
 export enum CurrencyType {
-  MAIN = 'garden_coins',
-  FOREST = 'logs',
-  GARDEN = 'vegetables',
-  WINTER = 'snowflakes',
+  MAIN = 'main',
+  FOREST = 'forest',
+  DIRT = 'dirt',
+  WEED = 'weed'
 }
 
 // Награды за уровни

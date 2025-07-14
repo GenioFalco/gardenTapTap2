@@ -2,9 +2,8 @@
 export enum CurrencyType {
   MAIN = 'MAIN',
   FOREST = 'FOREST',
-  MOUNTAIN = 'MOUNTAIN',
-  DESERT = 'DESERT',
-  LAKE = 'LAKE'
+  DIRT = 'DIRT',
+  WEED = 'WEED'
 }
 
 // Интерфейс валюты
@@ -32,6 +31,7 @@ export interface Location {
   character_id?: number;
   currency_id?: string;
   currency_type?: string;
+  unlock_rank?: number;
 }
 
 // Интерфейс инструмента

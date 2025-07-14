@@ -33,16 +33,10 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({
         return '/assets/currencies/garden_coin.png';
       case 'forest':
         return '/assets/currencies/wood.png';
-      case 'garden':
-        return '/assets/currencies/vegetable.png';
-      case 'winter':
-        return '/assets/currencies/snowflake.png';
-      case 'mountain':
-        return '/assets/currencies/stone.png';
-      case 'desert':
-        return '/assets/currencies/sand.png';
-      case 'lake':
-        return '/assets/currencies/water.png';
+      case 'dirt':
+        return '/assets/currencies/dirt.png';
+      case 'weed':
+        return '/assets/currencies/weed.png';
       default:
         return '/assets/currencies/default.png';
     }
@@ -55,16 +49,10 @@ const LevelUpModal: React.FC<LevelUpModalProps> = ({
         return 'Сад-коины';
       case 'forest':
         return 'Дерево';
-      case 'garden':
-        return 'Овощи';
-      case 'winter':
-        return 'Снежинки';
-      case 'mountain':
-        return 'Камень';
-      case 'desert':
-        return 'Песок';
-      case 'lake':
-        return 'Вода';
+      case 'dirt':
+        return 'Грязь';
+      case 'weed':
+        return 'Сорняки';
       default:
         return 'Ресурсы';
     }

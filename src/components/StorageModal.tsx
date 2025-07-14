@@ -143,13 +143,10 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
             
             // Карта соответствия типов валют и их ID
             const currencyMap: Record<string, string> = {
-              'forest': '2',
-              'garden': '3',
-              'winter': '4',
-              'mountain': '5',
               'main': '1',
-              'desert': '6',
-              'lake': '7'
+              'forest': '2',
+                      'dirt': '3',
+        'weed': '4'
             };
             
             const currencyId = currencyMap[currencyType] || currencyType;

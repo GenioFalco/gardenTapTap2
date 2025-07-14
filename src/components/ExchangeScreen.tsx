@@ -38,12 +38,11 @@ const ENERGY_PACKAGES: EnergyPackage[] = [
   { id: 3, name: 'Большой пакет', energy_amount: 50, price: 180 }
 ];
 
-// Фиксированные валюты локаций (в реальном приложении должны загружаться с сервера)
+// Фиксированные валюты локаций (согласно реальным данным в базе)
 const LOCATION_CURRENCIES: LocationCurrency[] = [
-  { id: 'forest', name: 'Древесина', icon: '🌳', exchangeRate: 0.5 },
-  { id: 'mountain', name: 'Камень', icon: '⛰️', exchangeRate: 0.7 },
-  { id: 'desert', name: 'Песок', icon: '🏜️', exchangeRate: 0.3 },
-  { id: 'farm', name: 'Зерно', icon: '🌾', exchangeRate: 0.4 }
+  { id: 'forest', name: 'Брёвна', icon: '/assets/currencies/wood.png', exchangeRate: 0.5 },
+  { id: 'dirt', name: 'Грязь', icon: '/assets/currencies/dirt.png', exchangeRate: 0.3 },
+  { id: 'weed', name: 'Сорняки', icon: '/assets/currencies/weed.png', exchangeRate: 0.2 }
 ];
 
 const ExchangeScreen: React.FC = () => {
@@ -485,23 +484,30 @@ const ExchangeScreen: React.FC = () => {
               }}
               className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
             >
-              {LOCATION_CURRENCIES.map(currency => (
-                <option key={currency.id} value={currency.id}>
-                  {currency.icon} {currency.name} - Баланс: {currencyBalances[currency.id] || 0}
-                </option>
-              ))}
+                              {LOCATION_CURRENCIES.map(currency => (
+                  <option key={currency.id} value={currency.id}>
+                   {currency.name} - Баланс: {currencyBalances[currency.id] || 0}
+                  </option>
+                ))}
             </select>
           </div>
           
           {/* Курс обмена */}
           {selectedCurrency && (
             <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
-              <div className="text-sm text-gray-300">Курс обмена:</div>
-              <div className="flex items-center justify-center">
-                <span className="text-white font-bold">1 {selectedCurrency.icon}</span>
-                <span className="text-gray-400 mx-2">→</span>
-                <span className="text-yellow-400 font-bold">{selectedCurrency.exchangeRate} 🪙</span>
-              </div>
+                              <div className="text-sm text-gray-300">Курс обмена:</div>
+                <div className="flex items-center justify-center">
+                  <div className="flex items-center">
+                    <span className="text-white font-bold mr-1">1</span>
+                    <img src={selectedCurrency.icon} alt={selectedCurrency.name} className="w-4 h-4 mr-1" />
+                    <span className="text-white font-bold">{selectedCurrency.name}</span>
+                  </div>
+                  <span className="text-gray-400 mx-2">→</span>
+                  <div className="flex items-center">
+                    <span className="text-yellow-400 font-bold mr-1">{selectedCurrency.exchangeRate}</span>
+                    <img src="/assets/currencies/garden_coin.png" alt="Монеты" className="w-4 h-4" />
+                  </div>
+                </div>
             </div>
           )}
           
