@@ -389,7 +389,7 @@ const ExchangeScreen: React.FC = () => {
     }
     return Math.floor(parseInt(exchangeAmount) * selectedCurrency.exchangeRate);
   };
-  
+
   // Функция для смены текущего блока
   const goToBlock = (index: number) => {
     setCurrentBlockIndex(index);
@@ -408,136 +408,136 @@ const ExchangeScreen: React.FC = () => {
   const blocks = [
     // Блок покупки энергии
     <div key="energy" className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-6">
-      <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
-        <h2 className="text-lg font-bold text-yellow-400 text-center">Пополнить энергию</h2>
-      </div>
-      
-      <div className="p-3">
-        {/* Статус энергии и монет */}
-        <div className="flex justify-between mb-3">
-          <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
-            <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
-              ⚡
+        <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
+          <h2 className="text-lg font-bold text-yellow-400 text-center">Пополнить энергию</h2>
+        </div>
+        
+        <div className="p-3">
+          {/* Статус энергии и монет */}
+          <div className="flex justify-between mb-3">
+            <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
+              <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
+                ⚡
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">Энергия</div>
+                <div className="font-bold text-white">{energy} / {maxEnergy}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-xs text-gray-400">Энергия</div>
-              <div className="font-bold text-white">{energy} / {maxEnergy}</div>
+            
+            <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
+              <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
+                🪙
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">Монеты</div>
+                <div className="font-bold text-white">{coins}</div>
+              </div>
             </div>
           </div>
           
-          <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
-            <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
-              🪙
-            </div>
-            <div>
-              <div className="text-xs text-gray-400">Монеты</div>
-              <div className="font-bold text-white">{coins}</div>
-            </div>
+          {/* Пакеты энергии */}
+          <div className="grid grid-cols-3 gap-2">
+            {ENERGY_PACKAGES.map((pack) => (
+              <div key={pack.id} className="border border-gray-700 rounded-lg p-2 hover:shadow-md transition-shadow bg-gray-800 bg-opacity-90">
+                <div className="flex items-center justify-center mb-1">
+                  <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-yellow-400 text-xl">
+                    ⚡
+                  </div>
+                </div>
+                <h3 className="text-sm font-medium text-center text-white">{pack.name}</h3>
+                <div className="text-yellow-400 font-bold text-center my-1">+{pack.energy_amount}</div>
+                <div className="text-center text-yellow-500 font-bold mb-2 flex items-center justify-center">
+                  {pack.price} <span className="ml-1">🪙</span>
+                </div>
+                <button
+                  onClick={() => buyEnergy(pack)}
+                  disabled={buying || coins < pack.price || energy >= maxEnergy}
+                  className={`w-full py-1 px-2 rounded-md text-center text-sm transition ${
+                    buying || coins < pack.price || energy >= maxEnergy
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+                  }`}
+                >
+                  {buying ? 'Покупка...' : 'Купить'}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
-        
-        {/* Пакеты энергии */}
-        <div className="grid grid-cols-3 gap-2">
-          {ENERGY_PACKAGES.map((pack) => (
-            <div key={pack.id} className="border border-gray-700 rounded-lg p-2 hover:shadow-md transition-shadow bg-gray-800 bg-opacity-90">
-              <div className="flex items-center justify-center mb-1">
-                <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-yellow-400 text-xl">
-                  ⚡
-                </div>
-              </div>
-              <h3 className="text-sm font-medium text-center text-white">{pack.name}</h3>
-              <div className="text-yellow-400 font-bold text-center my-1">+{pack.energy_amount}</div>
-              <div className="text-center text-yellow-500 font-bold mb-2 flex items-center justify-center">
-                {pack.price} <span className="ml-1">🪙</span>
-              </div>
-              <button
-                onClick={() => buyEnergy(pack)}
-                disabled={buying || coins < pack.price || energy >= maxEnergy}
-                className={`w-full py-1 px-2 rounded-md text-center text-sm transition ${
-                  buying || coins < pack.price || energy >= maxEnergy
-                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                    : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
-                }`}
-              >
-                {buying ? 'Покупка...' : 'Купить'}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>,
-    
+      
     // Блок обмена валюты локации на главную
     <div key="exchange" className="bg-gray-900 bg-opacity-80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden border border-gray-700 w-full mb-6">
-      <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
-        <h2 className="text-lg font-bold text-yellow-400 text-center">Обмен ресурсов на монеты</h2>
-      </div>
-      
-      <div className="p-3">
-        {/* Выбор валюты */}
-        <div className="mb-3">
-          <label className="block text-sm font-medium text-gray-300 mb-1">Выберите ресурс для обмена</label>
-          <select 
-            value={selectedCurrency?.id || ''}
-            onChange={(e) => {
-              const currency = LOCATION_CURRENCIES.find(c => c.id === e.target.value);
-              setSelectedCurrency(currency || null);
-            }}
-            className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
-          >
-            {LOCATION_CURRENCIES.map(currency => (
-              <option key={currency.id} value={currency.id}>
-                {currency.icon} {currency.name} - Баланс: {currencyBalances[currency.id] || 0}
-              </option>
-            ))}
-          </select>
+        <div className="bg-gray-800 bg-opacity-90 p-2 border-b border-yellow-500">
+          <h2 className="text-lg font-bold text-yellow-400 text-center">Обмен ресурсов на монеты</h2>
         </div>
         
-        {/* Курс обмена */}
-        {selectedCurrency && (
+        <div className="p-3">
+          {/* Выбор валюты */}
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-gray-300 mb-1">Выберите ресурс для обмена</label>
+            <select 
+              value={selectedCurrency?.id || ''}
+              onChange={(e) => {
+                const currency = LOCATION_CURRENCIES.find(c => c.id === e.target.value);
+                setSelectedCurrency(currency || null);
+              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
+            >
+              {LOCATION_CURRENCIES.map(currency => (
+                <option key={currency.id} value={currency.id}>
+                  {currency.icon} {currency.name} - Баланс: {currencyBalances[currency.id] || 0}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Курс обмена */}
+          {selectedCurrency && (
+            <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
+              <div className="text-sm text-gray-300">Курс обмена:</div>
+              <div className="flex items-center justify-center">
+                <span className="text-white font-bold">1 {selectedCurrency.icon}</span>
+                <span className="text-gray-400 mx-2">→</span>
+                <span className="text-yellow-400 font-bold">{selectedCurrency.exchangeRate} 🪙</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Ввод суммы для обмена */}
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-gray-300 mb-1">Количество для обмена</label>
+            <input
+              type="number"
+              value={exchangeAmount}
+              onChange={(e) => setExchangeAmount(e.target.value)}
+              placeholder="Введите количество"
+              min="1"
+              className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
+            />
+          </div>
+          
+          {/* Результат обмена */}
           <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
-            <div className="text-sm text-gray-300">Курс обмена:</div>
+            <div className="text-sm text-gray-300">Вы получите:</div>
             <div className="flex items-center justify-center">
-              <span className="text-white font-bold">1 {selectedCurrency.icon}</span>
-              <span className="text-gray-400 mx-2">→</span>
-              <span className="text-yellow-400 font-bold">{selectedCurrency.exchangeRate} 🪙</span>
+              <span className="text-yellow-400 font-bold text-xl">{calculateExchangeResult()} 🪙</span>
             </div>
           </div>
-        )}
-        
-        {/* Ввод суммы для обмена */}
-        <div className="mb-3">
-          <label className="block text-sm font-medium text-gray-300 mb-1">Количество для обмена</label>
-          <input
-            type="number"
-            value={exchangeAmount}
-            onChange={(e) => setExchangeAmount(e.target.value)}
-            placeholder="Введите количество"
-            min="1"
-            className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:ring-yellow-500 focus:border-yellow-500"
-          />
-        </div>
-        
-        {/* Результат обмена */}
-        <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
-          <div className="text-sm text-gray-300">Вы получите:</div>
-          <div className="flex items-center justify-center">
-            <span className="text-yellow-400 font-bold text-xl">{calculateExchangeResult()} 🪙</span>
-          </div>
-        </div>
-        
-        {/* Кнопка обмена */}
-        <button
-          onClick={exchangeCurrency}
-          disabled={exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)}
-          className={`w-full py-2 px-4 rounded-md text-center font-medium transition ${
-            exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)
-              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-              : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
-          }`}
-        >
-          {exchanging ? 'Обмен...' : 'Обменять'}
-        </button>
+          
+          {/* Кнопка обмена */}
+          <button
+            onClick={exchangeCurrency}
+            disabled={exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)}
+            className={`w-full py-2 px-4 rounded-md text-center font-medium transition ${
+              exchanging || !selectedCurrency || !exchangeAmount || isNaN(parseInt(exchangeAmount)) || parseInt(exchangeAmount) <= 0 || (currencyBalances[selectedCurrency?.id || ''] || 0) < parseInt(exchangeAmount)
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+            }`}
+          >
+            {exchanging ? 'Обмен...' : 'Обменять'}
+          </button>
       </div>
     </div>,
     
@@ -660,4 +660,4 @@ const ExchangeScreen: React.FC = () => {
   );
 };
 
-export default ExchangeScreen;
+export default ExchangeScreen; 

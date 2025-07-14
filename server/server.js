@@ -65,8 +65,8 @@ async function ensureUserExists(userId) {
       // Добавляем начальные ресурсы
       await db.run(`
         INSERT INTO player_currencies (user_id, currency_id, amount) 
-        VALUES (?, 'main', 0), (?, 'forest', 0)
-      `, [userId, userId]);
+        VALUES (?, ?, 0), (?, ?, 0)
+      `, [userId, CurrencyType.MAIN, userId, CurrencyType.FOREST]);
       
       // Создаем запись в player_profile
       await db.run(`
@@ -800,7 +800,7 @@ app.post('/api/player/tap', async (req, res) => {
       await db.run(`
         INSERT OR REPLACE INTO player_currencies (user_id, currency_id, amount)
         VALUES (?, ?, COALESCE((SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?), 0) + ?)
-      `, [userId, 1, userId, 1, mainCurrencyGained]); // Предполагаем, что ID основной валюты = 1
+              `, [userId, CurrencyType.MAIN, userId, CurrencyType.MAIN, mainCurrencyGained]);
       console.log(`Добавлены монеты: ${mainCurrencyGained}`);
       
       // Проверяем, не превышен ли лимит хранилища для ресурсов локации
@@ -2087,25 +2087,25 @@ async function addExperience(userId, exp) {
   }
 }
 
-// Обработка награды
+    // Обработка награды
 async function processReward(userId, reward) {
   switch(reward.reward_type) {
     case RewardType.MAIN_CURRENCY:
-      // Добавляем основную валюту (сад-коины)
-      const mainCurrency = await getOrCreatePlayerCurrency(userId, '5'); // 5 - ID основной валюты (сад-коины)
+      // Добавляем основную валюту (монеты)
+      const mainCurrency = await getOrCreatePlayerCurrency(userId, CurrencyType.MAIN);
       
       await db.run(`
         UPDATE player_currencies
         SET amount = amount + ?
         WHERE user_id = ? AND currency_id = ?
       `, [reward.amount, userId, mainCurrency.currency_id]);
-      console.log(`Награда: добавлено ${reward.amount} основной валюты (сад-коины)`);
+      console.log(`Награда: добавлено ${reward.amount} основной валюты (монеты)`);
       break;
       
     case RewardType.LOCATION_CURRENCY:
       // Добавляем валюту текущей локации
-      // Если нет информации о конкретной локации, используем лес (ID: 1)
-      const defaultCurrency = await getOrCreatePlayerCurrency(userId, '1');
+      // Если нет информации о конкретной локации, используем лес (брёвна)
+      const defaultCurrency = await getOrCreatePlayerCurrency(userId, CurrencyType.FOREST);
       
       await db.run(`
         UPDATE player_currencies
@@ -2201,16 +2201,16 @@ async function getCurrencyIdByType(currencyType) {
     // Если не нашли по коду, используем значения по умолчанию
     console.warn(`Валюта с кодом ${normalizedType} не найдена, используем значение по умолчанию`);
     
-    // По умолчанию: 5 для main (сад-коины) или 1 для forest (брёвна)
+    // По умолчанию: 1 для main (монеты) или 2 для forest (брёвна)
     if (normalizedType === 'main') {
-      return { id: '5' };
+      return { id: CurrencyType.MAIN };
     } else {
-      return { id: '1' }; // По умолчанию валюта леса (брёвна)
+      return { id: CurrencyType.FOREST }; // По умолчанию валюта леса (брёвна)
     }
   } catch (error) {
     console.error(`Ошибка при получении ID валюты для кода ${currencyType}:`, error);
     // По умолчанию возвращаем ID валюты леса
-    return { id: '1' };
+    return { id: CurrencyType.FOREST };
   }
 }
 
@@ -2225,6 +2225,7 @@ async function startServer() {
     await ensurePlayerStatsTable();
     await ensureNotificationsTable();
     await ensureAchievementCongratulationsTable();
+    await ensureTelegramUsersTable();
     
     // Инициализируем Telegram бота
     initBot();
@@ -2603,11 +2604,11 @@ async function cleanupPlayerCurrencies() {
     const users = [...new Set(allCurrencies.map(c => c.user_id))];
     
     for (const userId of users) {
-      // Создаем основную валюту (сад-коины), если её нет
-      await getOrCreatePlayerCurrency(userId, '5');
+      // Создаем основную валюту (монеты), если её нет
+      await getOrCreatePlayerCurrency(userId, CurrencyType.MAIN);
       
       // Создаем валюту леса (брёвна), если её нет
-      await getOrCreatePlayerCurrency(userId, '1');
+      await getOrCreatePlayerCurrency(userId, CurrencyType.FOREST);
     }
     
     console.log('Очистка дубликатов в таблице player_currencies завершена успешно');
@@ -3088,7 +3089,7 @@ app.post('/api/player/helpers/collect-income', async (req, res) => {
         let storageIsFull = false;
         
         // Для основной валюты (монеты, id=1) не проверяем лимит хранилища
-        if (currencyId == 1) {
+        if (currencyId == CurrencyType.MAIN) {
           storageCapacity = Number.MAX_SAFE_INTEGER;
         } else {
           // Для валют локаций проверяем лимит хранилища
@@ -3235,9 +3236,9 @@ app.get('/api/currencies/:currencyType', async (req, res) => {
     let currencyId;
     
     if (currencyType === 'FOREST') {
-      currencyId = 1;
+      currencyId = CurrencyType.FOREST;
     } else if (currencyType === 'MAIN') {
-      currencyId = 5;
+      currencyId = CurrencyType.MAIN;
     } else if (!isNaN(parseInt(currencyType))) {
       // Если передан числовой ID, используем его
       currencyId = parseInt(currencyType);
@@ -4469,6 +4470,46 @@ async function updateProfileWithLatestAchievement(userId) {
   }
 }
 
+// Функция для создания таблицы пользователей Telegram
+async function ensureTelegramUsersTable() {
+  try {
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS telegram_users (
+        user_id TEXT PRIMARY KEY,
+        username TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        display_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Таблица telegram_users проверена/создана');
+  } catch (error) {
+    console.error('Ошибка при создании таблицы telegram_users:', error);
+  }
+}
+
+// Функция для получения имени пользователя из Telegram
+async function getTelegramUserName(userId) {
+  try {
+    const user = await db.get(`
+      SELECT display_name, first_name, last_name, username
+      FROM telegram_users 
+      WHERE user_id = ?
+    `, [userId]);
+    
+    if (user) {
+      return user.display_name || user.first_name || user.username || userId;
+    }
+    
+    return userId;
+  } catch (error) {
+    console.error('Ошибка при получении имени пользователя Telegram:', error);
+    return userId;
+  }
+}
+
 // API-эндпоинт для получения рейтинга пользователей
 app.get('/api/leaderboard', async (req, res) => {
   try {
@@ -4547,7 +4588,7 @@ app.post('/api/player/buy-energy', async (req, res) => {
     console.log(`Текущая энергия игрока: ${progress.energy}/${progress.max_energy}`);
     
     // Получаем баланс монет
-    const mainCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 1', [userId]);
+    const mainCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?', [userId, CurrencyType.MAIN]);
     const coinAmount = mainCurrency ? parseFloat(mainCurrency.amount) : 0;
     
     if (coinAmount < price) {
@@ -4566,8 +4607,8 @@ app.post('/api/player/buy-energy', async (req, res) => {
       await db.run(`
         UPDATE player_currencies
         SET amount = amount - ?
-        WHERE user_id = ? AND currency_id = 1
-      `, [price, userId]);
+        WHERE user_id = ? AND currency_id = ?
+      `, [price, userId, CurrencyType.MAIN]);
       
       // Вычисляем новое количество энергии (не превышая максимум)
       const newEnergy = Math.min(progress.energy + energyAmount, progress.max_energy);
@@ -4596,7 +4637,7 @@ app.post('/api/player/buy-energy', async (req, res) => {
       await db.run('COMMIT');
       
       // Получаем обновленные данные о монетах
-      const updatedCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = 1', [userId]);
+      const updatedCurrency = await db.get('SELECT amount FROM player_currencies WHERE user_id = ? AND currency_id = ?', [userId, CurrencyType.MAIN]);
       const updatedCoins = updatedCurrency ? parseFloat(updatedCurrency.amount) : 0;
       
       console.log(`Энергия успешно куплена: ${progress.energy} -> ${updatedEnergy.energy}, монеты: ${coinAmount} -> ${updatedCoins}`);
@@ -4906,14 +4947,15 @@ app.post('/api/services/order', async (req, res) => {
       
       // Отправляем уведомление в Telegram бот
       try {
+        const userName = await getTelegramUserName(userId);
         const orderData = {
           orderId: result.lastID,
           userId: userId,
+          userName: userName,
           serviceName: service.name,
           price: service.price,
           contactInfo: contactInfo,
-          notes: notes || '',
-          balanceAfter: updatedCurrency ? updatedCurrency.amount : 0
+          notes: notes || ''
         };
         
         sendOrderNotification(orderData);
@@ -5031,9 +5073,11 @@ app.put('/api/admin/orders/:id/status', async (req, res) => {
     
     // Отправляем уведомление в Telegram бот об обновлении статуса
     try {
+      const userName = await getTelegramUserName(updatedOrder.user_id);
       const orderData = {
         orderId: updatedOrder.id,
         userId: updatedOrder.user_id,
+        userName: userName,
         serviceName: updatedOrder.service_name,
         status: status
       };

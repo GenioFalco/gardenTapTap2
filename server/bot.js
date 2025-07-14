@@ -1,4 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
+const { db } = require('./db');
 
 // Конфигурация бота
 const BOT_TOKEN = '7956184080:AAGPyyVY9g98V6W7fazaM2CqcXrUJYsrdx4';
@@ -15,8 +16,12 @@ function initBot() {
     console.log('Telegram bot успешно запущен!');
     
     // Обработчик команды /start
-    bot.onText(/\/start/, (msg) => {
+    bot.onText(/\/start/, async (msg) => {
       const chatId = msg.chat.id;
+      
+      // Сохраняем информацию о пользователе
+      await saveUserInfo(msg.from);
+      
       bot.sendMessage(chatId, 'Бот Garden Tap Tap запущен! Этот бот отправляет уведомления о новых заказах услуг администраторам.');
       
       // Если это администратор, показываем дополнительную информацию
@@ -26,8 +31,11 @@ function initBot() {
     });
     
     // Обработчик команды /status
-    bot.onText(/\/status/, (msg) => {
+    bot.onText(/\/status/, async (msg) => {
       const chatId = msg.chat.id;
+      
+      // Сохраняем информацию о пользователе
+      await saveUserInfo(msg.from);
       
       // Только администратор может использовать эту команду
       if (chatId.toString() === ADMIN_CHAT_ID) {
@@ -38,8 +46,12 @@ function initBot() {
     });
     
     // Обработчик команды /help
-    bot.onText(/\/help/, (msg) => {
+    bot.onText(/\/help/, async (msg) => {
       const chatId = msg.chat.id;
+      
+      // Сохраняем информацию о пользователе
+      await saveUserInfo(msg.from);
+      
       const helpText = `
 Доступные команды:
 /start - Запустить бота
@@ -76,12 +88,11 @@ function sendOrderNotification(orderData) {
   const message = `🔔 НОВЫЙ ЗАКАЗ УСЛУГИ
 
 📦 Заказ №${orderData.orderId}
-👤 Пользователь: ${orderData.userId}
+👤 Пользователь: ${orderData.userName || orderData.userId}
 🛍️ Услуга: ${orderData.serviceName}
 💰 Цена: ${orderData.price} монет
 📱 Контакт: ${orderData.contactInfo}
 ${orderData.notes ? `📝 Примечание: ${orderData.notes}` : ''}
-💳 Баланс после покупки: ${orderData.balanceAfter} монет
 
 ⏰ Время: ${new Date().toLocaleString()}`;
   
@@ -124,7 +135,7 @@ function sendStatusUpdateNotification(orderData) {
   const message = `${statusEmoji[orderData.status]} ОБНОВЛЕНИЕ СТАТУСА ЗАКАЗА
 
 📦 Заказ №${orderData.orderId}
-👤 Пользователь: ${orderData.userId}
+👤 Пользователь: ${orderData.userName || orderData.userId}
 🛍️ Услуга: ${orderData.serviceName}
 📊 Новый статус: ${statusText[orderData.status]}
 
@@ -137,6 +148,45 @@ function sendStatusUpdateNotification(orderData) {
   } catch (error) {
     console.error('Ошибка при отправке уведомления об изменении статуса:', error);
     return false;
+  }
+}
+
+// Функция для сохранения информации о пользователе Telegram
+async function saveUserInfo(userInfo) {
+  try {
+    if (!userInfo || !userInfo.id) {
+      return;
+    }
+    
+    const userId = userInfo.id.toString();
+    const username = userInfo.username || null;
+    const firstName = userInfo.first_name || null;
+    const lastName = userInfo.last_name || null;
+    const displayName = firstName || username || `User${userId}`;
+    
+    // Проверяем, существует ли пользователь
+    const existingUser = await db.get(`
+      SELECT user_id FROM telegram_users WHERE user_id = ?
+    `, [userId]);
+    
+    if (existingUser) {
+      // Обновляем существующего пользователя
+      await db.run(`
+        UPDATE telegram_users 
+        SET username = ?, first_name = ?, last_name = ?, display_name = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ?
+      `, [username, firstName, lastName, displayName, userId]);
+    } else {
+      // Создаем нового пользователя
+      await db.run(`
+        INSERT INTO telegram_users (user_id, username, first_name, last_name, display_name)
+        VALUES (?, ?, ?, ?, ?)
+      `, [userId, username, firstName, lastName, displayName]);
+    }
+    
+    console.log(`Информация о пользователе Telegram сохранена: ${displayName} (${userId})`);
+  } catch (error) {
+    console.error('Ошибка при сохранении информации о пользователе Telegram:', error);
   }
 }
 
