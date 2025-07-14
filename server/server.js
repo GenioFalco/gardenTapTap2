@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const { db, initDatabase, CurrencyType, RewardType } = require('./db');
 const currencyRoutes = require('./routes/currency.routes');
-  const referralRoutes = require('./routes/referral.routes');
+const referralRoutes = require('./routes/referral.routes');
+const { initBot, sendOrderNotification, sendStatusUpdateNotification } = require('./bot');
 
 // Инициализируем Express приложение
 const app = express();
@@ -2224,6 +2225,9 @@ async function startServer() {
     await ensurePlayerStatsTable();
     await ensureNotificationsTable();
     await ensureAchievementCongratulationsTable();
+    
+    // Инициализируем Telegram бота
+    initBot();
     
     // Запускаем сервер
     app.listen(port, () => {
@@ -4814,49 +4818,25 @@ app.post('/api/services/order', async (req, res) => {
       return res.status(404).json({ error: 'Услуга не найдена или недоступна' });
     }
     
-    // Проверяем и создаем таблицу player_currency, если она не существует
-    const tableExists = await db.get(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='player_currency'"
-    );
-    
-    if (!tableExists) {
-      console.log('Создаем таблицу player_currency');
-      await db.run(`
-        CREATE TABLE IF NOT EXISTS player_currency (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id TEXT NOT NULL,
-          currency_id TEXT NOT NULL,
-          amount INTEGER NOT NULL DEFAULT 0,
-          UNIQUE(user_id, currency_id)
-        )
-      `);
-      console.log('Таблица player_currency успешно создана');
-      
-      // Добавляем запись для пользователя с начальным балансом
-      await db.run(`
-        INSERT OR IGNORE INTO player_currency (user_id, currency_id, amount)
-        VALUES (?, ?, 1000)
-      `, [userId, service.currency_id]);
-    }
-    
+    // Используем существующую таблицу player_currencies
     // Проверяем достаточно ли монет у пользователя
     const userCurrency = await db.get(`
-      SELECT amount FROM player_currency 
+      SELECT amount FROM player_currencies 
       WHERE user_id = ? AND currency_id = ?
-    `, [userId, service.currency_id]);
+    `, [userId, 1]); // Используем фиксированный currency_id=1 для монет
     
     // Если записи о валюте нет, создаем её с начальным балансом
     if (!userCurrency) {
       await db.run(`
-        INSERT INTO player_currency (user_id, currency_id, amount)
+        INSERT INTO player_currencies (user_id, currency_id, amount)
         VALUES (?, ?, 1000)
-      `, [userId, service.currency_id]);
+      `, [userId, 1]); // Используем фиксированный currency_id=1 для монет
       
       // Получаем созданную запись
       const newUserCurrency = await db.get(`
-        SELECT amount FROM player_currency 
+        SELECT amount FROM player_currencies 
         WHERE user_id = ? AND currency_id = ?
-      `, [userId, service.currency_id]);
+      `, [userId, 1]);
       
       if (newUserCurrency.amount < service.price) {
         return res.status(400).json({ error: 'Недостаточно монет для заказа услуги' });
@@ -4893,10 +4873,10 @@ app.post('/api/services/order', async (req, res) => {
     try {
       // Списываем монеты
       await db.run(`
-        UPDATE player_currency 
+        UPDATE player_currencies 
         SET amount = amount - ? 
         WHERE user_id = ? AND currency_id = ?
-      `, [service.price, userId, service.currency_id]);
+      `, [service.price, userId, 1]); // Используем фиксированный currency_id=1 для монет
       
       // Создаем заказ
       const result = await db.run(`
@@ -4906,12 +4886,41 @@ app.post('/api/services/order', async (req, res) => {
       
       // Получаем обновленный баланс
       const updatedCurrency = await db.get(`
-        SELECT amount FROM player_currency 
+        SELECT amount FROM player_currencies 
         WHERE user_id = ? AND currency_id = ?
-      `, [userId, service.currency_id]);
+      `, [userId, 1]); // Используем фиксированный currency_id=1 для монет
       
       // Завершаем транзакцию
       await db.run('COMMIT');
+      
+      // Выводим подробную информацию о заказе в консоль для администратора
+      console.log('\n======= НОВЫЙ ЗАКАЗ УСЛУГИ =======');
+      console.log(`Заказ №${result.lastID}`);
+      console.log(`Пользователь: ${userId}`);
+      console.log(`Услуга: ${service.name}`);
+      console.log(`Цена: ${service.price} монет`);
+      console.log(`Контакт: ${contactInfo}`);
+      if (notes) console.log(`Примечание: ${notes}`);
+      console.log(`Баланс после списания: ${updatedCurrency ? updatedCurrency.amount : 'не определен'}`);
+      console.log('===================================\n');
+      
+      // Отправляем уведомление в Telegram бот
+      try {
+        const orderData = {
+          orderId: result.lastID,
+          userId: userId,
+          serviceName: service.name,
+          price: service.price,
+          contactInfo: contactInfo,
+          notes: notes || '',
+          balanceAfter: updatedCurrency ? updatedCurrency.amount : 0
+        };
+        
+        sendOrderNotification(orderData);
+      } catch (notifyError) {
+        console.error('Ошибка при отправке уведомления в Telegram:', notifyError);
+        // Не прерываем выполнение основного кода из-за ошибки уведомления
+      }
       
       res.json({
         success: true,
@@ -4946,5 +4955,117 @@ app.get('/api/services/orders', async (req, res) => {
   } catch (error) {
     console.error('Ошибка при получении истории заказов:', error);
     res.status(500).json({ error: 'Ошибка при получении истории заказов' });
+  }
+});
+
+// Эндпоинт для получения всех заказов услуг (для администратора)
+app.get('/api/admin/orders', async (req, res) => {
+  try {
+    // Получаем все заказы услуг
+    const orders = await db.all(`
+      SELECT 
+        o.id, 
+        o.user_id, 
+        o.service_id, 
+        s.name as service_name, 
+        s.price, 
+        o.status, 
+        o.created_at, 
+        o.updated_at, 
+        o.contact_info, 
+        o.notes
+      FROM service_orders o
+      JOIN services s ON o.service_id = s.id
+      ORDER BY o.created_at DESC
+    `);
+    
+    res.json(orders);
+  } catch (error) {
+    console.error('Ошибка при получении списка заказов:', error);
+    res.status(500).json({ error: 'Ошибка при получении списка заказов' });
+  }
+});
+
+// Эндпоинт для обновления статуса заказа (для администратора)
+app.put('/api/admin/orders/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!status || !['pending', 'processing', 'completed', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Неверный статус заказа' });
+    }
+    
+    // Обновляем статус заказа
+    await db.run(`
+      UPDATE service_orders
+      SET status = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `, [status, id]);
+    
+    // Получаем обновленные данные заказа
+    const updatedOrder = await db.get(`
+      SELECT 
+        o.id, 
+        o.user_id, 
+        o.service_id, 
+        s.name as service_name, 
+        o.status, 
+        o.updated_at
+      FROM service_orders o
+      JOIN services s ON o.service_id = s.id
+      WHERE o.id = ?
+    `, [id]);
+    
+    if (!updatedOrder) {
+      return res.status(404).json({ error: 'Заказ не найден' });
+    }
+    
+    // Логируем обновление статуса
+    console.log(`\n======= ОБНОВЛЕНИЕ СТАТУСА ЗАКАЗА =======`);
+    console.log(`Заказ №${updatedOrder.id}`);
+    console.log(`Услуга: ${updatedOrder.service_name}`);
+    console.log(`Новый статус: ${status}`);
+    console.log(`Время обновления: ${updatedOrder.updated_at}`);
+    console.log(`=========================================\n`);
+    
+    // Отправляем уведомление в Telegram бот об обновлении статуса
+    try {
+      const orderData = {
+        orderId: updatedOrder.id,
+        userId: updatedOrder.user_id,
+        serviceName: updatedOrder.service_name,
+        status: status
+      };
+      
+      sendStatusUpdateNotification(orderData);
+    } catch (notifyError) {
+      console.error('Ошибка при отправке уведомления в Telegram:', notifyError);
+      // Не прерываем выполнение основного кода из-за ошибки уведомления
+    }
+    
+    res.json({
+      success: true,
+      order: updatedOrder
+    });
+  } catch (error) {
+    console.error('Ошибка при обновлении статуса заказа:', error);
+    res.status(500).json({ error: 'Ошибка при обновлении статуса заказа' });
+  }
+});
+
+// Тестовый эндпоинт для проверки отправки уведомлений
+app.get('/api/test/notification', async (req, res) => {
+  try {
+    // Выводим тестовое уведомление в консоль
+    console.log('\n======= ТЕСТОВОЕ УВЕДОМЛЕНИЕ =======');
+    console.log('Это тестовое уведомление для проверки системы логирования');
+    console.log('Время:', new Date().toLocaleString());
+    console.log('====================================\n');
+    
+    res.json({ success: true, message: 'Тестовое уведомление отправлено в консоль сервера' });
+  } catch (error) {
+    console.error('Ошибка при отправке тестового уведомления:', error);
+    res.status(500).json({ error: 'Ошибка при отправке тестового уведомления' });
   }
 });
