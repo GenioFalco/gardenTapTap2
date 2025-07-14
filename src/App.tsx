@@ -805,7 +805,8 @@ function App() {
         }
         
         // Обновляем локальное состояние
-        const updatedTools = await api.getUnlockedToolsByCharacterId(1);
+        const characterId = currentLocation.characterId || (currentLocation as any).character_id || 1;
+        const updatedTools = await api.getUnlockedToolsByCharacterId(characterId);
         setTools(updatedTools);
         
         // Обновляем ресурсы

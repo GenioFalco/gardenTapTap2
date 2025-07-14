@@ -93,97 +93,44 @@ const StorageModal: React.FC<StorageModalProps> = ({ show, onClose, playerLevel 
       
       for (const location of unlockedLocations) {
         try {
+          // Получаем currency_id из базы данных
+          const currencyId = String((location as any).currency_id || 1);
+          
           // Пропускаем основную валюту (сад-коины)
-          if ((location.currencyType as string) === 'main' || (location.currency_type as string) === 'main') {
+          if (currencyId === '1') {
             continue;
           }
           
-          // Для леса (локация 1) используем валюту "forest"
-          if (location.id === 1) {
-            const currencyId = '2'; // ID для леса (брёвна)
+          try {
+            // Получаем информацию о хранилище
+            const storageInfo = await api.getStorageInfo(location.id, currencyId);
             
-            try {
-              // Получаем информацию о хранилище
-              const storageInfo = await api.getStorageInfo(location.id, currencyId);
-              
-              // Получаем текущее количество валюты у игрока
-              const amount = await api.getResourceAmount(currencyId);
-              
-              // Находим валюту в списке всех валют
-              const currency = allCurrencies.find(c => String(c.id) === currencyId);
-              
-              // Получаем информацию об улучшении склада
-              const upgradeInfo = await api.getStorageUpgradeInfo(location.id, currencyId);
-              setUpgradeInfo(prev => ({
-                ...prev,
-                [currencyId]: upgradeInfo
-              }));
-              
-              storageData.push({
-                id: currencyId,
-                name: currency?.name || 'Дерево',
-                imagePath: currency?.imagePath || currency?.image_path || '/assets/currencies/wood.png',
-                amount: amount,
-                capacity: storageInfo.capacity,
-                storageLevel: storageInfo.storage_level,
-                locationId: location.id,
-                locationName: location.name,
-                percentageFilled: (amount / storageInfo.capacity) * 100
-              });
-            } catch (err) {
-              console.error('Ошибка при загрузке данных для леса:', err);
-            }
-          }
-          // Для других локаций используем их валюты
-          else if (location.currencyType || location.currency_type) {
-            const currencyType = (location.currencyType || location.currency_type || '').toLowerCase();
+            // Получаем текущее количество валюты у игрока
+            const amount = await api.getResourceAmount(currencyId);
             
-            // Пропускаем основную валюту
-            if (currencyType === 'main') continue;
+            // Находим валюту в списке всех валют
+            const currency = allCurrencies.find(c => String(c.id) === currencyId);
             
-            // Карта соответствия типов валют и их ID
-            const currencyMap: Record<string, string> = {
-              'main': '1',
-              'forest': '2',
-                      'dirt': '3',
-        'weed': '4'
-            };
+            // Получаем информацию об улучшении склада
+            const upgradeInfo = await api.getStorageUpgradeInfo(location.id, currencyId);
+            setUpgradeInfo(prev => ({
+              ...prev,
+              [currencyId]: upgradeInfo
+            }));
             
-            const currencyId = currencyMap[currencyType] || currencyType;
-            
-            try {
-              // Получаем информацию о хранилище
-              const storageInfo = await api.getStorageInfo(location.id, currencyId);
-              
-              // Получаем текущее количество валюты у игрока
-              const amount = await api.getResourceAmount(currencyId);
-              
-              // Находим валюту в списке всех валют
-              const currency = allCurrencies.find(c => 
-                String(c.id) === currencyId || c.currency_type === currencyType
-              );
-              
-              // Получаем информацию об улучшении склада
-              const upgradeInfo = await api.getStorageUpgradeInfo(location.id, currencyId);
-              setUpgradeInfo(prev => ({
-                ...prev,
-                [currencyId]: upgradeInfo
-              }));
-              
-              storageData.push({
-                id: currencyId,
-                name: currency?.name || `Валюта ${currencyType}`,
-                imagePath: currency?.imagePath || currency?.image_path || '/assets/currencies/default.png',
-                amount: amount,
-                capacity: storageInfo.capacity,
-                storageLevel: storageInfo.storage_level,
-                locationId: location.id,
-                locationName: location.name,
-                percentageFilled: (amount / storageInfo.capacity) * 100
-              });
-            } catch (err) {
-              console.error(`Ошибка при загрузке данных для валюты ${currencyType}:`, err);
-            }
+            storageData.push({
+              id: currencyId,
+              name: currency?.name || 'Ресурс',
+              imagePath: currency?.imagePath || currency?.image_path || '/assets/currencies/default.png',
+              amount: amount,
+              capacity: storageInfo.capacity,
+              storageLevel: storageInfo.storage_level,
+              locationId: location.id,
+              locationName: location.name,
+              percentageFilled: (amount / storageInfo.capacity) * 100
+            });
+          } catch (err) {
+            console.error(`Ошибка при загрузке данных для локации ${location.id}:`, err);
           }
         } catch (err) {
           console.error(`Ошибка при обработке локации ${location.id}:`, err);
