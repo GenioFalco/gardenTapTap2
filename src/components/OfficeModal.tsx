@@ -8,6 +8,7 @@ interface OfficeModalProps {
   locationId: number;
   locationName: string;
   playerLevel: number;
+  playerRank: number;
   locationCurrency: number;
   locationCurrencyType: CurrencyType;
   onHelpersChanged: (amount?: number) => void; // Callback для обновления игрового экрана
@@ -18,17 +19,24 @@ interface OfficeModalProps {
 const HelperCard: React.FC<{
   helper: Helper;
   playerLevel: number;
+  playerRank: number;
   locationCurrency: number;
   helperLevels: Record<number, any[]>;
   processingHelperId: number | null;
   onBuy: (helper: Helper) => void;
   onUpgrade: (helper: Helper) => void;
-}> = ({ helper, playerLevel, locationCurrency, helperLevels, processingHelperId, onBuy, onUpgrade }) => {
+}> = ({ helper, playerLevel, playerRank, locationCurrency, helperLevels, processingHelperId, onBuy, onUpgrade }) => {
   // Проверяем, куплен ли помощник
   const isUnlocked = helper.isUnlocked === true || (helper as any).is_unlocked === 1;
   
   // Проверяем, доступен ли помощник для покупки по уровню
   const hasRequiredLevel = (helper as any).hasRequiredLevel || playerLevel >= helper.unlockLevel;
+  
+  // Проверяем, доступен ли помощник для покупки по рангу
+  const helperRequiredRank = (helper as any).unlockRank || 1;
+  const hasRequiredRank = playerRank >= helperRequiredRank;
+  
+
   
   // Получаем данные об уровне помощника
   const helperLevel = isUnlocked ? ((helper as any).level || 1) : 0;
@@ -117,7 +125,7 @@ const HelperCard: React.FC<{
             </button>
           )}
           
-          {!isUnlocked && hasRequiredLevel && (
+          {!isUnlocked && hasRequiredLevel && hasRequiredRank && (
             <button 
               className={buyButtonClass}
               onClick={() => onBuy(helper)}
@@ -132,6 +140,12 @@ const HelperCard: React.FC<{
           {!isUnlocked && !hasRequiredLevel && (
             <div className="text-xs text-gray-400 text-center py-1 px-1 rounded border border-gray-700">
               Уровень {helper.unlockLevel}+
+            </div>
+          )}
+          
+          {!isUnlocked && hasRequiredLevel && !hasRequiredRank && (
+            <div className="text-xs text-red-400 text-center py-1 px-1 rounded border border-red-700">
+                             Требуется {((helper as any).unlockRank || 1)} ранг
             </div>
           )}
         </div>
@@ -280,6 +294,7 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
   locationId,
   locationName,
   playerLevel,
+  playerRank,
   locationCurrency,
   locationCurrencyType,
   onHelpersChanged,
@@ -480,6 +495,7 @@ const OfficeModal: React.FC<OfficeModalProps> = ({
                   key={helper.id}
                   helper={helper}
                   playerLevel={playerLevel}
+                  playerRank={playerRank}
                   locationCurrency={locationCurrency}
                   helperLevels={helperLevels}
                   processingHelperId={processingHelperId}

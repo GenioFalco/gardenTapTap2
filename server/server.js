@@ -261,6 +261,7 @@ app.get('/api/characters/:id/tools', async (req, res) => {
         t.power,
         t.unlock_level, 
         t.unlock_cost, 
+        t.unlock_rank,
         t.currency_id,
         t.image_path,
         t.main_coins_power,
@@ -325,6 +326,7 @@ app.get('/api/characters/:id/tools', async (req, res) => {
         power: tool.power,
         unlockLevel: tool.unlock_level,
         unlockCost: tool.unlock_cost,
+        unlockRank: tool.unlock_rank,
         currencyId: tool.currency_id,
         currencyType: tool.currency_type,
         imagePath: tool.image_path,
@@ -793,6 +795,10 @@ app.post('/api/player/tap', async (req, res) => {
     const resourcesGained = Math.round(toolPower * locationCoinsPower);
     const mainCurrencyGained = Math.round(toolPower * mainCoinsPower);
     
+    console.log(`[TAP] Инструмент: ${equippedTool ? equippedTool.name : 'базовый'}`);
+    console.log(`[TAP] toolPower: ${toolPower}, locationCoinsPower: ${locationCoinsPower}`);
+    console.log(`[TAP] Расчет: ${toolPower} * ${locationCoinsPower} = ${resourcesGained}`);
+    
     try {
       // Проверяем лимит хранилища для валюты локации
       const storageLimit = await db.get(`
@@ -1015,6 +1021,7 @@ app.get('/api/tools/:toolId', async (req, res) => {
         t.power,
         t.unlock_level as unlockLevel, 
         t.unlock_cost as unlockCost,
+        t.unlock_rank as unlockRank,
         t.currency_id as currencyId, 
         t.image_path as imagePath,
         c.code as currencyType
@@ -3304,6 +3311,7 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
         t.power,
         t.unlock_level, 
         t.unlock_cost, 
+        t.unlock_rank,
         t.currency_id,
         t.image_path,
         t.main_coins_power,
@@ -3338,6 +3346,7 @@ app.get('/api/player/characters/:id/tools', async (req, res) => {
         power: tool.power,
         unlockLevel: tool.unlock_level,
         unlockCost: tool.unlock_cost,
+        unlockRank: tool.unlock_rank,
         currencyId: tool.currency_id,
         currencyType: tool.currency_type,
         imagePath: tool.image_path,

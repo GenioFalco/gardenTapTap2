@@ -13,6 +13,7 @@ const UpgradeModal = ({
   tools, 
   equippedToolId, 
   playerLevel,
+  playerRank,
   onBuyTool,
   onActivateTool,
   locationCurrency,
@@ -28,6 +29,7 @@ const UpgradeModal = ({
   tools: Tool[];
   equippedToolId: number;
   playerLevel: number;
+  playerRank: number;
   onBuyTool: (toolId: number) => Promise<boolean>;
   onActivateTool: (toolId: number) => Promise<boolean | void>;
   locationCurrency: number;
@@ -142,6 +144,10 @@ const UpgradeModal = ({
               {tools.map(tool => {
                 const isEquipped = tool.id === equippedToolId;
                 const isUnlockable = playerLevel >= tool.unlockLevel;
+                const toolRequiredRank = (tool as any).unlockRank || 1;
+                const hasRequiredRank = playerRank >= toolRequiredRank;
+                
+
                 
                 // Проверяем, является ли инструмент разблокированным:
                 // 1. Если он уже экипирован
@@ -188,6 +194,10 @@ const UpgradeModal = ({
                         <div className="text-sm text-gray-400 text-center border border-gray-700 py-2 rounded">
                           Доступен с {tool.unlockLevel} уровня
                         </div>
+                      ) : !hasRequiredRank ? (
+                        <div className="text-sm text-red-400 text-center border border-red-700 py-2 rounded">
+                          Требуется {((tool as any).unlockRank || 1)} ранг
+                        </div>
                       ) : isOwned ? (
                         !isEquipped && (
                           <button 
@@ -228,6 +238,7 @@ const UpgradeModal = ({
               locationId={locationId}
               locationName={locationName}
               playerLevel={playerLevel}
+              playerRank={playerRank}
               locationCurrency={locationCurrency}
               locationCurrencyType={locationCurrencyType}
               onHelpersChanged={handleHelpersChanged}
@@ -260,6 +271,7 @@ interface GameScreenProps {
   unlockedTools?: number[]; // Добавляем список разблокированных инструментов
   updateResources?: (currencyId?: string | number, newAmount?: number) => Promise<void>; // Функция для обновления ресурсов
   userId: string; // Добавляем userId для TasksModal
+  playerRank: number; // Добавляем ранг игрока
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({
@@ -280,7 +292,8 @@ const GameScreen: React.FC<GameScreenProps> = ({
   gardenCoins = 0,
   unlockedTools = [], // По умолчанию пустой массив
   updateResources,
-  userId
+  userId,
+  playerRank
 }) => {
   // Состояние для модального окна
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -776,6 +789,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
         tools={tools}
         equippedToolId={equippedToolId}
         playerLevel={level}
+        playerRank={playerRank}
         onBuyTool={onUpgrade}
         onActivateTool={async (toolId) => {
           const result = await onActivateTool(toolId);

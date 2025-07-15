@@ -201,6 +201,17 @@ function App() {
         console.log('Garden coins:', coins);
         setGardenCoins(coins);
         
+        // Получаем профиль игрока для получения текущего ранга
+        try {
+          const playerProfile = await api.getPlayerProfile();
+          console.log('Player profile:', playerProfile);
+          if (playerProfile.currentRank) {
+            setCurrentRank(playerProfile.currentRank);
+          }
+        } catch (error) {
+          console.error('Ошибка при загрузке профиля игрока:', error);
+        }
+        
         setInitialized(true);
         
         // Имитируем немного дополнительного времени загрузки для отображения загрузочного экрана
@@ -1224,6 +1235,7 @@ function App() {
           unlockedTools={playerProgress.unlockedTools || []}
           updateResources={updateResources}
           userId={userId}
+          playerRank={currentRank?.id || 1}
         />
       )}
       
