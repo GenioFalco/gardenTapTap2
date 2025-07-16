@@ -3,19 +3,19 @@
  */
 
 // Environment configuration for the application
-// This allows switching between local development and production (GitHub Pages)
+// This allows switching between local development and production
 
 // Определяем, запущено ли приложение в Telegram WebApp
 const isTelegramWebApp = !!window.Telegram && !!window.Telegram.WebApp;
 
-// Определяем, запущено ли приложение на GitHub Pages
-const isGitHubPages = window.location.hostname.includes('github.io');
+// Определяем окружение
 const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = !isProduction;
 
-// Default to development API URL
-const apiUrl = isProduction || isGitHubPages
-  ? '' // Используем относительные пути в продакшене
-  : (process.env.REACT_APP_API_URL || 'http://localhost:3002');
+// API URL конфигурация
+const apiUrl = isDevelopment
+  ? 'http://localhost:3002'  // Для разработки
+  : '';  // Для продакшена используем относительные пути (nginx прокси)
 
 // Тема приложения, значение по умолчанию - 'dark'
 const theme = isTelegramWebApp 
@@ -32,7 +32,6 @@ export const config = {
   // Add other configuration variables as needed
   isDevelopment: process.env.NODE_ENV === 'development',
   isProduction: process.env.NODE_ENV === 'production',
-  isGitHubPages,
 
   // Интеграция с Telegram
   telegram: {
