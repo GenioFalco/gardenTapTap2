@@ -205,6 +205,7 @@ export const tap = async (locationId: number): Promise<{
   experienceGained: number;
   levelUp: boolean;
   level: number;
+  experience: number;
   rewards: Reward[];
   energyLeft: number;
 }> => {
@@ -216,6 +217,7 @@ export const tap = async (locationId: number): Promise<{
     experienceGained: number;
     levelUp: boolean;
     level: number;
+    experience: number;
     rewards: Reward[];
     energyLeft: number;
   }>('/player/tap', {

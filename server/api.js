@@ -595,8 +595,8 @@ const api = {
       // Рассчитываем полученные ресурсы (сила инструмента)
       const resourcesGained = parseFloat(tool.power);
       
-      // Рассчитываем полученный опыт (пока равен ресурсам)
-      const experienceGained = resourcesGained;
+      // Рассчитываем полученный опыт (всегда 1 за тап)
+      const experienceGained = 1;
       
       // Рассчитываем полученные монеты (основная валюта)
       const mainCoinsPower = tool.mainCoinsPower || 0.5;

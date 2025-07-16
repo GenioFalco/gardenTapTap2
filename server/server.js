@@ -858,23 +858,17 @@ app.post('/api/player/tap', async (req, res) => {
       // Просто обновляем энергию, НЕ обновляя время последнего пополнения
       await db.run('UPDATE player_progress SET energy = ? WHERE user_id = ?', [newEnergy, userId]);
       
-      // Добавляем опыт (1-3 единицы за тап)
-      const expGained = Math.floor(Math.random() * 3) + 1;
+      // Добавляем опыт (1 единица за тап)
+      const expGained = 1;
       
-      // Модифицируем функцию addExperience, чтобы она не запускала checkAndGrantAchievements
-      // Это поможет избежать вложенных транзакций
-      const levelResult = {
-        levelUp: false,
-        level: playerProgress.level,
-        rewards: []
-      };
-      
-      // Обновляем опыт напрямую
-      const newExp = playerProgress.experience + expGained;
-      await db.run('UPDATE player_progress SET experience = ? WHERE user_id = ?', [newExp, userId]);
+      // Добавляем опыт и проверяем повышение уровня
+      const levelResult = await addExperience(userId, expGained);
       
       // Обновляем статистику тапов
       await updateTapStats(userId, actualResourcesGained, 1);
+      
+      // Получаем обновленный прогресс игрока для отправки текущего опыта
+      const updatedProgress = await getOrCreatePlayerProgress(userId);
       
       // Отправляем результат
       res.json({
@@ -883,6 +877,7 @@ app.post('/api/player/tap', async (req, res) => {
         experienceGained: expGained,
         levelUp: levelResult.levelUp,
         level: levelResult.level,
+        experience: updatedProgress.experience, // Добавляем текущий опыт
         rewards: levelResult.rewards,
         energyLeft: newEnergy,
         storageIsFull
@@ -2065,54 +2060,63 @@ async function addExperience(userId, exp) {
   try {
     // Получаем текущий прогресс игрока
     const playerProgress = await getOrCreatePlayerProgress(userId);
-    const currentLevel = playerProgress.level;
-    const currentExp = playerProgress.experience;
+    let currentLevel = playerProgress.level;
+    let currentExp = playerProgress.experience + exp;
     
-    // Добавляем опыт
-    const newExp = currentExp + exp;
+    let levelUp = false;
+    let allRewards = [];
     
-    // Получаем информацию о текущем уровне
-    const currentLevelInfo = await db.get('SELECT required_exp FROM levels WHERE level = ?', [currentLevel + 1]);
-    
-    // Если информация о следующем уровне не найдена, просто добавляем опыт без повышения уровня
-    if (!currentLevelInfo) {
-      await db.run('UPDATE player_progress SET experience = ? WHERE user_id = ?', [newExp, userId]);
-      return { levelUp: false, level: currentLevel, rewards: [] };
-    }
-    
-    // Проверяем, достаточно ли опыта для повышения уровня
-    const requiredExp = currentLevelInfo.required_exp;
-    
-    if (newExp >= requiredExp) {
-      // Повышаем уровень
-      const newLevel = currentLevel + 1;
+    // Проверяем повышение уровня в цикле (может быть несколько уровней за раз)
+    while (true) {
+      // Получаем информацию о следующем уровне
+      const nextLevelInfo = await db.get('SELECT required_exp FROM levels WHERE level = ?', [currentLevel + 1]);
       
-      // Обновляем уровень и опыт
-      await db.run(
-        'UPDATE player_progress SET level = ?, experience = ? WHERE user_id = ?',
-        [newLevel, newExp - requiredExp, userId]
-      );
-      
-      // Получаем награды за новый уровень
-      const rewards = await db.all(
-        'SELECT * FROM rewards WHERE level_id = ?',
-        [newLevel]
-      );
-      
-      // Обрабатываем каждую награду
-      for (const reward of rewards) {
-        await processReward(userId, reward);
+      // Если информация о следующем уровне не найдена, выходим из цикла
+      if (!nextLevelInfo) {
+        break;
       }
       
-      // Проверяем и выдаем достижения после повышения уровня
-      await checkAndGrantAchievements(userId);
+      // Проверяем, достаточно ли опыта для повышения уровня
+      const requiredExp = nextLevelInfo.required_exp;
       
-      return { levelUp: true, level: newLevel, rewards };
-    } else {
-      // Просто обновляем опыт
-      await db.run('UPDATE player_progress SET experience = ? WHERE user_id = ?', [newExp, userId]);
-      return { levelUp: false, level: currentLevel, rewards: [] };
+      if (currentExp >= requiredExp) {
+        // Повышаем уровень
+        currentLevel++;
+        currentExp -= requiredExp;
+        levelUp = true;
+        
+        console.log(`Игрок ${userId} повысил уровень до ${currentLevel}! Остаток опыта: ${currentExp}`);
+        
+        // Получаем награды за новый уровень
+        const rewards = await db.all(
+          'SELECT * FROM rewards WHERE level_id = ?',
+          [currentLevel]
+        );
+        
+        allRewards = [...allRewards, ...rewards];
+        
+        // Обрабатываем каждую награду
+        for (const reward of rewards) {
+          await processReward(userId, reward);
+        }
+      } else {
+        // Опыта недостаточно для следующего уровня, выходим из цикла
+        break;
+      }
     }
+    
+    // Обновляем уровень и опыт в базе данных
+    await db.run(
+      'UPDATE player_progress SET level = ?, experience = ? WHERE user_id = ?',
+      [currentLevel, currentExp, userId]
+    );
+    
+    // Если был повышен уровень, проверяем достижения
+    if (levelUp) {
+      await checkAndGrantAchievements(userId);
+    }
+    
+    return { levelUp, level: currentLevel, rewards: allRewards };
   } catch (error) {
     console.error(`Ошибка при добавлении опыта: ${error.message}`);
     throw error;

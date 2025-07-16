@@ -624,16 +624,17 @@ function App() {
         setGardenCoins(coins);
       }
       
-      // Отображаем заработанный опыт (всегда 1)
+      // Отображаем заработанный опыт
       console.log(`Заработано ${tapResult.experienceGained} опыта`);
       
-      // Обновляем прогресс, но НЕ запрашиваем новый прогресс с сервера, чтобы избежать дублирования энергии
-      // Вместо этого напрямую обновляем состояние энергии из результата тапа
+      // Обновляем прогресс игрока в реальном времени
       setPlayerProgress(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          energy: tapResult.energyLeft // Используем энергию из результата тапа
+          experience: tapResult.experience, // Используем актуальный опыт из ответа сервера
+          level: tapResult.level,
+          energy: tapResult.energyLeft
         };
       });
       
@@ -643,6 +644,8 @@ function App() {
       if (tapResult.levelUp) {
         const nextLevel = await api.getLevelInfo(tapResult.level + 1);
         setNextLevelExp(nextLevel.requiredExp);
+        
+        // При повышении уровня прогресс уже обновлен выше
         
         // Подготовка данных для модального окна
         setCurrentLevel(tapResult.level);
@@ -785,6 +788,11 @@ function App() {
 
         // После успешного тапа и получения опыта проверяем ранг
         await checkPlayerRank();
+      } else {
+        // Даже если уровень не повысился, обновляем информацию о следующем уровне
+        // чтобы прогресс-бар обновлялся в реальном времени
+        const nextLevel = await api.getLevelInfo(tapResult.level + 1);
+        setNextLevelExp(nextLevel.requiredExp);
       }
     } catch (error) {
       console.error('Ошибка при тапе:', error);
