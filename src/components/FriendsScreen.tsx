@@ -237,16 +237,17 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   };
 
   return (
-    <div className="h-screen w-full pt-36 mt-1 px-4 flex flex-col items-center overflow-hidden relative">
+    <div className="h-screen w-full pt-36 mt-1 px-4 overflow-y-auto relative pb-24">
       <div className="absolute inset-0 z-0" 
         style={{backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
       
-      {/* Панель приглашения друзей */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl mb-3 relative z-10 overflow-hidden"
-      >
+      <div className="flex flex-col items-center relative z-10">
+        {/* Панель приглашения друзей */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl mb-3 overflow-hidden"
+        >
         <div className="p-3">
           <h2 className="text-base font-bold text-white mb-1">Пригласи друзей</h2>
           <p className="text-white/80 text-xs mb-2">Получи 500 монет, когда друг присоединится по твоему коду!</p>
@@ -411,7 +412,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
         )}
         
         {!loading && !error && leaderboard.length > 0 && (
-          <div className="overflow-y-auto max-h-[calc(100vh-250px)]">
+          <div>
             <div className="flex items-center justify-between px-4 py-2 bg-gray-800/70 text-gray-400 text-sm">
               <div className="w-8">#</div>
               <div className="flex-grow">Игрок</div>
@@ -463,6 +464,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
