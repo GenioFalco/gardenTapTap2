@@ -237,17 +237,16 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   };
 
   return (
-    <div className="h-screen w-full pt-36 mt-1 px-4 overflow-y-auto relative pb-24">
+    <div className="h-screen w-full pt-36 mt-1 px-4 flex flex-col items-center overflow-hidden relative pb-24">
       <div className="absolute inset-0 z-0" 
         style={{backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
       
-      <div className="flex flex-col items-center relative z-10">
-        {/* Панель приглашения друзей */}
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl mb-3 overflow-hidden"
-        >
+      {/* Панель приглашения друзей - фиксированная */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl mb-3 relative z-10 overflow-hidden"
+      >
         <div className="p-3">
           <h2 className="text-base font-bold text-white mb-1">Пригласи друзей</h2>
           <p className="text-white/80 text-xs mb-2">Получи 500 монет, когда друг присоединится по твоему коду!</p>
@@ -388,6 +387,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
         </div>
       </motion.div>
       
+      {/* Блок рейтинга - с фиксированным заголовком и прокручиваемым списком */}
       <div className="w-full max-w-md bg-gray-800/60 backdrop-blur-sm rounded-lg shadow-xl relative z-10 overflow-hidden">
         <div className="bg-gray-800/70 py-4 px-4 border-b border-gray-700/50">
           <h2 className="text-xl font-bold text-center text-white">Рейтинг игроков</h2>
@@ -421,50 +421,52 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
               <div className="w-16 text-center">Уровень</div>
             </div>
             
-            {leaderboard.map((player) => (
-              <motion.div
-                key={player.userId}
-                className={`${getPositionBackgroundColor(player.position)} ${player.position <= 3 ? 'border-l-4 border-yellow-500/80' : ''} mb-2 mx-2 rounded-lg overflow-hidden shadow-md backdrop-blur-sm`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: player.position * 0.05 }}
-              >
-                <div className="flex items-center p-3">
-                  {/* Позиция */}
-                  <div className={`w-8 font-bold text-lg ${player.position <= 3 ? getPositionTextColor(player.position) : 'text-white'}`}>
-                    {player.position}
-                  </div>
-                  
-                  {/* Информация об игроке */}
-                  <div className="flex-grow flex items-center">
-                    <div>
-                      <div className="font-medium text-white">{player.username}</div>
-                      {player.achievement && (
-                        <div className="text-xs text-yellow-400">{player.achievement.name}</div>
-                      )}
+            {/* Прокручиваемый список участников */}
+            <div className="overflow-y-auto max-h-60">
+              {leaderboard.map((player) => (
+                <motion.div
+                  key={player.userId}
+                  className={`${getPositionBackgroundColor(player.position)} ${player.position <= 3 ? 'border-l-4 border-yellow-500/80' : ''} mb-2 mx-2 rounded-lg overflow-hidden shadow-md backdrop-blur-sm`}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: player.position * 0.05 }}
+                >
+                  <div className="flex items-center p-3">
+                    {/* Позиция */}
+                    <div className={`w-8 font-bold text-lg ${player.position <= 3 ? getPositionTextColor(player.position) : 'text-white'}`}>
+                      {player.position}
+                    </div>
+                    
+                    {/* Информация об игроке */}
+                    <div className="flex-grow flex items-center">
+                      <div>
+                        <div className="font-medium text-white">{player.username}</div>
+                        {player.achievement && (
+                          <div className="text-xs text-yellow-400">{player.achievement.name}</div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Ранг */}
+                    <div className="w-16 text-center">
+                      <div className="text-sm font-medium text-white">{player.rank.name}</div>
+                    </div>
+                    
+                    {/* Очки */}
+                    <div className="w-16 text-center">
+                      <div className="text-sm font-medium text-white">{player.seasonPoints}</div>
+                    </div>
+                    
+                    {/* Уровень */}
+                    <div className="w-16 text-center">
+                      <div className="text-sm font-medium text-white">Ур. {player.level}</div>
                     </div>
                   </div>
-                  
-                  {/* Ранг */}
-                  <div className="w-16 text-center">
-                    <div className="text-sm font-medium text-white">{player.rank.name}</div>
-                  </div>
-                  
-                  {/* Очки */}
-                  <div className="w-16 text-center">
-                    <div className="text-sm font-medium text-white">{player.seasonPoints}</div>
-                  </div>
-                  
-                  {/* Уровень */}
-                  <div className="w-16 text-center">
-                    <div className="text-sm font-medium text-white">Ур. {player.level}</div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              ))}
+            </div>
           </div>
         )}
-      </div>
       </div>
     </div>
   );

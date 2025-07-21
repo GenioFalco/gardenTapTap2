@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const { db } = require('./db');
 
 // Конфигурация бота
-const BOT_TOKEN = '7956184080:AAGPyyVY9g98V6W7fazaM2CqcXrUJYsrdx4';
+const BOT_TOKEN = '8179825934:AAGMWDM8aASXUJYUYXoZfo835AwtBVmP-e4';
 const ADMIN_CHAT_ID = '854880510';
 
 // Создание экземпляра бота
