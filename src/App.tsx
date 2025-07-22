@@ -1410,10 +1410,14 @@ function App() {
       
       {/* Экран обмена */}
       {activeTab === "exchange" && (
-        <div className="h-screen w-full pt-36 mt-1 px-4 overflow-y-auto relative">
+        <div className="h-screen w-full pt-36 mt-1 px-4 flex flex-col overflow-hidden relative pb-24">
           <div className="absolute inset-0 z-0" 
                style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
-          <ExchangeScreen />
+          
+          {/* Прокручиваемый контейнер для всего содержимого */}
+          <div className="flex-1 overflow-y-auto relative z-10">
+            <ExchangeScreen />
+          </div>
         </div>
       )}
       

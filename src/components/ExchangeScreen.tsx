@@ -635,7 +635,7 @@ const ExchangeScreen: React.FC = () => {
   ];
 
   return (
-    <div className="w-full max-w-md mx-auto flex flex-col items-center pb-16 bg-gray-900">
+    <div className="w-full max-w-md mx-auto flex flex-col items-center relative z-10">
       {/* Сообщения */}
       {message && (
         <div className={`p-2 rounded-lg mb-2 text-center fixed top-28 left-1/2 transform -translate-x-1/2 z-20 ${
@@ -647,18 +647,9 @@ const ExchangeScreen: React.FC = () => {
         </div>
       )}
       
-      {/* Контейнер для вертикального слайдера */}
-      <div 
-        ref={sliderRef}
-        className="w-full max-h-[600px] overflow-y-auto scroll-smooth bg-gray-900 rounded-xl overscroll-none"
-        style={{ 
-          scrollbarWidth: 'none', 
-          msOverflowStyle: 'none',
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain'
-        }}
-      >
-        <div className="flex flex-col pb-4">
+      {/* Контейнер для блоков */}
+      <div className="w-full">
+        <div className="flex flex-col pb-4 space-y-4">
           {blocks}
         </div>
       </div>
