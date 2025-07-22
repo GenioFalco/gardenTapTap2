@@ -1249,150 +1249,156 @@ function App() {
       
       {/* Экран локаций */}
       {activeTab === "locations" && (
-        <div className="h-screen w-full pt-36 mt-1 px-4 overflow-hidden relative pb-24">
+        <div className="h-screen w-full pt-36 mt-1 px-4 flex flex-col overflow-hidden relative pb-24">
           <div className="absolute inset-0 z-0" 
                style={{backgroundImage: `url(${currentLocation.background})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}></div>
           
-          {/* Заголовок раздела */}
-          <div className="text-center mb-6 relative z-10">
-            <h2 className="text-2xl font-bold text-white drop-shadow-lg">Доступные локации</h2>
-            <p className="text-sm text-white opacity-80">Выберите локацию для сбора ресурсов</p>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-4 max-h-[calc(100vh-220px)] overflow-y-auto relative z-10">
-            {locations.map((location) => {
-              const isUnlocked = true; // Все локации в массиве уже разблокированы (фильтруются сервером)
-              const isActive = location.id === currentLocationId;
+          {/* Прокручиваемый контейнер для всего содержимого */}
+          <div className="flex-1 overflow-y-auto relative z-10">
+            <div className="flex flex-col items-center space-y-4">
+              {/* Заголовок раздела */}
+              <div className="text-center mb-2 w-full max-w-md">
+                <h2 className="text-2xl font-bold text-white drop-shadow-lg">Доступные локации</h2>
+                <p className="text-sm text-white opacity-80">Выберите локацию для сбора ресурсов</p>
+              </div>
               
-              // Определяем цвет градиента в зависимости от типа локации
-              let gradientColors = "from-blue-700 to-blue-900";
-              const currencyType = String(location.currencyType || '').toUpperCase();
-              if (currencyType === "FOREST") gradientColors = "from-green-700 to-green-900";
-              if (currencyType === "DIRT") gradientColors = "from-amber-700 to-amber-900";
-              if (currencyType === "WEED") gradientColors = "from-lime-700 to-lime-900";
-        
-              
-              return (
-                <div 
-                  key={location.id} 
-                  className={`location-card rounded-xl overflow-hidden bg-gray-800 bg-opacity-80 
-                    ${!isUnlocked ? 'grayscale' : ''} 
-                    ${isActive ? 'ring-2 ring-yellow-400' : ''} 
-                    transition-all duration-300 shadow backdrop-blur-sm`}
-                >
-                                      <div className="flex h-28 relative">
-                    {/* Изображение локации */}
-                    <div className="w-1/3 h-full overflow-hidden">
-                      <img 
-                        src={location.background} 
-                        alt={location.name}
-                        className="w-full h-full object-cover"
-                      />
-                      
-                      {/* Индикатор активной локации */}
-                      {isActive && (
-                        <div className="absolute top-2 left-2 bg-green-600 text-xs px-2 py-1 rounded-full text-white font-medium flex items-center">
-                          <span className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse"></span>
-                          Активна
-                    </div>
-                  )}
-                    </div>
-                    
-                    {/* Информация о локации */}
-                    <div className="w-2/3 p-4 flex flex-col justify-between">
-                      <div className="flex justify-between items-start">
-                        <h3 className="text-lg font-bold text-white leading-tight pr-2 flex-1">{location.name}</h3>
-                      </div>
-                      
-                      <div className="flex items-center justify-between mt-2">
-                        {/* Информация о ресурсах локации */}
-                        <div className="flex items-center max-w-[50%] overflow-hidden">
-                          {isUnlocked ? (
-                            <div className="flex items-center bg-yellow-500 px-2 py-1 rounded shadow-sm mr-2 overflow-hidden">
-                              <div className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center flex-shrink-0">
-                                <img 
-                                  src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
-                                  alt={location.resourceName || "Ресурс"}
-                                  className="w-4 h-4 object-contain"
-                                  onError={(e) => {
-                                    // Если изображение не загрузилось, заменяем на резервное изображение
-                                    const target = e.target as HTMLImageElement;
-                                    target.src = '/assets/currencies/garden_coin.png';
-                                  }}
-                                />
-                              </div>
-                              <span className="text-xs text-white mx-1 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-                                {getCurrencyName(String(location.currencyType || '').toLowerCase())}:
-                              </span>
-                              <span className="text-sm font-bold text-white">
-                                {location.id === currentLocationId
-                                  ? resourceAmount.toFixed(0) 
-                                  : '0'}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center opacity-60 mr-2">
-                              <div className="w-5 h-5 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center flex-shrink-0">
-                                <img 
-                                  src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
-                                  alt={location.resourceName || "Ресурс"}
-                                  className="w-4 h-4 object-contain opacity-70"
-                                  onError={(e) => {
-                                    // Если изображение не загрузилось, заменяем на резервное изображение
-                                    const target = e.target as HTMLImageElement;
-                                    target.src = '/assets/currencies/garden_coin.png';
-                                  }}
-                                />
-                              </div>
-                              <span className="text-xs text-gray-400 ml-1 whitespace-nowrap overflow-hidden text-ellipsis">
-                                {getCurrencyName(String(location.currencyType || '').toLowerCase())}
-                              </span>
+              {/* Список локаций */}
+              <div className="w-full max-w-md space-y-4">
+                {locations.map((location) => {
+                  const isUnlocked = true; // Все локации в массиве уже разблокированы (фильтруются сервером)
+                  const isActive = location.id === currentLocationId;
+                  
+                  // Определяем цвет градиента в зависимости от типа локации
+                  let gradientColors = "from-blue-700 to-blue-900";
+                  const currencyType = String(location.currencyType || '').toUpperCase();
+                  if (currencyType === "FOREST") gradientColors = "from-green-700 to-green-900";
+                  if (currencyType === "DIRT") gradientColors = "from-amber-700 to-amber-900";
+                  if (currencyType === "WEED") gradientColors = "from-lime-700 to-lime-900";
+            
+                  
+                  return (
+                    <div 
+                      key={location.id} 
+                      className={`location-card rounded-xl overflow-hidden bg-gray-800 bg-opacity-80 
+                        ${!isUnlocked ? 'grayscale' : ''} 
+                        ${isActive ? 'ring-2 ring-yellow-400' : ''} 
+                        transition-all duration-300 shadow backdrop-blur-sm`}
+                    >
+                      <div className="flex h-28 relative">
+                        {/* Изображение локации */}
+                        <div className="w-1/3 h-full overflow-hidden">
+                          <img 
+                            src={location.background} 
+                            alt={location.name}
+                            className="w-full h-full object-cover"
+                          />
+                          
+                          {/* Индикатор активной локации */}
+                          {isActive && (
+                            <div className="absolute top-2 left-2 bg-green-600 text-xs px-2 py-1 rounded-full text-white font-medium flex items-center">
+                              <span className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse"></span>
+                              Активна
                             </div>
                           )}
                         </div>
                         
-                        {/* Кнопка выбора или информация о разблокировке */}
-                        <div className="ml-2 flex-shrink-0">
-                          {isUnlocked ? (
-                            <button 
-                              className={`px-3 py-1.5 rounded bg-yellow-500 text-white text-xs font-medium
-                                hover:bg-yellow-600 transition-all duration-200 whitespace-nowrap`}
-                              onClick={() => {
-                                handleLocationChange(location.id);
-                                setActiveTab("tap");
-                              }}
-                            >
-                              {isActive ? 'Играть' : 'Выбрать'}
-                            </button>
-                          ) : (
-                            <div className="bg-gray-700 bg-opacity-70 px-2 py-1.5 rounded">
-                              <div className="flex items-center">
-                                <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                </svg>
-                                <span className="text-white text-xs">Ур. {location.unlockLevel || 1}</span>
-                              </div>
+                        {/* Информация о локации */}
+                        <div className="w-2/3 p-4 flex flex-col justify-between">
+                          <div className="flex justify-between items-start">
+                            <h3 className="text-lg font-bold text-white leading-tight pr-2 flex-1">{location.name}</h3>
+                          </div>
+                          
+                          <div className="flex items-center justify-between mt-2">
+                            {/* Информация о ресурсах локации */}
+                            <div className="flex items-center max-w-[50%] overflow-hidden">
+                              {isUnlocked ? (
+                                <div className="flex items-center bg-yellow-500 px-2 py-1 rounded shadow-sm mr-2 overflow-hidden">
+                                  <div className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center flex-shrink-0">
+                                    <img 
+                                      src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
+                                      alt={location.resourceName || "Ресурс"}
+                                      className="w-4 h-4 object-contain"
+                                      onError={(e) => {
+                                        // Если изображение не загрузилось, заменяем на резервное изображение
+                                        const target = e.target as HTMLImageElement;
+                                        target.src = '/assets/currencies/garden_coin.png';
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-white mx-1 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+                                    {getCurrencyName(String(location.currencyType || '').toLowerCase())}:
+                                  </span>
+                                  <span className="text-sm font-bold text-white">
+                                    {location.id === currentLocationId
+                                      ? resourceAmount.toFixed(0) 
+                                      : '0'}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center opacity-60 mr-2">
+                                  <div className="w-5 h-5 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center flex-shrink-0">
+                                    <img 
+                                      src={getCurrencyImage(String(location.currencyType || '').toLowerCase())} 
+                                      alt={location.resourceName || "Ресурс"}
+                                      className="w-4 h-4 object-contain opacity-70"
+                                      onError={(e) => {
+                                        // Если изображение не загрузилось, заменяем на резервное изображение
+                                        const target = e.target as HTMLImageElement;
+                                        target.src = '/assets/currencies/garden_coin.png';
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-gray-400 ml-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                                    {getCurrencyName(String(location.currencyType || '').toLowerCase())}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                          )}
+                            
+                            {/* Кнопка выбора или информация о разблокировке */}
+                            <div className="ml-2 flex-shrink-0">
+                              {isUnlocked ? (
+                                <button 
+                                  className={`px-3 py-1.5 rounded bg-yellow-500 text-white text-xs font-medium
+                                    hover:bg-yellow-600 transition-all duration-200 whitespace-nowrap`}
+                                  onClick={() => {
+                                    handleLocationChange(location.id);
+                                    setActiveTab("tap");
+                                  }}
+                                >
+                                  {isActive ? 'Играть' : 'Выбрать'}
+                                </button>
+                              ) : (
+                                <div className="bg-gray-700 bg-opacity-70 px-2 py-1.5 rounded">
+                                  <div className="flex items-center">
+                                    <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-white text-xs">Ур. {location.unlockLevel || 1}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
+                      
+                      {/* Полоса прогресса для заблокированных локаций */}
+                      {!isUnlocked && (
+                        <div className="h-1.5 bg-gray-700 w-full">
+                          <div 
+                            className="h-full bg-yellow-500" 
+                            style={{ 
+                              width: `${Math.min(100, (playerProgress.level / (location.unlockLevel || 1)) * 100)}%` 
+                            }}
+                          ></div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  
-                  {/* Полоса прогресса для заблокированных локаций */}
-                  {!isUnlocked && (
-                    <div className="h-1.5 bg-gray-700 w-full">
-                      <div 
-                        className="h-full bg-yellow-500" 
-                        style={{ 
-                          width: `${Math.min(100, (playerProgress.level / (location.unlockLevel || 1)) * 100)}%` 
-                        }}
-                      ></div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
