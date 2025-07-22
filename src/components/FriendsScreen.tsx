@@ -92,7 +92,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   const handleInviteFriend = async () => {
     try {
       // Формируем ссылку на приглашение с параметром referral
-      const botLink = `https://t.me/share/url?url=https://t.me/testbotmvpBot?start=ref_${referralCode}&text=Присоединяйся к игре Garden Tap Tap! Используй мой код: ${referralCode}`;
+      const botLink = `https://t.me/share/url?url=https://t.me/GardenTapTapBot?start=ref_${referralCode}&text=Присоединяйся к игре Garden Tap Tap! Используй мой код: ${referralCode}`;
       
       // Открываем Telegram для выбора чатов
       window.open(botLink, '_blank');
@@ -135,7 +135,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({ background }) => {
   const handleCopyLink = async () => {
     try {
       // Сохраняем ссылку для копирования с реферальным кодом
-      const botLink = `https://t.me/testbotmvpBot?start=ref_${referralCode}`;
+      const botLink = `https://t.me/GardenTapTapBot?start=ref_${referralCode}`;
       
       // Копируем ссылку в буфер обмена
       await navigator.clipboard.writeText(botLink);
