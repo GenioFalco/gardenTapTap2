@@ -425,8 +425,8 @@ const ExchangeScreen: React.FC = () => {
             </div>
             
             <div className="flex items-center bg-gray-800 p-1.5 rounded-md border border-gray-700">
-              <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-1">
-                🪙
+              <div className="w-6 h-6 flex items-center justify-center mr-1">
+                <img src="/assets/currencies/garden_coin.png" alt="Монеты" className="w-5 h-5" />
               </div>
               <div>
                 <div className="text-xs text-gray-400">Монеты</div>
@@ -447,7 +447,8 @@ const ExchangeScreen: React.FC = () => {
                 <h3 className="text-sm font-medium text-center text-white">{pack.name}</h3>
                 <div className="text-yellow-400 font-bold text-center my-1">+{pack.energy_amount}</div>
                 <div className="text-center text-yellow-500 font-bold mb-2 flex items-center justify-center">
-                  {pack.price} <span className="ml-1">🪙</span>
+                  <img src="/assets/currencies/garden_coin.png" alt="Монеты" className="w-4 h-4 mr-1" />
+                  {pack.price}
                 </div>
                 <button
                   onClick={() => buyEnergy(pack)}
@@ -528,7 +529,8 @@ const ExchangeScreen: React.FC = () => {
           <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700">
             <div className="text-sm text-gray-300">Вы получите:</div>
             <div className="flex items-center justify-center">
-              <span className="text-yellow-400 font-bold text-xl">{calculateExchangeResult()} 🪙</span>
+              <img src="/assets/currencies/garden_coin.png" alt="Монеты" className="w-5 h-5 mr-2" />
+              <span className="text-yellow-400 font-bold text-xl">{calculateExchangeResult()}</span>
             </div>
           </div>
           
@@ -557,8 +559,8 @@ const ExchangeScreen: React.FC = () => {
         {/* Информация о балансе */}
         <div className="mb-3 bg-gray-800 p-2 rounded-md border border-gray-700 flex items-center justify-center">
           <div className="flex items-center">
-            <div className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full mr-2">
-              🪙
+            <div className="w-6 h-6 flex items-center justify-center mr-2">
+              <img src="/assets/currencies/garden_coin.png" alt="Монеты" className="w-5 h-5" />
             </div>
             <div>
               <div className="text-xs text-gray-400">Ваш баланс:</div>
@@ -581,7 +583,7 @@ const ExchangeScreen: React.FC = () => {
           >
             {services.map(service => (
               <option key={service.id} value={service.id}>
-                {service.name} - {service.price} 🪙
+                {service.name} - {service.price} монет
               </option>
             ))}
           </select>
@@ -592,7 +594,10 @@ const ExchangeScreen: React.FC = () => {
           <div className="mb-3 bg-gray-800 p-3 rounded-md border border-gray-700">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-md font-bold text-white">{selectedService.name}</h3>
-              <div className="text-yellow-400 font-bold">{selectedService.price} 🪙</div>
+              <div className="text-yellow-400 font-bold flex items-center">
+                <img src="/assets/currencies/garden_coin.png" alt="Монеты" className="w-4 h-4 mr-1" />
+                {selectedService.price}
+              </div>
             </div>
             <p className="text-sm text-gray-300 mb-2">{selectedService.description}</p>
           </div>
