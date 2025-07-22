@@ -691,7 +691,7 @@ function App() {
           console.error('Ошибка при проверке доступных инструментов:', error);
         }
         
-        // Проверяем, есть ли локации, доступные на новом уровне
+                // Проверяем, есть ли локации, доступные на новом уровне
         try {
           const availableLocations = await api.getLocationsByUnlockLevel(newLevel);
           console.log(`Локации, доступные на уровне ${newLevel}:`, availableLocations);

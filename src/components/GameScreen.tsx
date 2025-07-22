@@ -143,7 +143,6 @@ const UpgradeModal = ({
               
               {tools.map(tool => {
                 const isEquipped = tool.id === equippedToolId;
-                const isUnlockable = playerLevel >= tool.unlockLevel;
                 const toolRequiredRank = (tool as any).unlockRank || 1;
                 const hasRequiredRank = playerRank >= toolRequiredRank;
                 
@@ -190,11 +189,7 @@ const UpgradeModal = ({
                     </div>
                     
                     <div className="mt-3">
-                      {!isUnlockable ? (
-                        <div className="text-sm text-gray-400 text-center border border-gray-700 py-2 rounded">
-                          Доступен с {tool.unlockLevel} уровня
-                        </div>
-                      ) : !hasRequiredRank ? (
+                      {!hasRequiredRank ? (
                         <div className="text-sm text-red-400 text-center border border-red-700 py-2 rounded">
                           Требуется {((tool as any).unlockRank || 1)} ранг
                         </div>

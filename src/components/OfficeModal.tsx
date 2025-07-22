@@ -29,8 +29,7 @@ const HelperCard: React.FC<{
   // Проверяем, куплен ли помощник
   const isUnlocked = helper.isUnlocked === true || (helper as any).is_unlocked === 1;
   
-  // Проверяем, доступен ли помощник для покупки по уровню
-  const hasRequiredLevel = (helper as any).hasRequiredLevel || playerLevel >= helper.unlockLevel;
+  // Убрана проверка по уровню - теперь только по рангу
   
   // Проверяем, доступен ли помощник для покупки по рангу
   const helperRequiredRank = (helper as any).unlockRank || 1;
@@ -95,13 +94,7 @@ const HelperCard: React.FC<{
               {helperLevel}
             </span>
           ) : (
-            !hasRequiredLevel ? (
-              <span className="text-xs text-gray-400">
-                {helper.unlockLevel}+
-              </span>
-            ) : (
-              <span className="w-5"></span>
-            )
+            <span className="w-5"></span>
           )}
         </div>
         
@@ -125,7 +118,7 @@ const HelperCard: React.FC<{
             </button>
           )}
           
-          {!isUnlocked && hasRequiredLevel && hasRequiredRank && (
+          {!isUnlocked && hasRequiredRank && (
             <button 
               className={buyButtonClass}
               onClick={() => onBuy(helper)}
@@ -137,15 +130,9 @@ const HelperCard: React.FC<{
             </button>
           )}
           
-          {!isUnlocked && !hasRequiredLevel && (
-            <div className="text-xs text-gray-400 text-center py-1 px-1 rounded border border-gray-700">
-              Уровень {helper.unlockLevel}+
-            </div>
-          )}
-          
-          {!isUnlocked && hasRequiredLevel && !hasRequiredRank && (
+          {!isUnlocked && !hasRequiredRank && (
             <div className="text-xs text-red-400 text-center py-1 px-1 rounded border border-red-700">
-                             Требуется {((helper as any).unlockRank || 1)} ранг
+              Требуется {((helper as any).unlockRank || 1)} ранг
             </div>
           )}
         </div>
