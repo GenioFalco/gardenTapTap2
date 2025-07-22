@@ -514,7 +514,7 @@ const seedDatabase = () => {
         `);
 
         for (let i = 1; i <= 50; i++) {
-          const requiredExp = Math.floor(100 * Math.pow(1.5, i - 1));
+          const requiredExp = Math.floor(100 * Math.pow(1.2, i - 1));
           insertLevel.run(i, requiredExp);
         }
         insertLevel.finalize();
