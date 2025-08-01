@@ -729,6 +729,19 @@ app.get('/api/levels/:level', async (req, res) => {
   }
 });
 
+// Получить максимальный уровень в базе данных
+app.get('/api/max-level', async (req, res) => {
+  try {
+    const result = await db.get('SELECT MAX(level) as maxLevel FROM levels');
+    const maxLevel = result ? result.maxLevel : 20;
+    
+    res.json({ maxLevel });
+  } catch (error) {
+    console.error('Ошибка при получении максимального уровня:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 // Получить информацию о локации по ID
 app.get('/api/locations/:locationId', async (req, res) => {
   try {

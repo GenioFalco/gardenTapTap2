@@ -50,6 +50,7 @@ function App() {
   const [playerProgress, setPlayerProgress] = useState<PlayerProgress | null>(null);
   const [resourceAmount, setResourceAmount] = useState<number>(0);
   const [nextLevelExp, setNextLevelExp] = useState<number>(0);
+  const [maxLevel, setMaxLevel] = useState<number>(20); // Максимальный уровень в игре
   const [userName, setUserName] = useState<string>('');
   const [userAvatar, setUserAvatar] = useState<string>('');
   const [gardenCoins, setGardenCoins] = useState<number>(0);
@@ -191,10 +192,20 @@ function App() {
           setResourceAmount(0);
         }
         
-        // Получаем информацию о следующем уровне
-        const nextLevel = await api.getLevelInfo(progress.level + 1);
-        console.log('Next level info in App.tsx:', nextLevel);
-        setNextLevelExp(nextLevel.requiredExp);
+        // Получаем максимальный уровень в игре
+        const gameMaxLevel = await api.getMaxLevel();
+        setMaxLevel(gameMaxLevel);
+        console.log(`Max level in game: ${gameMaxLevel}, player level: ${progress.level}`);
+        
+        // Получаем информацию о следующем уровне только если игрок не на максимальном уровне
+        if (progress.level < gameMaxLevel) {
+          const nextLevel = await api.getLevelInfo(progress.level + 1);
+          console.log('Next level info in App.tsx:', nextLevel);
+          setNextLevelExp(nextLevel.requiredExp);
+        } else {
+          console.log(`Player is at max level ${progress.level}, no next level info needed`);
+          setNextLevelExp(999999999); // Большое число для максимального уровня
+        }
         
         // Получаем сад-коины (основная валюта)
         const coins = await api.getResourceAmount(CurrencyType.MAIN.toLowerCase());
@@ -642,8 +653,14 @@ function App() {
       
       // Если уровень повысился, обновляем данные о следующем уровне и показываем модальное окно
       if (tapResult.levelUp) {
-        const nextLevel = await api.getLevelInfo(tapResult.level + 1);
-        setNextLevelExp(nextLevel.requiredExp);
+        // Получаем информацию о следующем уровне только если игрок не достиг максимального
+        if (tapResult.level < maxLevel) {
+          const nextLevel = await api.getLevelInfo(tapResult.level + 1);
+          setNextLevelExp(nextLevel.requiredExp);
+        } else {
+          console.log(`Player reached max level ${tapResult.level}`);
+          setNextLevelExp(999999999);
+        }
         
         // При повышении уровня прогресс уже обновлен выше
         
@@ -791,8 +808,13 @@ function App() {
       } else {
         // Даже если уровень не повысился, обновляем информацию о следующем уровне
         // чтобы прогресс-бар обновлялся в реальном времени
-        const nextLevel = await api.getLevelInfo(tapResult.level + 1);
-        setNextLevelExp(nextLevel.requiredExp);
+        if (tapResult.level < maxLevel) {
+          const nextLevel = await api.getLevelInfo(tapResult.level + 1);
+          setNextLevelExp(nextLevel.requiredExp);
+        } else {
+          console.log(`Player is at max level ${tapResult.level}, no next level needed`);
+          setNextLevelExp(999999999);
+        }
       }
     } catch (error) {
       console.error('Ошибка при тапе:', error);

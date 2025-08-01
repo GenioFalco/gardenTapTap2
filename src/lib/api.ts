@@ -115,15 +115,26 @@ export const getPlayerProgress = async (): Promise<PlayerProgress> => {
   const progress = await fetchApi<PlayerProgress>('/player/progress');
   console.log('Raw player progress from API:', progress);
   
-  // Получаем информацию о следующем уровне для расчета требуемого опыта
-  const nextLevel = await getLevelInfo(progress.level + 1);
-  console.log('Next level info:', nextLevel);
+  // Получаем максимальный уровень в игре
+  const maxLevel = await getMaxLevel();
+  console.log(`Max level in game: ${maxLevel}, player level: ${progress.level}`);
+  
+  let nextLevelExperience = 999999999; // Значение по умолчанию для максимального уровня
+  
+  // Получаем информацию о следующем уровне только если игрок не на максимальном уровне
+  if (progress.level < maxLevel) {
+    const nextLevel = await getLevelInfo(progress.level + 1);
+    console.log('Next level info:', nextLevel);
+    nextLevelExperience = nextLevel.requiredExp;
+  } else {
+    console.log(`Player is at max level ${progress.level}, no next level info needed`);
+  }
   
   // Обновляем прогресс с требуемым опытом для следующего уровня
   // При этом сохраняем maxEnergy из базы данных, который уже приходит в ответе
   const updatedProgress = {
     ...progress,
-    nextLevelExperience: nextLevel.requiredExp // Добавляем требуемый опыт для следующего уровня
+    nextLevelExperience: nextLevelExperience // Добавляем требуемый опыт для следующего уровня
   };
   
   console.log('Updated player progress with nextLevelExperience:', updatedProgress);
@@ -191,6 +202,12 @@ export const unlockLocation = async (locationId: number): Promise<void> => {
 export const addExperience = async (exp: number): Promise<{ levelUp: boolean; level: number; rewards: Reward[] }> => {
   // На стороне сервера эта функция используется внутренне при тапе
   return { levelUp: false, level: 1, rewards: [] };
+};
+
+// Получить максимальный уровень в игре
+export const getMaxLevel = async (): Promise<number> => {
+  const response = await fetchApi<{ maxLevel: number }>('/max-level');
+  return response.maxLevel;
 };
 
 // Получить информацию об уровне
